@@ -1,0 +1,27 @@
+[package]
+name = "scylla-cpp-driver-rust"
+version = "0.0.1"
+edition = "2018"
+description = "Wrapper for Scylla's Rust driver, exports functions to be used by C"
+repository = "https://github.com/scylladb/scylla-rust-driver"
+readme = "./README.md"
+keywords = ["database", "scylla", "cql", "cassandra"]
+categories = ["database"]
+license = "MIT OR Apache-2.0"
+
+
+[dependencies]
+scylla = { version = "0.2.1"}
+tokio = { version = "1.1.0", features = ["full"] }
+lazy_static = "1.4.0"
+oneshot = "0.1.2"
+
+[build-dependencies]
+bindgen = "0.59.1"
+
+[lib]
+name = "scylla_cpp_driver"
+crate-type = ["cdylib", "staticlib"]
+
+[profile.release]
+lto = true

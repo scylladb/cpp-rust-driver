@@ -1,0 +1,3 @@
+.vscode/
+build/
+scylla-rust-wrapper/target/
