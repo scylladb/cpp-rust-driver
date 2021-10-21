@@ -1,7 +1,8 @@
 use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
 use scylla::{Session, SessionBuilder};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 type CassSession = Arc<RwLock<Option<Session>>>;
 
@@ -25,7 +26,7 @@ pub extern "C" fn cass_session_connect(
             .await
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
 
-        *session_opt.write().unwrap() = Some(session);
+        *session_opt.write().await = Some(session);
         Ok(CassResultValue::Empty)
     })
 }
