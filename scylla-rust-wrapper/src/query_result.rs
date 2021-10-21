@@ -1,24 +1,40 @@
 use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
+use scylla::QueryResult;
 use std::sync::Arc;
+use crate::argconv::*;
 
-pub type CassResult = Arc<scylla::QueryResult>;
+pub type CassResult = Arc<QueryResult>;
 
-pub struct CassIterator {}
+pub struct CassIterator {
+    #[allow(unused)]
+    result: Arc<QueryResult>,
+    #[allow(unused)]
+    position: usize,
+}
 
-pub struct CassRow {}
+pub struct CassRow {
+    #[allow(unused)]
+    row: scylla::frame::response::result::Row,
+}
 
 pub type CassValue = Option<CqlValue>;
 
-pub unsafe extern "C" fn cass_iterator_from_result(
-    _result: *const CassResult,
-) -> *mut CassIterator {
-    unimplemented!();
+pub unsafe extern "C" fn cass_iterator_from_result(result_raw: *const CassResult) -> *mut CassIterator {
+    let result: &CassResult = ptr_to_ref(result_raw);
+
+    let iterator = CassIterator {
+        result: result.clone(),
+        position: 0,
+    };
+
+    Box::into_raw(Box::new(iterator))
 }
 
-pub unsafe extern "C" fn cass_result_free(_result: *const CassResult) {
-    unimplemented!();
+// This was const for some reason, seems like a mistake in cpp driver
+pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
+    free_boxed(result_raw);
 }
 
 pub unsafe extern "C" fn cass_iterator_free(_iterator: *mut CassIterator) {
