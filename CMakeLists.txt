@@ -12,7 +12,7 @@ ExternalProject_Add(
     scylla-rust-driver
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build COMMAND cargo build --release
+    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,,--release>
     BINARY_DIR "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper"
     INSTALL_COMMAND ""
     LOG_BUILD ON
