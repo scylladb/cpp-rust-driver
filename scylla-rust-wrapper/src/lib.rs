@@ -6,6 +6,9 @@ pub mod cluster;
 pub mod future;
 pub mod session;
 
+#[allow(non_camel_case_types)]
+pub type size_t = usize;
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
 }
