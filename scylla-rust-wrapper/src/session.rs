@@ -1,5 +1,6 @@
 use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
+use crate::statement::CassStatement;
 use scylla::{Session, SessionBuilder};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -27,6 +28,28 @@ pub extern "C" fn cass_session_connect(
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
 
         *session_opt.write().await = Some(session);
+        Ok(CassResultValue::Empty)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn cass_session_execute(
+    session_raw: *mut CassSession,
+    statement_raw: *const CassStatement,
+) -> *mut CassFuture {
+    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
+    let statement_opt: CassStatement = unsafe { statement_raw.as_ref().unwrap() }.clone();
+
+    CassFuture::make_raw(async move {
+        // TODO: Proper error handling
+        session_opt
+            .read()
+            .await
+            .as_ref()
+            .unwrap()
+            .query(statement_opt.query.clone(), ())
+            .await
+            .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
         Ok(CassResultValue::Empty)
     })
 }
