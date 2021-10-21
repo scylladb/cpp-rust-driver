@@ -1,3 +1,4 @@
+use crate::argconv::*;
 use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
 use crate::statement::CassStatement;
@@ -8,17 +9,17 @@ use tokio::sync::RwLock;
 type CassSession = Arc<RwLock<Option<Session>>>;
 
 #[no_mangle]
-pub extern "C" fn cass_session_new() -> *mut CassSession {
+pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
     Box::into_raw(Box::new(Arc::new(RwLock::new(None))))
 }
 
 #[no_mangle]
-pub extern "C" fn cass_session_connect(
+pub unsafe extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     session_builder_raw: *const SessionBuilder,
 ) -> *mut CassFuture {
-    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
-    let builder: &SessionBuilder = unsafe { session_builder_raw.as_ref().unwrap() }.clone();
+    let session_opt = ptr_to_ref(session_raw);
+    let builder = ptr_to_ref(session_builder_raw);
 
     CassFuture::make_raw(async move {
         // TODO: Proper error handling
@@ -33,12 +34,12 @@ pub extern "C" fn cass_session_connect(
 }
 
 #[no_mangle]
-pub extern "C" fn cass_session_execute(
+pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
 ) -> *mut CassFuture {
-    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
-    let statement_opt: CassStatement = unsafe { statement_raw.as_ref().unwrap() }.clone();
+    let session_opt = ptr_to_ref(session_raw);
+    let statement_opt = ptr_to_ref(statement_raw);
 
     CassFuture::make_raw(async move {
         // TODO: Proper error handling
@@ -55,9 +56,6 @@ pub extern "C" fn cass_session_execute(
 }
 
 #[no_mangle]
-pub extern "C" fn cass_session_free(session_raw: *mut CassSession) {
-    if !session_raw.is_null() {
-        let ptr = unsafe { Box::from_raw(session_raw) };
-        drop(ptr); // Explicit drop, to make function clearer
-    }
+pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
+    free_boxed(session_raw);
 }
