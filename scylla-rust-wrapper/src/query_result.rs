@@ -3,6 +3,7 @@ use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::QueryResult;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 pub type CassResult = Arc<QueryResult>;
@@ -64,10 +65,18 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
 }
 
 pub unsafe extern "C" fn cass_row_get_column(
-    _row: *const CassRow,
-    _index: size_t,
+    row_raw: *const CassRow,
+    index: size_t,
 ) -> *const CassValue {
-    unimplemented!();
+    let row: &CassRow = ptr_to_ref(row_raw);
+
+    let index_usize: usize = index.try_into().unwrap();
+    let column_value: &Option<CqlValue> = match row.columns.get(index_usize) {
+        Some(val) => val,
+        None => return std::ptr::null(),
+    };
+
+    column_value
 }
 
 pub unsafe extern "C" fn cass_value_get_int32(
