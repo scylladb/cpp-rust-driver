@@ -80,14 +80,28 @@ pub unsafe extern "C" fn cass_row_get_column(
 }
 
 pub unsafe extern "C" fn cass_value_get_int32(
-    _value: *const CassValue,
-    _output: *mut cass_int32_t,
+    value: *const CassValue,
+    output: *mut cass_int32_t,
 ) -> CassError {
-    unimplemented!();
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_int32_t = ptr_to_ref_mut(output);
+
+    let cql_val: &CqlValue = match val {
+        Some(v) => v,
+        None => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    };
+
+    match cql_val {
+        CqlValue::Int(i) => *out = *i,
+        _ => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    };
+
+    crate::cass_error::OK
 }
 
-pub unsafe extern "C" fn cass_value_is_null(_value: *const CassValue) -> cass_bool_t {
-    unimplemented!();
+pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
+    let val: &CassValue = ptr_to_ref(value);
+    val.is_none() as cass_bool_t
 }
 
 // CassResult functions:
