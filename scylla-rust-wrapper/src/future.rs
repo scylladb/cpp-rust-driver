@@ -1,11 +1,15 @@
 use crate::argconv::*;
 use crate::cass_error::{self, CassError};
+use crate::query_result::CassResult;
 use crate::RUNTIME;
 use oneshot::{channel, Receiver};
+use scylla::QueryResult;
 use std::future::Future;
+use std::sync::Arc;
 
 pub enum CassResultValue {
     Empty,
+    QueryResult(Arc<QueryResult>),
 }
 
 pub type CassFutureResult = Result<CassResultValue, CassError>;
@@ -94,4 +98,19 @@ pub unsafe extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
     free_boxed(future_raw);
+}
+
+pub unsafe extern "C" fn cass_future_get_result(future_raw: *mut CassFuture) -> *const CassResult {
+    let future: &mut CassFuture = ptr_to_ref_mut(future_raw);
+    let result: &CassResultValue = match future.wait_for_result() {
+        Ok(res) => res,
+        Err(_) => return std::ptr::null(),
+    };
+
+    let query_result: Arc<QueryResult> = match result {
+        CassResultValue::QueryResult(qr) => qr.clone(),
+        _ => return std::ptr::null(), // TODO other code?
+    };
+
+    Box::into_raw(Box::new(query_result))
 }
