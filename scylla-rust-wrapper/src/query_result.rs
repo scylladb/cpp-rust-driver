@@ -1,27 +1,24 @@
+use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
+use scylla::frame::response::result::{CqlValue, Row};
 use scylla::QueryResult;
 use std::sync::Arc;
-use crate::argconv::*;
 
 pub type CassResult = Arc<QueryResult>;
 
 pub struct CassIterator {
-    #[allow(unused)]
     result: Arc<QueryResult>,
-    #[allow(unused)]
     position: usize,
 }
 
-pub struct CassRow {
-    #[allow(unused)]
-    row: scylla::frame::response::result::Row,
-}
+pub type CassRow = Row;
 
 pub type CassValue = Option<CqlValue>;
 
-pub unsafe extern "C" fn cass_iterator_from_result(result_raw: *const CassResult) -> *mut CassIterator {
+pub unsafe extern "C" fn cass_iterator_from_result(
+    result_raw: *const CassResult,
+) -> *mut CassIterator {
     let result: &CassResult = ptr_to_ref(result_raw);
 
     let iterator = CassIterator {
@@ -37,16 +34,33 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
     free_boxed(result_raw);
 }
 
-pub unsafe extern "C" fn cass_iterator_free(_iterator: *mut CassIterator) {
-    unimplemented!();
+pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
+    free_boxed(iterator);
 }
 
-pub unsafe extern "C" fn cass_iterator_next(_iterator: *mut CassIterator) -> cass_bool_t {
-    unimplemented!();
+pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass_bool_t {
+    let iter: &mut CassIterator = ptr_to_ref_mut(iterator);
+    iter.position += 1;
+
+    match &iter.result.rows {
+        Some(rs) => (iter.position < rs.len()) as cass_bool_t,
+        None => 0,
+    }
 }
 
-pub unsafe extern "C" fn cass_iterator_get_row(_iterator: *const CassIterator) -> *const CassRow {
-    unimplemented!();
+pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) -> *const CassRow {
+    let iter: &CassIterator = ptr_to_ref(iterator);
+    let row: &Row = match iter
+        .result
+        .rows
+        .as_ref()
+        .and_then(|rs| rs.get(iter.position))
+    {
+        Some(row) => row,
+        None => return std::ptr::null(),
+    };
+
+    row
 }
 
 pub unsafe extern "C" fn cass_row_get_column(
