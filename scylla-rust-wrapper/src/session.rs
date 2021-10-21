@@ -1,7 +1,9 @@
 use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
+use crate::statement::CassStatement;
 use scylla::{Session, SessionBuilder};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 type CassSession = Arc<RwLock<Option<Session>>>;
 
@@ -15,7 +17,7 @@ pub extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     session_builder_raw: *const SessionBuilder,
 ) -> *mut CassFuture {
-    let session_opt: &CassSession = unsafe { session_raw.as_ref().unwrap() };
+    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
     let builder: &SessionBuilder = unsafe { session_builder_raw.as_ref().unwrap() }.clone();
 
     CassFuture::make_raw(async move {
@@ -25,7 +27,29 @@ pub extern "C" fn cass_session_connect(
             .await
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
 
-        *session_opt.write().unwrap() = Some(session);
+        *session_opt.write().await = Some(session);
+        Ok(CassResultValue::Empty)
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn cass_session_execute(
+    session_raw: *mut CassSession,
+    statement_raw: *const CassStatement,
+) -> *mut CassFuture {
+    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
+    let statement_opt: CassStatement = unsafe { statement_raw.as_ref().unwrap() }.clone();
+
+    CassFuture::make_raw(async move {
+        // TODO: Proper error handling
+        session_opt
+            .read()
+            .await
+            .as_ref()
+            .unwrap()
+            .query(statement_opt.query.clone(), ())
+            .await
+            .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
         Ok(CassResultValue::Empty)
     })
 }
