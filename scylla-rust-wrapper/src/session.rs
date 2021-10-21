@@ -16,7 +16,7 @@ pub extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     session_builder_raw: *const SessionBuilder,
 ) -> *mut CassFuture {
-    let session_opt: &CassSession = unsafe { session_raw.as_ref().unwrap() };
+    let session_opt: CassSession = unsafe { session_raw.as_ref().unwrap() }.clone();
     let builder: &SessionBuilder = unsafe { session_builder_raw.as_ref().unwrap() }.clone();
 
     CassFuture::make_raw(async move {
