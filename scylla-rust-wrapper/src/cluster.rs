@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::{self, CassError};
 use crate::types::*;
+use core::time::Duration;
 use scylla::load_balancing::{
     DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
 };
@@ -125,6 +126,25 @@ unsafe fn cluster_set_contact_points(
     );
     Ok(())
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.session_builder.config.tcp_nodelay = enabled != 0;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_port(
     cluster_raw: *mut CassCluster,
