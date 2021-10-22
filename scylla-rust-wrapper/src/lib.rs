@@ -6,6 +6,7 @@ mod argconv;
 pub mod cass_error;
 pub mod cluster;
 pub mod future;
+pub mod prepared;
 pub mod query_result;
 pub mod session;
 pub mod statement;
