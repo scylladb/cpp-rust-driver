@@ -2,13 +2,10 @@ use crate::argconv::*;
 use crate::types::size_t;
 use scylla::query::Query;
 use std::os::raw::c_char;
-use std::sync::Arc;
 
-pub struct CassStatement_ {
+pub struct CassStatement {
     pub query: Query,
 }
-
-pub type CassStatement = Arc<CassStatement_>;
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_new(
@@ -36,9 +33,9 @@ pub unsafe extern "C" fn cass_statement_new_n(
         "parameter_count > 0 not implemented yet"
     );
 
-    Box::into_raw(Box::new(Arc::new(CassStatement_ {
+    Box::into_raw(Box::new(CassStatement {
         query: Query::new(query_str.to_string()),
-    })))
+    }))
 }
 
 #[no_mangle]
