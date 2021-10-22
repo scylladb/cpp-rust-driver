@@ -57,6 +57,34 @@ int main() {
     cass_future_free(statement_future);
     cass_statement_free(statement);
 
+    do_simple_query(session, "DROP TABLE IF EXISTS ks.t2");
+    do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t2 (pk int, ck int, v list<int>, v2 map<text, float>, primary key (pk, ck))");
+
+    CassCollection* list = cass_collection_new(CASS_COLLECTION_TYPE_LIST, 3);
+    cass_collection_append_int32(list, 123);
+    cass_collection_append_int32(list, 456);
+    cass_collection_append_int32(list, 789);
+
+    CassCollection* map = cass_collection_new(CASS_COLLECTION_TYPE_MAP, 2);
+    cass_collection_append_string(map, "k1");
+    cass_collection_append_float(map, 10.0);
+    cass_collection_append_string(map, "k2");
+    cass_collection_append_float(map, 20.0);
+
+    CassStatement* collection_statement = cass_statement_new("INSERT INTO ks.t2(pk, ck, v, v2) VALUES (?, ?, ?, ?)", 4);
+    cass_statement_bind_int32(collection_statement, 0, 1);
+    cass_statement_bind_int32(collection_statement, 1, 2);
+    cass_statement_bind_collection(collection_statement, 2, list);
+    cass_statement_bind_collection(collection_statement, 3, map);
+    cass_collection_free(list);
+    cass_collection_free(map);
+
+    CassFuture* collection_statement_future = cass_session_execute(session, collection_statement);
+    cass_future_set_callback(collection_statement_future, print_error_cb, NULL);
+    cass_future_wait(collection_statement_future);
+    cass_future_free(collection_statement_future);
+    cass_statement_free(collection_statement);
+
     CassStatement* select_statement = cass_statement_new("SELECT pk, ck, v FROM ks.t", 0);
     CassFuture* select_future = cass_session_execute(session, select_statement);
     printf("select code: %d\n", cass_future_error_code(select_future));
