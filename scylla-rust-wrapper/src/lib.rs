@@ -1,3 +1,4 @@
+#![allow(clippy::missing_safety_doc)]
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 

@@ -17,9 +17,9 @@ jobs:
     - name: Format check
       working-directory: ./scylla-rust-wrapper
       run: cargo fmt --verbose --all -- --check
-    #- name: Clippy check
-    #  working-directory: ./scylla-rust-wrapper
-    #  run: cargo clippy --verbose --examples -- -D warnings
+    - name: Clippy check
+      working-directory: ./scylla-rust-wrapper
+      run: cargo clippy --verbose --examples -- -D warnings
     - name: Cargo check
       working-directory: ./scylla-rust-wrapper
       run: cargo check
