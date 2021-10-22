@@ -14,7 +14,11 @@ int main() {
     printf("code: %d\n", cass_future_error_code(connect_future));
     cass_future_free(connect_future);
 
-    CassStatement* statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v) VALUES (7, 8, 9)", 0);
+    CassStatement* statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v) VALUES (?, ?, ?)", 3);
+    cass_statement_bind_int32(statement, 0, 100);
+    cass_statement_bind_int32(statement, 1, 200);
+    cass_statement_bind_int32(statement, 2, 300);
+
     CassFuture* statement_future = cass_session_execute(session, statement);
     printf("code: %d\n", cass_future_error_code(statement_future));
     cass_future_free(statement_future);

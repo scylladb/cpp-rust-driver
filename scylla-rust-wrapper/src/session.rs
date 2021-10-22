@@ -40,6 +40,8 @@ pub unsafe extern "C" fn cass_session_execute(
 ) -> *mut CassFuture {
     let session_opt = ptr_to_ref(session_raw);
     let statement_opt = ptr_to_ref(statement_raw);
+    let query = statement_opt.query.clone();
+    let bound_values = statement_opt.bound_values.clone();
 
     CassFuture::make_raw(async move {
         // TODO: Proper error handling
@@ -48,7 +50,7 @@ pub unsafe extern "C" fn cass_session_execute(
             .await
             .as_ref()
             .unwrap()
-            .query(statement_opt.query.clone(), ())
+            .query(query, bound_values)
             .await
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
         Ok(CassResultValue::Empty)
