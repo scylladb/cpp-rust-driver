@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Format check
+      working-directory: ./scylla-rust-wrapper
+      run: cargo fmt --verbose --all -- --check
+    #- name: Clippy check
+    #  working-directory: ./scylla-rust-wrapper
+    #  run: cargo clippy --verbose --examples -- -D warnings
+    - name: Cargo check
+      working-directory: ./scylla-rust-wrapper
+      run: cargo check
+    - name: Build
+      run: cmake . && make
