@@ -2,10 +2,10 @@ use crate::argconv::*;
 use crate::cass_error::{self, CassError};
 use crate::query_result::CassResult;
 use crate::RUNTIME;
-use oneshot::{channel, Receiver};
 use scylla::QueryResult;
 use std::future::Future;
-use std::sync::Arc;
+use std::os::raw::c_void;
+use std::sync::{Arc, Condvar, Mutex};
 
 pub enum CassResultValue {
     Empty,
@@ -14,104 +14,147 @@ pub enum CassResultValue {
 
 pub type CassFutureResult = Result<CassResultValue, CassError>;
 
-pub enum CassFuture {
-    Pending(Receiver<CassFutureResult>),
-    Done(CassFutureResult),
+pub type CassFutureCallback =
+    Option<unsafe extern "C" fn(future: *const CassFuture, data: *mut c_void)>;
+
+struct BoundCallback {
+    pub cb: CassFutureCallback,
+    pub data: *mut c_void,
+}
+
+// *mut c_void is not Send, so Rust will have to take our word
+// that we won't screw something up
+unsafe impl Send for BoundCallback {}
+
+impl BoundCallback {
+    fn invoke(self, fut: &CassFuture) {
+        unsafe {
+            self.cb.unwrap()(fut as *const CassFuture, self.data);
+        }
+    }
+}
+
+#[derive(Default)]
+struct CassFutureState {
+    value: Option<CassFutureResult>,
+    callback: Option<BoundCallback>,
+}
+
+pub struct CassFuture {
+    state: Mutex<CassFutureState>,
+    wait_for_value: Condvar,
 }
 
 impl CassFuture {
     pub fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + Sync + 'static,
-    ) -> *mut CassFuture {
-        Self::new_from_future(fut).box_and_make_raw()
+    ) -> *const CassFuture {
+        Self::new_from_future(fut).into_raw()
     }
 
     pub fn new_from_future(
         fut: impl Future<Output = CassFutureResult> + Send + Sync + 'static,
-    ) -> CassFuture {
-        let (tx, rx) = channel::<CassFutureResult>();
-        RUNTIME.spawn(async move {
-            let _ = tx.send(fut.await);
+    ) -> Arc<CassFuture> {
+        let cass_fut = Arc::new(CassFuture {
+            state: Mutex::new(Default::default()),
+            wait_for_value: Condvar::new(),
         });
-        CassFuture::Pending(rx)
-    }
+        let cass_fut_clone = cass_fut.clone();
+        RUNTIME.spawn(async move {
+            let r = fut.await;
+            let mut lock = cass_fut_clone.state.lock().unwrap();
+            lock.value = Some(r);
 
-    pub fn new_pending(r: Receiver<CassFutureResult>) -> Self {
-        CassFuture::Pending(r)
-    }
-
-    pub fn new_ready(r: CassFutureResult) -> Self {
-        CassFuture::Done(r)
-    }
-
-    pub fn wait_for_result(&mut self) -> &CassFutureResult {
-        match self {
-            CassFuture::Pending(_) => {
-                let mut dummy = CassFuture::Done(Err(cass_error::LIB_INTERNAL_ERROR));
-                std::mem::swap(&mut dummy, self);
-
-                let result = dummy
-                    .consume_rx()
-                    .recv()
-                    .unwrap_or(Err(cass_error::LIB_INTERNAL_ERROR));
-                *self = CassFuture::Done(result);
-                self.get_ready_result()
+            // Take the callback and call it after realeasing the lock
+            let maybe_cb = lock.callback.take();
+            std::mem::drop(lock);
+            if let Some(bound_cb) = maybe_cb {
+                bound_cb.invoke(cass_fut_clone.as_ref());
             }
-            CassFuture::Done(r) => r,
+
+            cass_fut_clone.wait_for_value.notify_all();
+        });
+        cass_fut
+    }
+
+    pub fn new_ready(r: CassFutureResult) -> Arc<Self> {
+        Arc::new(CassFuture {
+            state: Mutex::new(CassFutureState {
+                value: Some(r),
+                ..Default::default()
+            }),
+            wait_for_value: Condvar::new(),
+        })
+    }
+
+    pub fn with_waited_result<T>(&self, f: impl FnOnce(&mut CassFutureResult) -> T) -> T {
+        let mut guard = self
+            .wait_for_value
+            .wait_while(self.state.lock().unwrap(), |s| s.value.is_none())
+            .unwrap();
+        f((*guard).value.as_mut().unwrap())
+    }
+
+    pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
+        let mut lock = self.state.lock().unwrap();
+        if lock.callback.is_some() {
+            // Another callback has been already set
+            return cass_error::LIB_CALLBACK_ALREADY_SET;
         }
-    }
-
-    pub fn box_and_make_raw(self) -> *mut Self {
-        Box::into_raw(Box::new(self))
-    }
-
-    fn consume_rx(self) -> Receiver<CassFutureResult> {
-        match self {
-            CassFuture::Pending(rx) => rx,
-            CassFuture::Done(_) => unreachable!(),
+        let bound_cb = BoundCallback { cb, data };
+        if lock.value.is_some() {
+            // The value is already available, we need to call the callback ourselves
+            std::mem::drop(lock);
+            bound_cb.invoke(self);
+            return cass_error::OK;
         }
+        // Store the callback
+        lock.callback = Some(bound_cb);
+        cass_error::OK
     }
 
-    fn get_ready_result(&self) -> &CassFutureResult {
-        match self {
-            CassFuture::Pending(_) => unreachable!(),
-            CassFuture::Done(v) => v,
-        }
-    }
-}
-
-impl<F: Future<Output = CassFutureResult> + Send + Sync + 'static> From<F> for CassFuture {
-    fn from(f: F) -> CassFuture {
-        CassFuture::new_from_future(f)
+    fn into_raw(self: Arc<Self>) -> *const Self {
+        Arc::into_raw(self)
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> CassError {
-    let future = ptr_to_ref_mut(future_raw);
-    match future.wait_for_result() {
+pub unsafe extern "C" fn cass_future_set_callback(
+    future_raw: *const CassFuture,
+    callback: CassFutureCallback,
+    data: *mut ::std::os::raw::c_void,
+) -> CassError {
+    ptr_to_ref(future_raw).set_callback(callback, data)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
+    ptr_to_ref(future_raw).with_waited_result(|_| ());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_error_code(future_raw: *const CassFuture) -> CassError {
+    ptr_to_ref(future_raw).with_waited_result(|r: &mut CassFutureResult| match r {
         Ok(_) => cass_error::OK,
         Err(err) => *err,
-    }
+    })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
-    free_boxed(future_raw);
+pub unsafe extern "C" fn cass_future_free(future_raw: *const CassFuture) {
+    free_arced(future_raw);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_get_result(future_raw: *mut CassFuture) -> *const CassResult {
-    let future: &mut CassFuture = ptr_to_ref_mut(future_raw);
-    let result: &CassResultValue = match future.wait_for_result() {
-        Ok(res) => res,
-        Err(_) => return std::ptr::null(),
-    };
-
-    let query_result: Arc<QueryResult> = match result {
-        CassResultValue::QueryResult(qr) => qr.clone(),
-        _ => return std::ptr::null(), // TODO other code?
-    };
-
-    Box::into_raw(Box::new(query_result))
+pub unsafe extern "C" fn cass_future_get_result(
+    future_raw: *const CassFuture,
+) -> *const CassResult {
+    ptr_to_ref(future_raw)
+        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassResult> {
+            match r.as_ref().ok()? {
+                CassResultValue::QueryResult(qr) => Some(qr.clone()),
+                _ => None,
+            }
+        })
+        .map_or(std::ptr::null(), |qr| Box::into_raw(Box::new(qr)))
 }

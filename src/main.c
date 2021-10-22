@@ -12,6 +12,10 @@ void do_simple_query(CassSession* session, const char* query_text) {
     cass_statement_free(statement);
 }
 
+static void print_error_cb(CassFuture* future, void* data) {
+    printf("code: %d\n", cass_future_error_code(future));
+}
+
 int main() {
     CassFuture* connect_future = NULL;
     CassCluster* cluster = cass_cluster_new();
@@ -19,7 +23,8 @@ int main() {
 
     cass_cluster_set_contact_points(cluster, "127.0.1.1");
     connect_future = cass_session_connect(session, cluster);
-    printf("code: %d\n", cass_future_error_code(connect_future));
+    cass_future_set_callback(connect_future, print_error_cb, NULL);
+    cass_future_wait(connect_future);
     cass_future_free(connect_future);
 
     do_simple_query(session, "CREATE KEYSPACE IF NOT EXISTS ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}");
@@ -32,7 +37,8 @@ int main() {
     cass_statement_bind_int32(statement, 2, 300);
 
     CassFuture* statement_future = cass_session_execute(session, statement);
-    printf("code: %d\n", cass_future_error_code(statement_future));
+    cass_future_set_callback(statement_future, print_error_cb, NULL);
+    cass_future_wait(statement_future);
     cass_future_free(statement_future);
     cass_statement_free(statement);
 
