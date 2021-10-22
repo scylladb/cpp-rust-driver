@@ -2,7 +2,7 @@ use crate::argconv::*;
 use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
 use crate::statement::CassStatement;
-use scylla::{Session, SessionBuilder};
+use scylla::{QueryResult, Session, SessionBuilder};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn cass_session_execute(
 
     CassFuture::make_raw(async move {
         // TODO: Proper error handling
-        session_opt
+        let query_res: QueryResult = session_opt
             .read()
             .await
             .as_ref()
@@ -53,7 +53,7 @@ pub unsafe extern "C" fn cass_session_execute(
             .query(query, bound_values)
             .await
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
-        Ok(CassResultValue::Empty)
+        Ok(CassResultValue::QueryResult(Arc::new(query_res)))
     })
 }
 
