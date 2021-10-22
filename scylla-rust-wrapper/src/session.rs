@@ -17,7 +17,7 @@ pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
 pub unsafe extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     session_builder_raw: *const SessionBuilder,
-) -> *mut CassFuture {
+) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
     let builder = ptr_to_ref(session_builder_raw);
 
@@ -37,7 +37,7 @@ pub unsafe extern "C" fn cass_session_connect(
 pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
-) -> *mut CassFuture {
+) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
     let statement_opt = ptr_to_ref(statement_raw);
     let query = statement_opt.query.clone();

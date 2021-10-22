@@ -14,7 +14,6 @@ license = "MIT OR Apache-2.0"
 scylla = { git = "https://github.com/hackathon-rust-cpp/scylla-rust-driver.git", branch = "main" }
 tokio = { version = "1.1.0", features = ["full"] }
 lazy_static = "1.4.0"
-oneshot = "0.1.2"
 
 [build-dependencies]
 bindgen = "0.59.1"

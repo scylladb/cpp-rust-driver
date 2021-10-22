@@ -1,6 +1,7 @@
 use crate::types::size_t;
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 pub unsafe fn ptr_to_ref<T>(ptr: *const T) -> &'static T {
     ptr.as_ref().unwrap()
@@ -14,6 +15,13 @@ pub unsafe fn free_boxed<T>(ptr: *mut T) {
     if !ptr.is_null() {
         // This takes the ownership of the boxed value and drops it
         Box::from_raw(ptr);
+    }
+}
+
+pub unsafe fn free_arced<T>(ptr: *const T) {
+    if !ptr.is_null() {
+        // This decrements the arc's internal counter and potentially drops it
+        Arc::from_raw(ptr);
     }
 }
 
