@@ -6,7 +6,7 @@
 
 void do_prepared_query(CassSession* session, const char* query_text) {
     CassFuture* prepare_future = cass_session_prepare(session, query_text);
-    CassPrepared* prepared = cass_future_get_prepared(prepare_future);
+    const CassPrepared* prepared = cass_future_get_prepared(prepare_future);
     CassStatement* statement = cass_prepared_bind(prepared);
     CassFuture* statement_future = cass_session_execute(session, statement);
     printf("prepared query code: %d\n", cass_future_error_code(statement_future));
@@ -33,7 +33,7 @@ int main() {
     CassCluster* cluster = cass_cluster_new();
     CassSession* session = cass_session_new();
 
-    cass_cluster_set_contact_points(cluster, "127.0.0.2");
+    cass_cluster_set_contact_points(cluster, "127.0.1.1");
     connect_future = cass_session_connect(session, cluster);
     cass_future_set_callback(connect_future, print_error_cb, NULL);
     cass_future_wait(connect_future);
@@ -43,7 +43,7 @@ int main() {
     do_simple_query(session, "DROP TABLE IF EXISTS ks.t");
     do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t (pk int, ck int, v int, v2 text, primary key (pk, ck))");
     do_simple_query(session, "INSERT INTO ks.t(pk, ck, v, v2) VALUES (7, 8, 9, 'hello world')");
-    do_prepared_query(session, "INSERT INTO ks.t(pk, ck, v) VALUES (69, 69, 69)");
+    do_prepared_query(session, "INSERT INTO ks.t(pk, ck, v, v2) VALUES (69, 69, 69, 'greetings from Rust!')");
 
     CassStatement* statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v, v2) VALUES (?, ?, ?, ?)", 4);
     cass_statement_bind_int32(statement, 0, 100);
