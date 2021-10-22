@@ -8,9 +8,6 @@ pub mod future;
 pub mod query_result;
 pub mod session;
 pub mod statement;
-
-#[allow(non_camel_case_types)]
-pub type size_t = usize;
 pub mod types;
 
 lazy_static! {

@@ -1,6 +1,6 @@
-use crate::size_t;
+use crate::argconv::*;
+use crate::types::size_t;
 use scylla::query::Query;
-use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -11,25 +11,25 @@ pub struct CassStatement_ {
 pub type CassStatement = Arc<CassStatement_>;
 
 #[no_mangle]
-pub extern "C" fn cass_statement_new(
+pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
 ) -> *mut CassStatement {
-    let query_cstr = unsafe { CStr::from_ptr(query) };
-    let query_length = query_cstr.to_str().unwrap().len();
+    // TODO: error handling
+    let query_str = ptr_to_cstr(query).unwrap();
+    let query_length = query_str.len();
 
-    cass_statement_new_n(query, query_length, parameter_count)
+    cass_statement_new_n(query, query_length as size_t, parameter_count)
 }
 
 #[no_mangle]
-pub extern "C" fn cass_statement_new_n(
+pub unsafe extern "C" fn cass_statement_new_n(
     query: *const c_char,
     query_length: size_t,
     parameter_count: size_t,
 ) -> *mut CassStatement {
-    let query_str = unsafe {
-        std::str::from_utf8(std::slice::from_raw_parts(query as *const u8, query_length)).unwrap()
-    };
+    // TODO: error handling
+    let query_str = ptr_to_cstr_n(query, query_length).unwrap();
 
     assert!(
         parameter_count == 0,
@@ -42,9 +42,6 @@ pub extern "C" fn cass_statement_new_n(
 }
 
 #[no_mangle]
-pub extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
-    if !statement_raw.is_null() {
-        let ptr = unsafe { Box::from_raw(statement_raw) };
-        drop(ptr); // Explicit drop, to make function clearer
-    }
+pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
+    free_boxed(statement_raw);
 }
