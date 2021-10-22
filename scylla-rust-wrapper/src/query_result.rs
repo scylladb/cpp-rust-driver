@@ -17,6 +17,7 @@ pub type CassRow = Row;
 
 pub type CassValue = Option<CqlValue>;
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(
     result_raw: *const CassResult,
 ) -> *mut CassIterator {
@@ -31,15 +32,18 @@ pub unsafe extern "C" fn cass_iterator_from_result(
 }
 
 // This was const for some reason, seems like a mistake in cpp driver
+#[no_mangle]
 pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
     free_boxed(result_raw);
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
     free_boxed(iterator);
 }
 
 // After creating an iterator we have to call next() before accessing the value
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass_bool_t {
     let iter: &mut CassIterator = ptr_to_ref_mut(iterator);
 
@@ -56,6 +60,7 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
     }
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) -> *const CassRow {
     let iter: &CassIterator = ptr_to_ref(iterator);
 
@@ -77,6 +82,7 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
     row
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_row_get_column(
     row_raw: *const CassRow,
     index: size_t,
@@ -92,6 +98,7 @@ pub unsafe extern "C" fn cass_row_get_column(
     column_value
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int32(
     value: *const CassValue,
     output: *mut cass_int32_t,
@@ -112,6 +119,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
     crate::cass_error::OK
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
     let val: &CassValue = ptr_to_ref(value);
     val.is_none() as cass_bool_t

@@ -100,6 +100,7 @@ pub unsafe extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
     free_boxed(future_raw);
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn cass_future_get_result(future_raw: *mut CassFuture) -> *const CassResult {
     let future: &mut CassFuture = ptr_to_ref_mut(future_raw);
     let result: &CassResultValue = match future.wait_for_result() {
