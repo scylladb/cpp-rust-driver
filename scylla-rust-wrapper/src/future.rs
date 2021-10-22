@@ -1,3 +1,4 @@
+use crate::argconv::*;
 use crate::cass_error::{self, CassError};
 use crate::RUNTIME;
 use oneshot::{channel, Receiver};
@@ -82,8 +83,8 @@ impl<F: Future<Output = CassFutureResult> + Send + Sync + 'static> From<F> for C
 }
 
 #[no_mangle]
-pub extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> CassError {
-    let future: &mut CassFuture = unsafe { future_raw.as_mut().unwrap() };
+pub unsafe extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> CassError {
+    let future = ptr_to_ref_mut(future_raw);
     match future.wait_for_result() {
         Ok(_) => cass_error::OK,
         Err(err) => *err,
@@ -91,9 +92,6 @@ pub extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> CassErr
 }
 
 #[no_mangle]
-pub extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
-    if !future_raw.is_null() {
-        let ptr = unsafe { Box::from_raw(future_raw) };
-        drop(ptr); // Explicit drop, to make function clearer
-    }
+pub unsafe extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
+    free_boxed(future_raw);
 }

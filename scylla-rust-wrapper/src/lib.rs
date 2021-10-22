@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 
+mod argconv;
 pub mod cass_error;
 pub mod cluster;
 pub mod future;
@@ -25,13 +26,13 @@ lazy_static! {
 
 // #[no_mangle]
 // pub unsafe extern "C" fn do(foo: *mut Foo) -> *mut Foo {
-//     let foo = foo.as_ref().unwrap(); // That's ptr::as_ref
+//     let foo = argconv::ptr_to_ref(foo);
 // }
 
 // To take over/destroy Rust object previously given to C:
 
 // #[no_mangle]
 // pub unsafe extern "C" fn free_foo(foo: *mut Foo) {
-//     assert!(!foo.is_null());
-//     Box::from_raw(foo); // Rust auto-drops it
+//     // Take the ownership of the value and it will be automatically dropped
+//     argconv::ptr_to_opt_box(foo);
 // }
