@@ -3,7 +3,10 @@ use crate::cass_error;
 use crate::future::{CassFuture, CassResultValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
+use crate::types::size_t;
+use scylla::query::Query;
 use scylla::{QueryResult, Session, SessionBuilder};
+use std::os::raw::c_char;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -56,6 +59,42 @@ pub unsafe extern "C" fn cass_session_execute(
         .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?; // TODO: Proper error handling
 
         Ok(CassResultValue::QueryResult(Arc::new(query_res)))
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_prepare(
+    session: *mut CassSession,
+    query: *const c_char,
+) -> *const CassFuture {
+    // TODO: error handling
+    let query_str = ptr_to_cstr(query).unwrap();
+    let query_length = query_str.len();
+
+    cass_session_prepare_n(session, query, query_length as size_t)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_prepare_n(
+    cass_session_raw: *mut CassSession,
+    query: *const c_char,
+    query_length: size_t,
+) -> *const CassFuture {
+    // TODO: error handling
+    let query_str = ptr_to_cstr_n(query, query_length).unwrap();
+    let query = Query::new(query_str.to_string());
+    let cass_session: &CassSession = ptr_to_ref(cass_session_raw);
+
+    CassFuture::make_raw(async move {
+        let session_guard = cass_session.read().await;
+        let session = session_guard.as_ref().unwrap();
+
+        let prepared = session
+            .prepare(query)
+            .await
+            .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?; // TODO: Proper error handling
+
+        Ok(CassResultValue::Prepared(Arc::new(prepared)))
     })
 }
 
