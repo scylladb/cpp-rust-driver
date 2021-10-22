@@ -1,14 +1,17 @@
 use crate::argconv::*;
+use crate::cass_error::CassError;
 use crate::types::size_t;
+use scylla::frame::response::result::CqlValue;
+use scylla::frame::response::result::CqlValue::Int;
+use scylla::frame::value::MaybeUnset;
+use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use std::os::raw::c_char;
-use std::sync::Arc;
 
-pub struct CassStatement_ {
+pub struct CassStatement {
     pub query: Query,
+    pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
 }
-
-pub type CassStatement = Arc<CassStatement_>;
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_new(
@@ -31,14 +34,23 @@ pub unsafe extern "C" fn cass_statement_new_n(
     // TODO: error handling
     let query_str = ptr_to_cstr_n(query, query_length).unwrap();
 
-    assert!(
-        parameter_count == 0,
-        "parameter_count > 0 not implemented yet"
-    );
-
-    Box::into_raw(Box::new(Arc::new(CassStatement_ {
+    Box::into_raw(Box::new(CassStatement {
         query: Query::new(query_str.to_string()),
-    })))
+        bound_values: vec![Unset; parameter_count as usize],
+    }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_bind_int32(
+    statement_raw: *mut CassStatement,
+    index: size_t,
+    value: i32,
+) -> CassError {
+    // FIXME: Bounds check
+    let statement = ptr_to_ref_mut(statement_raw);
+    statement.bound_values[index as usize] = Set(Some(Int(value)));
+
+    crate::cass_error::OK
 }
 
 #[no_mangle]
