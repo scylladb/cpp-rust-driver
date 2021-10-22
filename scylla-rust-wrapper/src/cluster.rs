@@ -1,13 +1,26 @@
 use crate::argconv::*;
 use crate::cass_error::{self, CassError};
+use crate::types::*;
+use scylla::load_balancing::{
+    DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
+};
 use scylla::SessionBuilder;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int, c_uint};
+use std::sync::Arc;
+
+enum CassClusterChildLoadBalancingPolicy {
+    RoundRobinPolicy(RoundRobinPolicy),
+    DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy),
+}
 
 pub struct CassCluster {
     session_builder: SessionBuilder,
 
     contact_points: Vec<String>,
     port: u16,
+
+    child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
+    token_aware_policy_enabled: bool,
 }
 
 pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
@@ -17,10 +30,29 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
         .into_iter()
         .map(|cp| format!("{}:{}", cp, cluster.port))
         .collect();
+
+    let load_balancing: Arc<dyn LoadBalancingPolicy> = match &cluster.child_load_balancing_policy {
+        CassClusterChildLoadBalancingPolicy::RoundRobinPolicy(policy) => {
+            if cluster.token_aware_policy_enabled {
+                Arc::new(TokenAwarePolicy::new(Box::new(policy.clone())))
+            } else {
+                Arc::new(policy.clone())
+            }
+        }
+        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(policy) => {
+            if cluster.token_aware_policy_enabled {
+                Arc::new(TokenAwarePolicy::new(Box::new(policy.clone())))
+            } else {
+                Arc::new(policy.clone())
+            }
+        }
+    };
+
     cluster
         .session_builder
         .clone()
         .known_nodes(&known_nodes)
+        .load_balancing(load_balancing)
 }
 
 #[no_mangle]
@@ -29,6 +61,12 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         session_builder: SessionBuilder::new(),
         port: 9042,
         contact_points: Vec::new(),
+        // Per DataStax documentation: Without additional configuration the C/C++ driver
+        // defaults to using Datacenter-aware load balancing with token-aware routing.
+        child_load_balancing_policy: CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(
+            DcAwareRoundRobinPolicy::new("".to_string()),
+        ),
+        token_aware_policy_enabled: true,
     }))
 }
 
@@ -97,3 +135,60 @@ pub unsafe extern "C" fn cass_cluster_set_port(
     cass_error::OK
 }
 
+#[no_mangle]
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.child_load_balancing_policy =
+        CassClusterChildLoadBalancingPolicy::RoundRobinPolicy(RoundRobinPolicy::new());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
+    cluster: *mut CassCluster,
+    local_dc: *const c_char,
+    used_hosts_per_remote_dc: c_uint,
+    allow_remote_dcs_for_local_cl: cass_bool_t,
+) -> CassError {
+    let local_dc_str = ptr_to_cstr(local_dc).unwrap();
+    let local_dc_length = local_dc_str.len();
+
+    cass_cluster_set_load_balance_dc_aware_n(
+        cluster,
+        local_dc,
+        local_dc_length as size_t,
+        used_hosts_per_remote_dc,
+        allow_remote_dcs_for_local_cl,
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
+    cluster_raw: *mut CassCluster,
+    local_dc_raw: *const c_char,
+    local_dc_length: size_t,
+    _used_hosts_per_remote_dc: c_uint,
+    _allow_remote_dcs_for_local_cl: cass_bool_t,
+) -> CassError {
+    // FIMXE: validation
+    // FIXME: used_hosts_per_remote_dc, allow_remote_dcs_for_local_cl ignored
+    // as there is no equivalent configuration in Rust Driver.
+    let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length).unwrap();
+
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.child_load_balancing_policy =
+        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy::new(
+            local_dc.to_string(),
+        ));
+
+    cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.token_aware_policy_enabled = enabled != 0;
+}
