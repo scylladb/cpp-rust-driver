@@ -156,6 +156,42 @@ pub unsafe extern "C" fn cass_cluster_set_port(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_credentials(
+    cluster: *mut CassCluster,
+    username: *const c_char,
+    password: *const c_char,
+) {
+    let username_str = ptr_to_cstr(username).unwrap();
+    let username_length = username_str.len();
+
+    let password_str = ptr_to_cstr(password).unwrap();
+    let password_length = password_str.len();
+
+    cass_cluster_set_credentials_n(
+        cluster,
+        username,
+        username_length as size_t,
+        password,
+        password_length as size_t,
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_credentials_n(
+    cluster_raw: *mut CassCluster,
+    username_raw: *const c_char,
+    username_length: size_t,
+    password_raw: *const c_char,
+    password_length: size_t,
+) {
+    let username = ptr_to_cstr_n(username_raw, username_length).unwrap();
+    let password = ptr_to_cstr_n(password_raw, password_length).unwrap();
+
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.session_builder.config.auth_username = Some(username.to_string());
+    cluster.session_builder.config.auth_password = Some(password.to_string());
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
     let cluster = ptr_to_ref_mut(cluster_raw);
