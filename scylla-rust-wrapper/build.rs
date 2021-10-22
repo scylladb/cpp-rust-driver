@@ -31,4 +31,16 @@ fn main() {
     bindings
         .write_to_file(out_path.join("cassandra_bindings.rs"))
         .expect("Couldn't write bindings!");
+
+    let basic_bindings = bindgen::Builder::default()
+        .header("extern/cassandra.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .layout_tests(true)
+        .generate_comments(false)
+        .allowlist_type("size_t")
+        .generate()
+        .expect("Unable to generate bindings");
+    basic_bindings
+        .write_to_file(out_path.join("basic_types.rs"))
+        .expect("Couldn't write bindings!");
 }
