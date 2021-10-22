@@ -4,6 +4,18 @@
 
 #include "cassandra.h"
 
+void do_prepared_query(CassSession* session, const char* query_text) {
+    CassFuture* prepare_future = cass_session_prepare(session, query_text);
+    CassPrepared* prepared = cass_future_get_prepared(prepare_future);
+    CassStatement* statement = cass_prepared_bind(prepared);
+    CassFuture* statement_future = cass_session_execute(session, statement);
+    printf("prepared query code: %d\n", cass_future_error_code(statement_future));
+    cass_future_free(statement_future);
+    cass_future_free(prepare_future);
+    cass_prepared_free(prepared);
+    cass_statement_free(statement);
+}
+
 void do_simple_query(CassSession* session, const char* query_text) {
     CassStatement* statement = cass_statement_new(query_text, 0);
     CassFuture* statement_future = cass_session_execute(session, statement);
@@ -30,6 +42,7 @@ int main() {
     do_simple_query(session, "CREATE KEYSPACE IF NOT EXISTS ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}");
     do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t (pk int, ck int, v int, primary key (pk, ck))");
     do_simple_query(session, "INSERT INTO ks.t(pk, ck, v) VALUES (7, 8, 9)");
+    do_prepared_query(session, "INSERT INTO ks.t(pk, ck, v) VALUES (69, 69, 69)");
 
     CassStatement* statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v) VALUES (?, ?, ?)", 3);
     cass_statement_bind_int32(statement, 0, 100);

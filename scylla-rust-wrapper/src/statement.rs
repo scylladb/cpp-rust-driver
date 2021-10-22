@@ -6,10 +6,19 @@ use scylla::frame::response::result::CqlValue::Int;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
+use scylla::statement::prepared_statement::PreparedStatement;
 use std::os::raw::c_char;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub enum Statement {
+    Simple(Query),
+    // Arc is needed, because PreparedStatement is passed by reference to session.execute
+    Prepared(Arc<PreparedStatement>),
+}
 
 pub struct CassStatement {
-    pub query: Query,
+    pub statement: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
 }
 
@@ -35,7 +44,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
     let query_str = ptr_to_cstr_n(query, query_length).unwrap();
 
     Box::into_raw(Box::new(CassStatement {
-        query: Query::new(query_str.to_string()),
+        statement: Statement::Simple(Query::new(query_str.to_string())),
         bound_values: vec![Unset; parameter_count as usize],
     }))
 }
