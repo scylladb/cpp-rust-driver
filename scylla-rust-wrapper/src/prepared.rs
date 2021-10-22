@@ -21,7 +21,7 @@ pub unsafe extern "C" fn cass_prepared_bind(
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument
-    let statement = Statement::Prepared(prepared.clone());
+    let statement = Statement::Prepared(prepared);
 
     Box::into_raw(Box::new(CassStatement {
         statement,
