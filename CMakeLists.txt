@@ -7,12 +7,27 @@ include(ExternalProject)
 # Set default ExternalProject root directory
 set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/Rust)
 
+# Set a default build type if none was specified
+set(default_build_type "Release")
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+endif()
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
 # Add rust_example as a CMake target
 ExternalProject_Add(
     scylla-rust-driver
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build COMMAND cargo build --release
+    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,,--release>
     BINARY_DIR "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper"
     INSTALL_COMMAND ""
     LOG_BUILD ON
@@ -36,3 +51,4 @@ target_include_directories(scylla-cpp-driver INTERFACE "${CMAKE_SOURCE_DIR}/incl
 
 add_executable(main src/main.c)
 target_link_libraries(main scylla-cpp-driver)
+
