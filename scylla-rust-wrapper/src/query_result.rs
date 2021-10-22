@@ -109,11 +109,11 @@ pub unsafe extern "C" fn cass_value_get_float(
     let out: &mut cass_float_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Float(f)) => *out = *f,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -125,11 +125,11 @@ pub unsafe extern "C" fn cass_value_get_double(
     let out: &mut cass_double_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Double(d)) => *out = *d,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -141,11 +141,11 @@ pub unsafe extern "C" fn cass_value_get_bool(
     let out: &mut cass_bool_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Boolean(b)) => *out = (*b) as cass_bool_t,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -157,11 +157,11 @@ pub unsafe extern "C" fn cass_value_get_int8(
     let out: &mut cass_int8_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::TinyInt(i)) => *out = *i,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -173,11 +173,11 @@ pub unsafe extern "C" fn cass_value_get_int16(
     let out: &mut cass_int16_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::SmallInt(i)) => *out = *i,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -189,11 +189,11 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     let out: &mut cass_uint32_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Date(u)) => *out = *u, // FIXME: hack
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -205,11 +205,11 @@ pub unsafe extern "C" fn cass_value_get_int32(
     let out: &mut cass_int32_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Int(i)) => *out = *i,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -221,11 +221,11 @@ pub unsafe extern "C" fn cass_value_get_int64(
     let out: &mut cass_int64_t = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::BigInt(i)) => *out = *i,
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -237,11 +237,11 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     let out: &mut CassUuid = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Uuid(uuid)) => *out = (*uuid).into(),
-        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
-        None => return crate::cass_error::LIB_NULL_VALUE,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]

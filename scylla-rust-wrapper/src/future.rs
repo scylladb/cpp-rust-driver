@@ -1,7 +1,9 @@
 use crate::argconv::*;
-use crate::cass_error::{self, CassError};
+use crate::cass_error::CassError;
 use crate::prepared::CassPrepared;
+use crate::query_error::{CassErrorResult, CassErrorResult_};
 use crate::query_result::{CassResult, CassResult_};
+use crate::types::*;
 use crate::RUNTIME;
 use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
@@ -11,10 +13,13 @@ use std::sync::{Arc, Condvar, Mutex};
 pub enum CassResultValue {
     Empty,
     QueryResult(CassResult_),
+    QueryError(CassErrorResult_),
     Prepared(Arc<PreparedStatement>),
 }
 
-pub type CassFutureResult = Result<CassResultValue, CassError>;
+type CassFutureError = (CassError, String);
+
+pub type CassFutureResult = Result<CassResultValue, CassFutureError>;
 
 pub type CassFutureCallback =
     Option<unsafe extern "C" fn(future: *const CassFuture, data: *mut c_void)>;
@@ -101,18 +106,18 @@ impl CassFuture {
         let mut lock = self.state.lock().unwrap();
         if lock.callback.is_some() {
             // Another callback has been already set
-            return cass_error::LIB_CALLBACK_ALREADY_SET;
+            return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
         }
         let bound_cb = BoundCallback { cb, data };
         if lock.value.is_some() {
             // The value is already available, we need to call the callback ourselves
             std::mem::drop(lock);
             bound_cb.invoke(self);
-            return cass_error::OK;
+            return CassError::CASS_OK;
         }
         // Store the callback
         lock.callback = Some(bound_cb);
-        cass_error::OK
+        CassError::CASS_OK
     }
 
     fn into_raw(self: Arc<Self>) -> *const Self {
@@ -135,11 +140,34 @@ pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cass_bool_t {
+    let state_guard = ptr_to_ref(future_raw).state.lock().unwrap();
+    match state_guard.value {
+        None => cass_false,
+        Some(_) => cass_true,
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_future_error_code(future_raw: *const CassFuture) -> CassError {
     ptr_to_ref(future_raw).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(_) => cass_error::OK,
-        Err(err) => *err,
+        Ok(_) => CassError::CASS_OK,
+        Err((err, _)) => *err,
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_error_message(
+    future: *mut CassFuture,
+    message: *mut *const ::std::os::raw::c_char,
+    message_length: *mut size_t,
+) {
+    let message = ptr_to_ref_mut(message);
+    let message_length = ptr_to_ref_mut(message_length);
+    ptr_to_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
+        Ok(_) => write_str_to_c("", message, message_length),
+        Err((_, s)) => write_str_to_c(s.as_str(), message, message_length),
+    });
 }
 
 #[no_mangle]
@@ -155,6 +183,20 @@ pub unsafe extern "C" fn cass_future_get_result(
         .with_waited_result(|r: &mut CassFutureResult| -> Option<CassResult_> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(qr.clone()),
+                _ => None,
+            }
+        })
+        .map_or(std::ptr::null(), Arc::into_raw)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_get_error_result(
+    future_raw: *const CassFuture,
+) -> *const CassErrorResult {
+    ptr_to_ref(future_raw)
+        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassErrorResult_> {
+            match r.as_ref().ok()? {
+                CassResultValue::QueryError(qr) => Some(qr.clone()),
                 _ => None,
             }
         })

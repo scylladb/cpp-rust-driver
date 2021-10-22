@@ -80,7 +80,7 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
 
     let input = ptr_to_cstr_n(input_raw, input_length);
     if input.is_none() {
-        return crate::cass_error::LIB_BAD_PARAMS;
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
     let input_str = input.unwrap();
@@ -89,9 +89,9 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
     match ip_addr {
         Ok(ip_addr) => {
             *inet = ip_addr.into();
-            crate::cass_error::OK
+            CassError::CASS_OK
         }
-        Err(_) => crate::cass_error::LIB_BAD_PARAMS,
+        Err(_) => CassError::CASS_ERROR_LIB_BAD_PARAMS,
     }
 }
 

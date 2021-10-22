@@ -4,12 +4,40 @@
 
 #include "cassandra.h"
 
+void print_error_result(const CassErrorResult *err) {
+    printf("[error_result] code: %d\n", cass_error_result_code(err));
+    printf("[error_result] consistency: %d\n", cass_error_result_consistency(err));
+    printf("[error_result] responses received: %d\n", cass_error_result_responses_received(err));
+    printf("[error_result] responses required: %d\n", cass_error_result_responses_required(err));
+    printf("[error_result] num_failures: %d\n", cass_error_result_num_failures(err));
+    printf("[error_result] data_present: %d\n", cass_error_result_data_present(err));
+    printf("[error_result] write type: %d\n", cass_error_result_write_type(err));
+    const char *str;
+    size_t len;
+    cass_error_result_keyspace(err, &str, &len);
+    printf("[error_result] keyspace: %.*s\n", len, str);
+    cass_error_result_table(err, &str, &len);
+    printf("[error_result] table: %.*s\n", len, str);
+    cass_error_result_function(err, &str, &len);
+    printf("[error_result] function: %.*s\n", len, str);
+    printf("[error_result] num arg types: %d\n", cass_error_num_arg_types(err));
+    for(int i = 0; i < cass_error_num_arg_types(err); i++) {
+        cass_error_result_arg_type(err, i, &str, &len);
+        printf("[error_result] arg %d: %.*s\n", i, len, str);
+    }
+}
+
 void do_prepared_query(CassSession* session, const char* query_text) {
     CassFuture* prepare_future = cass_session_prepare(session, query_text);
     const CassPrepared* prepared = cass_future_get_prepared(prepare_future);
     CassStatement* statement = cass_prepared_bind(prepared);
     CassFuture* statement_future = cass_session_execute(session, statement);
     printf("prepared query code: %d\n", cass_future_error_code(statement_future));
+    const CassErrorResult *err = cass_future_get_error_result(statement_future);
+    if(err != NULL) {
+        print_error_result(err);
+    }
+    cass_error_result_free(err);
     cass_future_free(statement_future);
     cass_future_free(prepare_future);
     cass_prepared_free(prepared);
@@ -21,7 +49,17 @@ void do_simple_query(CassSession* session, const char* query_text) {
     cass_statement_set_tracing(statement, 1);
 
     CassFuture* statement_future = cass_session_execute(session, statement);
-    printf("simple query code: %d\n", cass_future_error_code(statement_future));
+    printf("simple query ready: %d\n", cass_future_ready(statement_future));
+    const char *msg;
+    size_t len;
+    cass_future_error_message(statement_future, &msg, &len);
+    const CassErrorResult *err = cass_future_get_error_result(statement_future);
+    if(err != NULL) {
+        print_error_result(err);
+    }
+    cass_error_result_free(err);
+    printf("simple query code: %d, message: %.*s\n", cass_future_error_code(statement_future), len, msg);
+    printf("simple query ready: %d\n", cass_future_ready(statement_future));
     cass_future_free(statement_future);
     cass_statement_free(statement);
 }
@@ -48,6 +86,11 @@ int main() {
     do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t (pk int, ck int, v int, v2 text, primary key (pk, ck))");
     do_simple_query(session, "INSERT INTO ks.t(pk, ck, v, v2) VALUES (7, 8, 9, 'hello world')");
     do_prepared_query(session, "INSERT INTO ks.t(pk, ck, v, v2) VALUES (69, 69, 69, 'greetings from Rust!')");
+
+    // Create already existing table
+    do_simple_query(session, "CREATE TABLE ks.t (pk int, ck int, v int, v2 text, primary key (pk, ck))");
+    // Some garbage as request
+    do_simple_query(session, "asdasdafdsdfguhvcsdrhjgvf");
 
     CassStatement* statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v, v2) VALUES (?, ?, ?, ?)", 4);
     cass_statement_bind_int32(statement, 0, 100);
