@@ -4,6 +4,7 @@ use crate::query_result::CassResult;
 use crate::RUNTIME;
 use scylla::QueryResult;
 use std::future::Future;
+use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
 
 pub enum CassResultValue {
@@ -13,9 +14,30 @@ pub enum CassResultValue {
 
 pub type CassFutureResult = Result<CassResultValue, CassError>;
 
+pub type CassFutureCallback =
+    Option<unsafe extern "C" fn(future: *const CassFuture, data: *mut c_void)>;
+
+struct BoundCallback {
+    pub cb: CassFutureCallback,
+    pub data: *mut c_void,
+}
+
+// *mut c_void is not Send, so Rust will have to take our word
+// that we won't screw something up
+unsafe impl Send for BoundCallback {}
+
+impl BoundCallback {
+    fn invoke(self, fut: &CassFuture) {
+        unsafe {
+            self.cb.unwrap()(fut as *const CassFuture, self.data);
+        }
+    }
+}
+
 #[derive(Default)]
 struct CassFutureState {
     value: Option<CassFutureResult>,
+    callback: Option<BoundCallback>,
 }
 
 pub struct CassFuture {
@@ -40,7 +62,16 @@ impl CassFuture {
         let cass_fut_clone = cass_fut.clone();
         RUNTIME.spawn(async move {
             let r = fut.await;
-            cass_fut_clone.state.lock().unwrap().value = Some(r);
+            let mut lock = cass_fut_clone.state.lock().unwrap();
+            lock.value = Some(r);
+
+            // Take the callback and call it after realeasing the lock
+            let maybe_cb = lock.callback.take();
+            std::mem::drop(lock);
+            if let Some(bound_cb) = maybe_cb {
+                bound_cb.invoke(cass_fut_clone.as_ref());
+            }
+
             cass_fut_clone.wait_for_value.notify_all();
         });
         cass_fut
@@ -64,9 +95,41 @@ impl CassFuture {
         f((*guard).value.as_mut().unwrap())
     }
 
+    pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
+        let mut lock = self.state.lock().unwrap();
+        if lock.callback.is_some() {
+            // Another callback has been already set
+            return cass_error::LIB_CALLBACK_ALREADY_SET;
+        }
+        let bound_cb = BoundCallback { cb, data };
+        if lock.value.is_some() {
+            // The value is already available, we need to call the callback ourselves
+            std::mem::drop(lock);
+            bound_cb.invoke(self);
+            return cass_error::OK;
+        }
+        // Store the callback
+        lock.callback = Some(bound_cb);
+        cass_error::OK
+    }
+
     fn into_raw(self: Arc<Self>) -> *const Self {
         Arc::into_raw(self)
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_set_callback(
+    future_raw: *const CassFuture,
+    callback: CassFutureCallback,
+    data: *mut ::std::os::raw::c_void,
+) -> CassError {
+    ptr_to_ref(future_raw).set_callback(callback, data)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
+    ptr_to_ref(future_raw).with_waited_result(|_| ());
 }
 
 #[no_mangle]
