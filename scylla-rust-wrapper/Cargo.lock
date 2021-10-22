@@ -865,8 +865,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 [[package]]
 name = "scylla"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19ff835deaf406d42020180b948ee5d8991d43999e10a7f1ebdbf5fe08be407"
+source = "git+https://github.com/hackathon-rust-cpp/scylla-rust-driver.git?branch=main#e5eed4bb020c363ba7aaff748ecee85ba04a6637"
 dependencies = [
  "arc-swap",
  "bigdecimal",
@@ -902,9 +901,8 @@ dependencies = [
 
 [[package]]
 name = "scylla-macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66e63cc30f40e947c537079b2744a076b3099bbdb661dd52f2c5a28ce1f5cea4"
+version = "0.1.1"
+source = "git+https://github.com/hackathon-rust-cpp/scylla-rust-driver.git?branch=main#e5eed4bb020c363ba7aaff748ecee85ba04a6637"
 dependencies = [
  "quote",
  "syn",
