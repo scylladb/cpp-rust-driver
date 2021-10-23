@@ -173,5 +173,5 @@ pub unsafe extern "C" fn cass_future_get_prepared(
                 _ => None,
             }
         })
-        .map_or(std::ptr::null(), |p| Arc::into_raw(p))
+        .map_or(std::ptr::null(), Arc::into_raw)
 }
