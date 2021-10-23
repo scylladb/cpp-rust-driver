@@ -5,6 +5,7 @@ use tokio::runtime::Runtime;
 mod argconv;
 pub mod cass_error;
 pub mod cluster;
+pub mod collection;
 pub mod future;
 pub mod prepared;
 pub mod query_result;
