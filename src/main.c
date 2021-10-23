@@ -34,6 +34,8 @@ int main() {
     CassSession* session = cass_session_new();
 
     cass_cluster_set_contact_points(cluster, "127.0.1.1");
+    cass_cluster_set_load_balance_round_robin(cluster);
+    cass_cluster_set_token_aware_routing(cluster, 1);
     connect_future = cass_session_connect(session, cluster);
     cass_future_set_callback(connect_future, print_error_cb, NULL);
     cass_future_wait(connect_future);
