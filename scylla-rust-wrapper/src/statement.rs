@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::collection::{CassCollection, CassCollectionType};
+use crate::collection::CassCollection;
 use crate::inet::CassInet;
 use crate::query_result::CassResult;
 use crate::types::*;
@@ -247,27 +247,8 @@ pub unsafe extern "C" fn cass_statement_bind_collection(
     collection_raw: *const CassCollection,
 ) -> CassError {
     // FIXME: implement _by_name and _by_name_n variants
-    // FIXME: validate that collection items are correct
-    let collection = ptr_to_ref(collection_raw);
-
-    let collection_cql_value: CqlValue = match collection.collection_type {
-        CassCollectionType::CASS_COLLECTION_TYPE_LIST => List(collection.items.clone()),
-        CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
-            let mut grouped_items = Vec::new();
-            // FIXME: validate even number of items
-            for i in (0..collection.items.len()).step_by(2) {
-                let key = collection.items[i].clone();
-                let value = collection.items[i + 1].clone();
-
-                grouped_items.push((key, value));
-            }
-
-            Map(grouped_items)
-        }
-        CassCollectionType::CASS_COLLECTION_TYPE_SET => CqlValue::Set(collection.items.clone()),
-    };
-
-    cass_statement_bind_cql_value(statement, index, collection_cql_value)
+    let collection = ptr_to_ref(collection_raw).clone();
+    cass_statement_bind_cql_value(statement, index, collection.into())
 }
 
 #[no_mangle]

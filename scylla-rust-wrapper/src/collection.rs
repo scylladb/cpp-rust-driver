@@ -5,6 +5,7 @@ use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
 use std::os::raw::c_char;
 
+#[derive(Clone)]
 pub struct CassCollection {
     pub collection_type: CassCollectionType,
     pub capacity: usize,
@@ -150,4 +151,26 @@ pub unsafe extern "C" fn cass_collection_append_bytes(
 #[no_mangle]
 pub unsafe extern "C" fn cass_collection_free(collection: *mut CassCollection) {
     free_boxed(collection);
+}
+
+impl From<CassCollection> for CqlValue {
+    fn from(collection: CassCollection) -> Self {
+        // FIXME: validate that collection items are correct
+        match collection.collection_type {
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => List(collection.items),
+            CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
+                let mut grouped_items = Vec::new();
+                // FIXME: validate even number of items
+                for i in (0..collection.items.len()).step_by(2) {
+                    let key = collection.items[i].clone();
+                    let value = collection.items[i + 1].clone();
+
+                    grouped_items.push((key, value));
+                }
+
+                Map(grouped_items)
+            }
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => CqlValue::Set(collection.items),
+        }
+    }
 }
