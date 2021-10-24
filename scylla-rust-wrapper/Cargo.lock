@@ -839,6 +839,7 @@ dependencies = [
  "lazy_static",
  "scylla",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

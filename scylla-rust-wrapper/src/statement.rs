@@ -3,6 +3,7 @@ use crate::cass_error::CassError;
 use crate::collection::{CassCollection, CassCollectionType};
 use crate::inet::CassInet;
 use crate::types::*;
+use crate::uuid::CassUuid;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
 use scylla::frame::value::MaybeUnset;
@@ -62,7 +63,6 @@ pub unsafe extern "C" fn cass_statement_new_n(
 // cass_statement_bind_custom
 // cass_statement_bind_custom_n
 // cass_statement_bind_tuple
-// cass_statement_bind_uuid
 //
 // Variants of all methods with by_name, by_name_n
 
@@ -210,6 +210,16 @@ pub unsafe extern "C" fn cass_statement_bind_inet(
 ) -> CassError {
     // FIXME: implement _by_name and _by_name_n variants
     cass_statement_bind_cql_value(statement, index, Inet(value.into()))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_bind_uuid(
+    statement: *mut CassStatement,
+    index: size_t,
+    value: CassUuid,
+) -> CassError {
+    // FIXME: implement _by_name and _by_name_n variants
+    cass_statement_bind_cql_value(statement, index, CqlValue::Uuid(value.into()))
 }
 
 #[no_mangle]
