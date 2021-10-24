@@ -95,4 +95,9 @@ fn main() {
         &["CassUuid_", "CassUuid"],
         &out_path,
     );
+    prepare_cppdriver_data(
+        "cppdriver_data_types.rs",
+        &["CassValueType_", "CassValueType"],
+        &out_path,
+    );
 }

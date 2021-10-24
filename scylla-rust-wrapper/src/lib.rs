@@ -6,6 +6,7 @@ use tokio::runtime::Runtime;
 mod binding;
 mod argconv;
 pub mod cass_error;
+pub mod cass_types;
 pub mod cluster;
 pub mod collection;
 pub mod future;
