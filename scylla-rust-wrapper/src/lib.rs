@@ -13,6 +13,7 @@ pub mod query_result;
 pub mod session;
 pub mod statement;
 pub mod types;
+pub mod user_type;
 
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
