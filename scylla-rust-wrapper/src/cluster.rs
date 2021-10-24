@@ -5,6 +5,7 @@ use core::time::Duration;
 use scylla::load_balancing::{
     DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
 };
+use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
@@ -236,6 +237,60 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy::new(
             local_dc.to_string(),
         ));
+
+    cass_error::OK
+}
+
+#[no_mangle]
+pub extern "C" fn cass_cluster_set_protocol_version(
+    _cluster: *mut CassCluster,
+    protocol_version: c_int,
+) -> CassError {
+    if protocol_version == 4 {
+        // Rust Driver supports only protocol version 4
+        cass_error::OK
+    } else {
+        cass_error::LIB_BAD_PARAMS
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn cass_cluster_set_queue_size_event(
+    _cluster: *mut CassCluster,
+    _queue_size: c_uint,
+) -> CassError {
+    // In Cpp Driver this function is also a no-op...
+    cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
+    cluster_raw: *mut CassCluster,
+    constant_delay_ms: cass_int64_t,
+    max_speculative_executions: c_int,
+) -> CassError {
+    if constant_delay_ms < 0 || max_speculative_executions < 0 {
+        return cass_error::LIB_BAD_PARAMS;
+    }
+
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let policy = SimpleSpeculativeExecutionPolicy {
+        max_retry_count: max_speculative_executions as usize,
+        retry_interval: Duration::from_millis(constant_delay_ms as u64),
+    };
+
+    cluster.session_builder.config.speculative_execution_policy = Some(Arc::new(policy));
+
+    cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
+    cluster_raw: *mut CassCluster,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.session_builder.config.speculative_execution_policy = None;
 
     cass_error::OK
 }
