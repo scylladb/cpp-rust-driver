@@ -104,14 +104,14 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
 
     let data_type = ptr_to_ref_mut(data_type_raw);
     match data_type {
-        CassDataType::ValueDataType(_) => crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        CassDataType::ValueDataType(_) => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         CassDataType::UDTDataType(udt_data_type) => {
             // The Cpp Driver does not check whether field_types size
             // exceeded field_count.
             udt_data_type
                 .field_types
                 .push((name_string, sub_data_type.clone()));
-            crate::cass_error::OK
+            CassError::CASS_OK
         }
     }
 }
@@ -176,10 +176,10 @@ pub unsafe extern "C" fn cass_data_type_set_type_name_n(
         .to_string();
 
     match data_type {
-        CassDataType::ValueDataType(_) => crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        CassDataType::ValueDataType(_) => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         CassDataType::UDTDataType(udt_data_type) => {
             udt_data_type.name = type_name_string;
-            crate::cass_error::OK
+            CassError::CASS_OK
         }
     }
 }
@@ -207,10 +207,10 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
         .to_string();
 
     match data_type {
-        CassDataType::ValueDataType(_) => crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        CassDataType::ValueDataType(_) => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         CassDataType::UDTDataType(udt_data_type) => {
             udt_data_type.keyspace = keyspace_string;
-            crate::cass_error::OK
+            CassError::CASS_OK
         }
     }
 }

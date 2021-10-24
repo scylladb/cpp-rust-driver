@@ -15,6 +15,7 @@ pub mod query_result;
 pub mod session;
 pub mod statement;
 pub mod types;
+pub mod user_type;
 pub mod uuid;
 
 lazy_static! {
