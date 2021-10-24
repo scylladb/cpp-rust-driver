@@ -4,6 +4,7 @@ use crate::collection::CassCollection;
 use crate::inet::CassInet;
 use crate::query_result::CassResult;
 use crate::types::*;
+use crate::user_type::CassUserType;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
@@ -74,7 +75,6 @@ pub unsafe extern "C" fn cass_statement_new_n(
 // cass_statement_bind_duration - DURATION not implemented in Rust Driver
 //
 // (methods requiring implementing cpp driver data structures)
-// cass_statement_bind_user_type
 // cass_statement_bind_custom
 // cass_statement_bind_custom_n
 // cass_statement_bind_tuple
@@ -420,6 +420,26 @@ pub unsafe extern "C" fn cass_statement_bind_bytes_by_name_n(
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
     cass_statement_bind_cql_value_by_name_n(statement, name, name_length, Blob(value_vec))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_bind_user_type(
+    statement: *mut CassStatement,
+    index: size_t,
+    user_type_raw: *const CassUserType,
+) -> CassError {
+    // FIXME: implement _by_name and _by_name_n variants
+    let user_type = ptr_to_ref(user_type_raw);
+
+    cass_statement_bind_cql_value(
+        statement,
+        index,
+        CqlValue::UserDefinedType {
+            keyspace: user_type.udt_data_type.keyspace.clone(),
+            type_name: user_type.udt_data_type.name.clone(),
+            fields: user_type.field_values.clone().into_iter().collect(),
+        },
+    )
 }
 
 #[no_mangle]
