@@ -18,6 +18,8 @@ void do_prepared_query(CassSession* session, const char* query_text) {
 
 void do_simple_query(CassSession* session, const char* query_text) {
     CassStatement* statement = cass_statement_new(query_text, 0);
+    cass_statement_set_tracing(statement, 1);
+
     CassFuture* statement_future = cass_session_execute(session, statement);
     printf("simple query code: %d\n", cass_future_error_code(statement_future));
     cass_future_free(statement_future);
