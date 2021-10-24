@@ -119,6 +119,13 @@ impl CassDataType {
             _ => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
         }
     }
+
+    pub fn get_udt_type(&self) -> &UDTDataType {
+        match self {
+            CassDataType::UDT(udt) => udt,
+            _ => panic!("Can get UDT out of non-UDT data type"),
+        }
+    }
 }
 
 // Changed return type to const ptr - Arc::into_raw is const.
