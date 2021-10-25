@@ -423,6 +423,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "machine-uid"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f1595709b0a7386bcd56ba34d250d626e5503917d05d32cdccddcd68603e212"
+dependencies = [
+ "winreg",
+]
+
+[[package]]
 name = "memchr"
 version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -837,6 +846,8 @@ version = "0.0.1"
 dependencies = [
  "bindgen",
  "lazy_static",
+ "machine-uid",
+ "rand 0.8.4",
  "scylla",
  "tokio",
  "uuid",
@@ -1125,6 +1136,15 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "winreg"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2986deb581c4fe11b621998a5e53361efe6b48a151178d0cd9eeffa4dc6acc9"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "wyz"
