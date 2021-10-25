@@ -21,7 +21,9 @@ pub struct CassIterator {
     position: Option<usize>,
 }
 
-pub type CassRow = Row;
+pub struct CassRow {
+    pub row: Row,
+}
 
 pub type CassValue = Option<CqlValue>;
 
@@ -83,7 +85,7 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
         None => return std::ptr::null(),
     };
 
-    let row: &Row = match iter
+    let row = match iter
         .result
         .rows
         .as_ref()
@@ -104,7 +106,7 @@ pub unsafe extern "C" fn cass_row_get_column(
     let row: &CassRow = ptr_to_ref(row_raw);
 
     let index_usize: usize = index.try_into().unwrap();
-    let column_value: &Option<CqlValue> = match row.columns.get(index_usize) {
+    let column_value: &Option<CqlValue> = match row.row.columns.get(index_usize) {
         Some(val) => val,
         None => return std::ptr::null(),
     };

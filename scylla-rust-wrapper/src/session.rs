@@ -4,6 +4,7 @@ use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
 use crate::query_result::CassResult;
+use crate::query_result::CassRow;
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
@@ -87,10 +88,18 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
-                rows: result.rows,
-                paging_state: result.paging_state,
-            }))),
+            Ok(result) => {
+                let rows = result.rows.map(|rows| {
+                    rows.iter()
+                        .map(|row| CassRow { row: row.clone() })
+                        .collect()
+                });
+
+                Ok(CassResultValue::QueryResult(Arc::new(CassResult {
+                    rows,
+                    paging_state: result.paging_state,
+                })))
+            }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })
