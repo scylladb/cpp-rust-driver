@@ -7,6 +7,7 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
+use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
@@ -54,7 +55,10 @@ pub unsafe extern "C" fn cass_statement_new_n(
     };
 
     let mut query = Query::new(query_str.to_string());
-    query.disable_paging(); // Cpp Driver by default disables paging
+
+    // Set Cpp Driver default configuration for queries:
+    query.disable_paging();
+    query.set_consistency(Consistency::One);
 
     Box::into_raw(Box::new(CassStatement {
         statement: Statement::Simple(query),

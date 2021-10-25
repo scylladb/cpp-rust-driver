@@ -6,6 +6,7 @@ use crate::future::{CassFuture, CassResultValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
+use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::{QueryResult, Session};
@@ -134,7 +135,9 @@ pub unsafe extern "C" fn cass_session_prepare_n(
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
-        prepared.disable_paging(); // Cpp Driver by default disables paging
+        // Set Cpp Driver default configuration for queries:
+        prepared.disable_paging();
+        prepared.set_consistency(Consistency::One);
 
         Ok(CassResultValue::Prepared(Arc::new(prepared)))
     })
