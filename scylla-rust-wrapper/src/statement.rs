@@ -448,7 +448,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement.paging_state = result.paging_state.clone();
+    statement.paging_state = result.result_metadata.paging_state.clone();
     CassError::CASS_OK
 }
 

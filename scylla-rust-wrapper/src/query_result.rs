@@ -11,10 +11,14 @@ use std::sync::Arc;
 
 pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
+    pub result_metadata: CassResultMetadata_,
+}
+pub type CassResult_ = Arc<CassResult>;
+
+pub struct CassResultMetadata {
     pub paging_state: Option<Bytes>,
 }
-
-pub type CassResult_ = Arc<CassResult>;
+pub type CassResultMetadata_ = Arc<CassResultMetadata>;
 
 pub struct CassIterator {
     result: CassResult_,
@@ -23,6 +27,7 @@ pub struct CassIterator {
 
 pub struct CassRow {
     pub row: Row,
+    pub result_metadata: CassResultMetadata_,
 }
 
 pub type CassValue = Option<CqlValue>;
@@ -50,7 +55,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    result.paging_state.is_some() as cass_bool_t
+    result.result_metadata.paging_state.is_some() as cass_bool_t
 }
 
 #[no_mangle]
