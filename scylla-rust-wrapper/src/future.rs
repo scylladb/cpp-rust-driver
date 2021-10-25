@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::cass_error::CassErrorMessage;
 use crate::prepared::CassPrepared;
 use crate::query_error::{CassErrorResult, CassErrorResult_};
 use crate::query_result::{CassResult, CassResult_};
@@ -166,8 +167,11 @@ pub unsafe extern "C" fn cass_future_error_message(
     let message = ptr_to_ref_mut(message);
     let message_length = ptr_to_ref_mut(message_length);
     ptr_to_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(_) => write_str_to_c("", message, message_length),
+        Ok(CassResultValue::QueryError(err)) => {
+            write_str_to_c(err.msg().as_str(), message, message_length)
+        }
         Err((_, s)) => write_str_to_c(s.as_str(), message, message_length),
+        _ => write_str_to_c("", message, message_length),
     });
 }
 
