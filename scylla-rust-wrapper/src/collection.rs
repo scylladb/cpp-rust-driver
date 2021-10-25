@@ -47,7 +47,7 @@ unsafe fn cass_collection_append_cql_value(
     let collection = ptr_to_ref_mut(collection_raw);
     collection.items.push(value);
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]

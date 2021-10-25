@@ -1,5 +1,5 @@
 use crate::argconv::*;
-use crate::cass_error::{self, CassError};
+use crate::cass_error::CassError;
 use crate::types::*;
 use core::time::Duration;
 use scylla::load_balancing::{
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points_n(
     contact_points_length: size_t,
 ) -> CassError {
     match cluster_set_contact_points(cluster, contact_points, contact_points_length) {
-        Ok(()) => cass_error::OK,
+        Ok(()) => CassError::CASS_OK,
         Err(err) => err,
     }
 }
@@ -109,7 +109,7 @@ unsafe fn cluster_set_contact_points(
 ) -> Result<(), CassError> {
     let cluster = ptr_to_ref_mut(cluster_raw);
     let mut contact_points = ptr_to_cstr_n(contact_points_raw, contact_points_length)
-        .ok_or(cass_error::LIB_BAD_PARAMS)?
+        .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
         .split(',')
         .peekable();
 
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn cass_cluster_set_port(
 ) -> CassError {
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.port = port as u16; // FIXME: validate port number
-    cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -164,6 +164,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials(
     username: *const c_char,
     password: *const c_char,
 ) {
+    // TODO: string error handling
     let username_str = ptr_to_cstr(username).unwrap();
     let username_length = username_str.len();
 
@@ -187,6 +188,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     password_raw: *const c_char,
     password_length: size_t,
 ) {
+    // TODO: string error handling
     let username = ptr_to_cstr_n(username_raw, username_length).unwrap();
     let password = ptr_to_cstr_n(password_raw, password_length).unwrap();
 
@@ -209,6 +211,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
     used_hosts_per_remote_dc: c_uint,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
+    // TODO: string error handling
     let local_dc_str = ptr_to_cstr(local_dc).unwrap();
     let local_dc_length = local_dc_str.len();
 
@@ -232,6 +235,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     // FIMXE: validation
     // FIXME: used_hosts_per_remote_dc, allow_remote_dcs_for_local_cl ignored
     // as there is no equivalent configuration in Rust Driver.
+    // TODO: string error handling
     let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length).unwrap();
 
     let cluster = ptr_to_ref_mut(cluster_raw);
@@ -240,7 +244,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
             local_dc.to_string(),
         ));
 
-    cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -250,9 +254,9 @@ pub extern "C" fn cass_cluster_set_protocol_version(
 ) -> CassError {
     if protocol_version == 4 {
         // Rust Driver supports only protocol version 4
-        cass_error::OK
+        CassError::CASS_OK
     } else {
-        cass_error::LIB_BAD_PARAMS
+        CassError::CASS_ERROR_LIB_BAD_PARAMS
     }
 }
 
@@ -262,7 +266,7 @@ pub extern "C" fn cass_cluster_set_queue_size_event(
     _queue_size: c_uint,
 ) -> CassError {
     // In Cpp Driver this function is also a no-op...
-    cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -272,7 +276,7 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
     max_speculative_executions: c_int,
 ) -> CassError {
     if constant_delay_ms < 0 || max_speculative_executions < 0 {
-        return cass_error::LIB_BAD_PARAMS;
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
     let cluster = ptr_to_ref_mut(cluster_raw);
@@ -284,7 +288,7 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
 
     cluster.session_builder.config.speculative_execution_policy = Some(Arc::new(policy));
 
-    cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -294,7 +298,7 @@ pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.session_builder.config.speculative_execution_policy = None;
 
-    cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]

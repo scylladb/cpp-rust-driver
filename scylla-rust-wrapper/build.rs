@@ -21,6 +21,7 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(false)
         .generate_comments(false)
+        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
         // Finish the builder and generate the bindings.
         .generate()
         // Unwrap the Result and panic on failure.

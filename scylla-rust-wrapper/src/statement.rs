@@ -30,8 +30,10 @@ pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
 ) -> *mut CassStatement {
-    // TODO: error handling
-    let query_str = ptr_to_cstr(query).unwrap();
+    let query_str = match ptr_to_cstr(query) {
+        Some(v) => v,
+        None => return std::ptr::null_mut(),
+    };
     let query_length = query_str.len();
 
     cass_statement_new_n(query, query_length as size_t, parameter_count)
@@ -43,8 +45,10 @@ pub unsafe extern "C" fn cass_statement_new_n(
     query_length: size_t,
     parameter_count: size_t,
 ) -> *mut CassStatement {
-    // TODO: error handling
-    let query_str = ptr_to_cstr_n(query, query_length).unwrap();
+    let query_str = match ptr_to_cstr_n(query, query_length) {
+        Some(v) => v,
+        None => return std::ptr::null_mut(),
+    };
 
     Box::into_raw(Box::new(CassStatement {
         statement: Statement::Simple(Query::new(query_str.to_string())),
@@ -71,11 +75,14 @@ unsafe fn cass_statement_bind_maybe_unset(
     index: size_t,
     value: MaybeUnset<Option<CqlValue>>,
 ) -> CassError {
-    // FIXME: Bounds check
     let statement = ptr_to_ref_mut(statement_raw);
-    statement.bound_values[index as usize] = value;
 
-    crate::cass_error::OK
+    if index as usize >= statement.bound_values.len() {
+        CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
+    } else {
+        statement.bound_values[index as usize] = value;
+        CassError::CASS_OK
+    }
 }
 
 unsafe fn cass_statement_bind_cql_value(
@@ -262,7 +269,7 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
         Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
     }
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -288,7 +295,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
         }
     }
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -301,7 +308,7 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
         Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
     }
 
-    crate::cass_error::OK
+    CassError::CASS_OK
 }
 
 #[no_mangle]

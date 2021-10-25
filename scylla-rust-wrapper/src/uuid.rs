@@ -135,11 +135,11 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
 
     match value_str {
         Some(value_str) => {
-            Uuid::parse_str(value_str).map_or(crate::cass_error::LIB_BAD_PARAMS, |parsed_uuid| {
+            Uuid::parse_str(value_str).map_or(CassError::CASS_ERROR_LIB_BAD_PARAMS, |parsed_uuid| {
                 *output = parsed_uuid.into();
-                crate::cass_error::OK
+                CassError::CASS_OK
             })
         }
-        None => crate::cass_error::LIB_BAD_PARAMS,
+        None => CassError::CASS_ERROR_LIB_BAD_PARAMS,
     }
 }

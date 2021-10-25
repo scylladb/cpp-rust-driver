@@ -37,3 +37,8 @@ pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
 pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     std::str::from_utf8(std::slice::from_raw_parts(ptr as *const u8, size as usize)).ok()
 }
+
+pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
+    *c_str = s.as_ptr() as *const i8;
+    *c_strlen = s.len() as u64;
+}

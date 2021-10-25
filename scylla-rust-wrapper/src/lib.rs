@@ -9,6 +9,7 @@ pub mod collection;
 pub mod future;
 pub mod inet;
 pub mod prepared;
+pub mod query_error;
 pub mod query_result;
 pub mod session;
 pub mod statement;

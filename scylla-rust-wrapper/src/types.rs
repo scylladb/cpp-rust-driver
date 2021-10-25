@@ -44,3 +44,8 @@ pub unsafe extern "C" fn cass_date_time_to_epoch(
     (((date as u64) - CASS_DATE_EPOCH) * (NUM_SECONDS_PER_DAY as u64)
         + ((time / CASS_TIME_NANOSECONDS_PER_SECOND) as u64)) as i64
 }
+
+#[allow(non_upper_case_globals)]
+pub const cass_false: cass_bool_t = 0;
+#[allow(non_upper_case_globals)]
+pub const cass_true: cass_bool_t = 1;
