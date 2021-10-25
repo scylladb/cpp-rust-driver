@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::QueryResult;
 use std::convert::TryInto;
@@ -113,6 +114,27 @@ pub unsafe extern "C" fn cass_value_get_int32(
 
     match cql_val {
         CqlValue::Int(i) => *out = *i,
+        _ => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_uuid(
+    value: *const CassValue,
+    output: *mut CassUuid,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut CassUuid = ptr_to_ref_mut(output);
+
+    let cql_val: &CqlValue = match val {
+        Some(v) => v,
+        None => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    };
+
+    match cql_val {
+        CqlValue::Uuid(uuid) => *out = (*uuid).into(),
         _ => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
     };
 
