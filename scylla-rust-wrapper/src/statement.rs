@@ -2,6 +2,7 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::collection::{CassCollection, CassCollectionType};
 use crate::inet::CassInet;
+use crate::query_result::CassResult;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::CqlValue;
@@ -10,6 +11,7 @@ use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
+use scylla::Bytes;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
@@ -23,6 +25,7 @@ pub enum Statement {
 pub struct CassStatement {
     pub statement: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
+    pub paging_state: Option<Bytes>,
 }
 
 #[no_mangle]
@@ -50,9 +53,13 @@ pub unsafe extern "C" fn cass_statement_new_n(
         None => return std::ptr::null_mut(),
     };
 
+    let mut query = Query::new(query_str.to_string());
+    query.disable_paging(); // Cpp Driver by default disables paging
+
     Box::into_raw(Box::new(CassStatement {
-        statement: Statement::Simple(Query::new(query_str.to_string())),
+        statement: Statement::Simple(query),
         bound_values: vec![Unset; parameter_count as usize],
+        paging_state: None,
     }))
 }
 
@@ -295,6 +302,18 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
         }
     }
 
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_paging_state(
+    statement: *mut CassStatement,
+    result: *const CassResult,
+) -> CassError {
+    let statement = ptr_to_ref_mut(statement);
+    let result = ptr_to_ref(result);
+
+    statement.paging_state = result.paging_state.clone();
     CassError::CASS_OK
 }
 

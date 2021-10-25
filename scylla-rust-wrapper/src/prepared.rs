@@ -26,5 +26,6 @@ pub unsafe extern "C" fn cass_prepared_bind(
     Box::into_raw(Box::new(CassStatement {
         statement,
         bound_values: Vec::new(),
+        paging_state: None,
     }))
 }

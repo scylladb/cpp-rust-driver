@@ -58,6 +58,7 @@ pub unsafe extern "C" fn cass_session_execute(
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
     let statement_opt = ptr_to_ref(statement_raw);
+    let paging_state = statement_opt.paging_state.clone();
     let bound_values = statement_opt.bound_values.clone();
 
     let statement = statement_opt.statement.clone();
@@ -73,8 +74,14 @@ pub unsafe extern "C" fn cass_session_execute(
         let session = session_guard.as_ref().unwrap();
 
         let query_res: Result<QueryResult, QueryError> = match statement {
-            Statement::Simple(query) => session.query(query, bound_values).await,
-            Statement::Prepared(prepared) => session.execute(&prepared, bound_values).await,
+            Statement::Simple(query) => {
+                session.query_paged(query, bound_values, paging_state).await
+            }
+            Statement::Prepared(prepared) => {
+                session
+                    .execute_paged(&prepared, bound_values, paging_state)
+                    .await
+            }
         };
 
         match query_res {
@@ -122,10 +129,12 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         }
         let session = session_guard.as_ref().unwrap();
 
-        let prepared = session
+        let mut prepared = session
             .prepare(query)
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
+
+        prepared.disable_paging(); // Cpp Driver by default disables paging
 
         Ok(CassResultValue::Prepared(Arc::new(prepared)))
     })

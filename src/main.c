@@ -153,6 +153,47 @@ int main() {
     cass_future_free(select_future);
     cass_statement_free(select_statement);
 
+    CassStatement* select_paged_statement = cass_statement_new("SELECT pk, ck, v FROM ks.t", 0);
+    cass_statement_set_paging_size(select_paged_statement, 1);
+
+    puts("");
+
+    cass_bool_t has_more_pages = cass_true;
+    while (has_more_pages) {
+        CassFuture* page_future = cass_session_execute(session, select_paged_statement);
+
+        const CassResult* page_result = cass_future_get_result(page_future);
+
+        if (page_result == NULL) {
+            puts("Error!");
+            return 1;
+        }
+
+        CassIterator* page_iterator = cass_iterator_from_result(page_result);
+        while (cass_iterator_next(page_iterator)) {
+            const CassRow* row = cass_iterator_get_row(page_iterator);
+
+            int32_t pk, ck, v;
+            cass_value_get_int32(cass_row_get_column(row, 0), &pk);
+            cass_value_get_int32(cass_row_get_column(row, 1), &ck);
+            cass_value_get_int32(cass_row_get_column(row, 2), &v);
+            printf("pk: %d, ck: %d, v: %d\n", pk, ck, v);
+        }
+
+        puts("[PAGE END]");
+
+        has_more_pages = cass_result_has_more_pages(page_result);
+
+        if (has_more_pages) {
+            cass_statement_set_paging_state(select_paged_statement, page_result);
+        }
+
+        cass_result_free(page_result);
+        cass_future_free(page_future);
+    }
+
+    cass_statement_free(select_paged_statement);
+
     cass_cluster_free(cluster);
     cass_session_free(session);
 }
