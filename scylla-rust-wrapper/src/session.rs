@@ -91,6 +91,7 @@ pub unsafe extern "C" fn cass_session_execute(
             Ok(result) => {
                 let result_metadata = Arc::new(CassResultMetadata {
                     paging_state: result.paging_state,
+                    col_specs: result.col_specs
                 });
 
                 let rows = result.rows.map(|rows| {
