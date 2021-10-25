@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
@@ -238,6 +239,22 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     let out: &mut CassUuid = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Uuid(uuid)) => *out = (*uuid).into(),
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    };
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_inet(
+    value: *const CassValue,
+    output: *mut CassInet,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut CassInet = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::Inet(inet)) => *out = (*inet).into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -511,12 +528,6 @@ extern "C" {
 
 // CassValue functions:
 /*
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_inet(
-    value: *const CassValue,
-    output: *mut CassInet
-) -> CassError {
-}
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
     value: *const CassValue,
