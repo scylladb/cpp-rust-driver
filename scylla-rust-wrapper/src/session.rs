@@ -3,6 +3,7 @@ use crate::cass_error::*;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::query_result::CassResult;
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
@@ -86,7 +87,10 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
+                rows: result.rows,
+                paging_state: result.paging_state,
+            }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })

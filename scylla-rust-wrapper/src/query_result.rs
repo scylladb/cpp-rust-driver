@@ -4,12 +4,16 @@ use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
-use scylla::QueryResult;
+use scylla::Bytes;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-pub type CassResult = QueryResult;
+pub struct CassResult {
+    pub rows: Option<Vec<CassRow>>,
+    pub paging_state: Option<Bytes>,
+}
+
 pub type CassResult_ = Arc<CassResult>;
 
 pub struct CassIterator {
