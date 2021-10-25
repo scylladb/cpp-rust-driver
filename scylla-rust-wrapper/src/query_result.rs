@@ -40,6 +40,12 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
+    let result = ptr_to_ref(result);
+    result.paging_state.is_some() as cass_bool_t
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
     free_boxed(iterator);
 }
