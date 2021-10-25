@@ -12,11 +12,13 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-type CassSession = Arc<RwLock<Option<Session>>>;
+type CassSession = RwLock<Option<Session>>;
+type CassSession_ = Arc<CassSession>;
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
-    Box::into_raw(Box::new(Arc::new(RwLock::new(None))))
+pub unsafe extern "C" fn cass_session_new() -> *const CassSession {
+    let session: CassSession_ = Arc::new(RwLock::new(None));
+    Arc::into_raw(session)
 }
 
 #[no_mangle]
@@ -25,11 +27,11 @@ pub unsafe extern "C" fn cass_session_connect(
     cluster_raw: *const CassCluster,
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
-    let cluster = ptr_to_ref(cluster_raw);
+    let cluster: CassCluster = (*ptr_to_ref(cluster_raw)).clone();
 
     CassFuture::make_raw(async move {
         // TODO: Proper error handling
-        let session = build_session_builder(cluster)
+        let session = build_session_builder(&cluster)
             .build()
             .await
             .map_err(|_| cass_error::LIB_NO_HOSTS_AVAILABLE)?;
@@ -102,5 +104,5 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
-    free_boxed(session_raw);
+    free_arced(session_raw);
 }
