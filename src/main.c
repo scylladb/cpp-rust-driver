@@ -132,7 +132,7 @@ int main() {
     cass_future_free(collection_statement_future);
     cass_statement_free(collection_statement);
 
-    CassStatement* select_statement = cass_statement_new("SELECT pk, ck, v FROM ks.t", 0);
+    CassStatement* select_statement = cass_statement_new("SELECT pk, ck, v, v2 FROM ks.t", 0);
     CassFuture* select_future = cass_session_execute(session, select_statement);
     printf("select code: %d\n", cass_future_error_code(select_future));
     
@@ -142,10 +142,13 @@ int main() {
         const CassRow* row = cass_iterator_get_row(res_iterator);
 
         int32_t pk, ck, v;
+        const char *s;
+        size_t s_len;
         cass_value_get_int32(cass_row_get_column(row, 0), &pk);
         cass_value_get_int32(cass_row_get_column(row, 1), &ck);
         cass_value_get_int32(cass_row_get_column(row, 2), &v);
-        printf("pk: %d, ck: %d, v: %d\n", pk, ck, v);
+        cass_value_get_string(cass_row_get_column(row, 3), &s, &s_len);
+        printf("pk: %d, ck: %d, v: %d, v2: %.*s\n", pk, ck, v, s_len, s);
     }
 
     cass_iterator_free(res_iterator);

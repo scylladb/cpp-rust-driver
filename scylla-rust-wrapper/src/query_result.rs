@@ -5,6 +5,7 @@ use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::QueryResult;
 use std::convert::TryInto;
+use std::os::raw::c_char;
 use std::sync::Arc;
 
 pub type CassResult = QueryResult;
@@ -240,6 +241,27 @@ pub unsafe extern "C" fn cass_value_get_uuid(
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_string(
+    value: *const CassValue,
+    output: *mut *const c_char,
+    output_size: *mut size_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    match val {
+        // It seems that cpp driver doesn't check the type - you can call _get_string
+        // on any type and get internal represenation. I don't see how to do it easily in
+        // a compatible way in rust, so let's do something sensible - only return result
+        // for string values.
+        Some(CqlValue::Ascii(s)) => write_str_to_c(s, output, output_size),
+        Some(CqlValue::Text(s)) => write_str_to_c(s, output, output_size),
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    }
 
     CassError::CASS_OK
 }
@@ -489,13 +511,6 @@ extern "C" {
 
 // CassValue functions:
 /*
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_string(
-    value: *const CassValue,
-    output: *mut *const ::std::os::raw::c_char,
-    output_size: *mut size_t,
-) -> CassError {
-}
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_inet(
     value: *const CassValue,
