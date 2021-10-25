@@ -1,5 +1,8 @@
 #![allow(non_camel_case_types)]
 
+use std::convert::TryFrom;
+
+use scylla::batch::BatchType;
 use scylla::statement::Consistency;
 
 // Definition for size_t (and possibly other types in the future)
@@ -86,5 +89,41 @@ impl From<Consistency> for CassConsistency {
             Consistency::LocalSerial => CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL,
             Consistency::LocalOne => CassConsistency::CASS_CONSISTENCY_LOCAL_ONE,
         }
+    }
+}
+
+impl TryFrom<CassConsistency> for Consistency {
+    type Error = ();
+
+    fn try_from(c: CassConsistency) -> Result<Consistency, ()> {
+        match c {
+            CassConsistency::CASS_CONSISTENCY_ANY => Ok(Consistency::Any),
+            CassConsistency::CASS_CONSISTENCY_ONE => Ok(Consistency::One),
+            CassConsistency::CASS_CONSISTENCY_TWO => Ok(Consistency::Two),
+            CassConsistency::CASS_CONSISTENCY_THREE => Ok(Consistency::Three),
+            CassConsistency::CASS_CONSISTENCY_QUORUM => Ok(Consistency::Quorum),
+            CassConsistency::CASS_CONSISTENCY_ALL => Ok(Consistency::All),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Ok(Consistency::LocalQuorum),
+            CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Ok(Consistency::EachQuorum),
+            CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(Consistency::Serial),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Ok(Consistency::LocalSerial),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Ok(Consistency::LocalOne),
+            _ => Err(()),
+        }
+    }
+}
+
+pub type CassBatchType = std::os::raw::c_uint;
+
+pub const CASS_BATCH_TYPE_LOGGED: CassBatchType = 0;
+pub const CASS_BATCH_TYPE_UNLOGGED: CassBatchType = 1;
+pub const CASS_BATCH_TYPE_COUNTER: CassBatchType = 2;
+
+pub fn make_batch_type(type_: CassBatchType) -> Option<BatchType> {
+    match type_ {
+        CASS_BATCH_TYPE_LOGGED => Some(BatchType::Logged),
+        CASS_BATCH_TYPE_UNLOGGED => Some(BatchType::Unlogged),
+        CASS_BATCH_TYPE_COUNTER => Some(BatchType::Counter),
+        _ => None,
     }
 }

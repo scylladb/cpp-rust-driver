@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 
 mod argconv;
+pub mod batch;
 pub mod cass_error;
 pub mod cluster;
 pub mod collection;

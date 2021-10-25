@@ -1,4 +1,5 @@
 use crate::argconv::*;
+use crate::batch::CassBatch;
 use crate::cass_error::*;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
@@ -87,6 +88,37 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match query_res {
             Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
+        }
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_execute_batch(
+    session_raw: *mut CassSession,
+    batch_raw: *const CassBatch,
+) -> *const CassFuture {
+    let session_opt = ptr_to_ref(session_raw);
+    let batch_opt = ptr_to_ref(batch_raw);
+    let state = batch_opt.state.clone();
+
+    CassFuture::make_raw(async move {
+        let session_guard = session_opt.read().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                "Session is not connected".msg(),
+            ));
+        }
+        let session = session_guard.as_ref().unwrap();
+
+        let query_res = session.batch(&state.batch, &state.bound_values).await;
+        match query_res {
+            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(QueryResult {
+                warnings: result.warnings,
+                tracing_id: result.tracing_id,
+                ..Default::default()
+            }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })
