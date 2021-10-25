@@ -245,6 +245,7 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     let out: &mut CassUuid = ptr_to_ref_mut(output);
     match val {
         Some(CqlValue::Uuid(uuid)) => *out = (*uuid).into(),
+        Some(CqlValue::Timeuuid(uuid)) => *out = (*uuid).into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
