@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::collection::{CassCollection, CassCollectionType};
+use crate::inet::CassInet;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
@@ -62,7 +63,6 @@ pub unsafe extern "C" fn cass_statement_new_n(
 // cass_statement_bind_custom_n
 // cass_statement_bind_tuple
 // cass_statement_bind_uuid
-// cass_statement_bind_inet
 //
 // Variants of all methods with by_name, by_name_n
 
@@ -200,6 +200,16 @@ pub unsafe extern "C" fn cass_statement_bind_bytes(
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
     cass_statement_bind_cql_value(statement, index, Blob(value_vec))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_bind_inet(
+    statement: *mut CassStatement,
+    index: size_t,
+    value: CassInet,
+) -> CassError {
+    // FIXME: implement _by_name and _by_name_n variants
+    cass_statement_bind_cql_value(statement, index, Inet(value.into()))
 }
 
 #[no_mangle]
