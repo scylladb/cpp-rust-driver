@@ -45,6 +45,7 @@ impl BoundCallback {
 #[derive(Default)]
 struct CassFutureState {
     value: Option<CassFutureResult>,
+    err_string: Option<String>,
     callback: Option<BoundCallback>,
 }
 
@@ -96,11 +97,15 @@ impl CassFuture {
     }
 
     pub fn with_waited_result<T>(&self, f: impl FnOnce(&mut CassFutureResult) -> T) -> T {
+        self.with_waited_state(|s| f(s.value.as_mut().unwrap()))
+    }
+
+    pub(self) fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
         let mut guard = self
             .wait_for_value
             .wait_while(self.state.lock().unwrap(), |s| s.value.is_none())
             .unwrap();
-        f((*guard).value.as_mut().unwrap())
+        f(&mut *guard)
     }
 
     pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
@@ -166,12 +171,16 @@ pub unsafe extern "C" fn cass_future_error_message(
 ) {
     let message = ptr_to_ref_mut(message);
     let message_length = ptr_to_ref_mut(message_length);
-    ptr_to_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(CassResultValue::QueryError(err)) => {
-            write_str_to_c(err.msg().as_str(), message, message_length)
-        }
-        Err((_, s)) => write_str_to_c(s.as_str(), message, message_length),
-        _ => write_str_to_c("", message, message_length),
+    ptr_to_ref(future).with_waited_state(|state: &mut CassFutureState| {
+        let value = &state.value;
+        let msg = state
+            .err_string
+            .get_or_insert_with(|| match value.as_ref().unwrap() {
+                Ok(CassResultValue::QueryError(err)) => err.msg(),
+                Err((_, s)) => s.msg(),
+                _ => "".to_string(),
+            });
+        write_str_to_c(msg.as_str(), message, message_length);
     });
 }
 
