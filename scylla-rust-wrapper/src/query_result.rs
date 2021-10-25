@@ -101,21 +101,128 @@ pub unsafe extern "C" fn cass_row_get_column(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_get_float(
+    value: *const CassValue,
+    output: *mut cass_float_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_float_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::Float(f)) => *out = *f,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_double(
+    value: *const CassValue,
+    output: *mut cass_double_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_double_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::Double(d)) => *out = *d,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_bool(
+    value: *const CassValue,
+    output: *mut cass_bool_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_bool_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::Boolean(b)) => *out = (*b) as cass_bool_t,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_int8(
+    value: *const CassValue,
+    output: *mut cass_int8_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_int8_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::TinyInt(i)) => *out = *i,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_int16(
+    value: *const CassValue,
+    output: *mut cass_int16_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_int16_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::SmallInt(i)) => *out = *i,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_uint32(
+    value: *const CassValue,
+    output: *mut cass_uint32_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_uint32_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::Date(u)) => *out = *u, // FIXME: hack
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
+    };
+
+    crate::cass_error::OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int32(
     value: *const CassValue,
     output: *mut cass_int32_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int32_t = ptr_to_ref_mut(output);
-
-    let cql_val: &CqlValue = match val {
-        Some(v) => v,
-        None => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    match val {
+        Some(CqlValue::Int(i)) => *out = *i,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
     };
 
-    match cql_val {
-        CqlValue::Int(i) => *out = *i,
-        _ => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    crate::cass_error::OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_int64(
+    value: *const CassValue,
+    output: *mut cass_int64_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let out: &mut cass_int64_t = ptr_to_ref_mut(output);
+    match val {
+        Some(CqlValue::BigInt(i)) => *out = *i,
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
     };
 
     crate::cass_error::OK
@@ -128,15 +235,10 @@ pub unsafe extern "C" fn cass_value_get_uuid(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut CassUuid = ptr_to_ref_mut(output);
-
-    let cql_val: &CqlValue = match val {
-        Some(v) => v,
-        None => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
-    };
-
-    match cql_val {
-        CqlValue::Uuid(uuid) => *out = (*uuid).into(),
-        _ => return crate::cass_error::LIB_BAD_PARAMS, // TODO: other error code?
+    match val {
+        Some(CqlValue::Uuid(uuid)) => *out = (*uuid).into(),
+        Some(_) => return crate::cass_error::LIB_INVALID_VALUE_TYPE,
+        None => return crate::cass_error::LIB_NULL_VALUE,
     };
 
     crate::cass_error::OK
@@ -387,77 +489,44 @@ extern "C" {
 
 // CassValue functions:
 /*
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_string(
+    value: *const CassValue,
+    output: *mut *const ::std::os::raw::c_char,
+    output_size: *mut size_t,
+) -> CassError {
+}
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_inet(
+    value: *const CassValue,
+    output: *mut CassInet
+) -> CassError {
+}
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_bytes(
+    value: *const CassValue,
+    output: *mut *const cass_byte_t,
+    output_size: *mut size_t,
+) -> CassError {
+}
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_decimal(
+    value: *const CassValue,
+    varint: *mut *const cass_byte_t,
+    varint_size: *mut size_t,
+    scale: *mut cass_int32_t,
+) -> CassError {
+}
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_duration(
+    value: *const CassValue,
+    months: *mut cass_int32_t,
+    days: *mut cass_int32_t,
+    nanos: *mut cass_int64_t,
+) -> CassError {
+}
 extern "C" {
     pub fn cass_value_data_type(value: *const CassValue) -> *const CassDataType;
-}
-extern "C" {
-    pub fn cass_value_get_float(value: *const CassValue, output: *mut cass_float_t) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_double(value: *const CassValue, output: *mut cass_double_t) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_bool(value: *const CassValue, output: *mut cass_bool_t) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_int8(
-        _value: *const CassValue,
-        _output: *mut cass_int8_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_int16(
-        _value: *const CassValue,
-        _output: *mut cass_int16_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_uint32(
-        _value: *const CassValue,
-        _output: *mut cass_uint32_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_int64(
-        _value: *const CassValue,
-        _output: *mut cass_int64_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_uuid(value: *const CassValue, output: *mut CassUuid) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_inet(value: *const CassValue, output: *mut CassInet) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_string(
-        value: *const CassValue,
-        output: *mut *const ::std::os::raw::c_char,
-        output_size: *mut size_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_bytes(
-        value: *const CassValue,
-        output: *mut *const cass_byte_t,
-        output_size: *mut size_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_decimal(
-        value: *const CassValue,
-        varint: *mut *const cass_byte_t,
-        varint_size: *mut size_t,
-        scale: *mut cass_int32_t,
-    ) -> CassError;
-}
-extern "C" {
-    pub fn cass_value_get_duration(
-        value: *const CassValue,
-        months: *mut cass_int32_t,
-        days: *mut cass_int32_t,
-        nanos: *mut cass_int64_t,
-    ) -> CassError;
 }
 extern "C" {
     pub fn cass_value_type(value: *const CassValue) -> CassValueType;
