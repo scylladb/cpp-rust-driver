@@ -6,10 +6,11 @@ use scylla::QueryResult;
 use std::convert::TryInto;
 use std::sync::Arc;
 
-pub type CassResult = Arc<QueryResult>;
+pub type CassResult = QueryResult;
+pub type CassResult_ = Arc<CassResult>;
 
 pub struct CassIterator {
-    result: Arc<QueryResult>,
+    result: CassResult_,
     position: Option<usize>,
 }
 
@@ -21,10 +22,10 @@ pub type CassValue = Option<CqlValue>;
 pub unsafe extern "C" fn cass_iterator_from_result(
     result_raw: *const CassResult,
 ) -> *mut CassIterator {
-    let result: &CassResult = ptr_to_ref(result_raw);
+    let result: CassResult_ = clone_arced(result_raw);
 
     let iterator = CassIterator {
-        result: result.clone(),
+        result,
         position: None,
     };
 
@@ -34,7 +35,7 @@ pub unsafe extern "C" fn cass_iterator_from_result(
 // This was const for some reason, seems like a mistake in cpp driver
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
-    free_boxed(result_raw);
+    free_arced(result_raw);
 }
 
 #[no_mangle]

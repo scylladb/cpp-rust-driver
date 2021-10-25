@@ -1,17 +1,16 @@
 use crate::argconv::*;
 use crate::cass_error::{self, CassError};
 use crate::prepared::CassPrepared;
-use crate::query_result::CassResult;
+use crate::query_result::{CassResult, CassResult_};
 use crate::RUNTIME;
 use scylla::prepared_statement::PreparedStatement;
-use scylla::QueryResult;
 use std::future::Future;
 use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
 
 pub enum CassResultValue {
     Empty,
-    QueryResult(Arc<QueryResult>),
+    QueryResult(CassResult_),
     Prepared(Arc<PreparedStatement>),
 }
 
@@ -153,13 +152,13 @@ pub unsafe extern "C" fn cass_future_get_result(
     future_raw: *const CassFuture,
 ) -> *const CassResult {
     ptr_to_ref(future_raw)
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassResult> {
+        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassResult_> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(qr.clone()),
                 _ => None,
             }
         })
-        .map_or(std::ptr::null(), |qr| Box::into_raw(Box::new(qr)))
+        .map_or(std::ptr::null(), Arc::into_raw)
 }
 
 #[no_mangle]

@@ -18,6 +18,11 @@ pub unsafe fn free_boxed<T>(ptr: *mut T) {
     }
 }
 
+pub unsafe fn clone_arced<T>(ptr: *const T) -> Arc<T> {
+    Arc::increment_strong_count(ptr);
+    Arc::from_raw(ptr)
+}
+
 pub unsafe fn free_arced<T>(ptr: *const T) {
     if !ptr.is_null() {
         // This decrements the arc's internal counter and potentially drops it

@@ -9,11 +9,13 @@ use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
 
+#[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
     RoundRobinPolicy(RoundRobinPolicy),
     DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy),
 }
 
+#[derive(Clone)]
 pub struct CassCluster {
     session_builder: SessionBuilder,
 
