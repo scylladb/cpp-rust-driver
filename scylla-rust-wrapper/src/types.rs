@@ -1,5 +1,7 @@
 #![allow(non_camel_case_types)]
 
+use scylla::statement::Consistency;
+
 // Definition for size_t (and possibly other types in the future)
 include!(concat!(env!("OUT_DIR"), "/basic_types.rs"));
 
@@ -49,3 +51,40 @@ pub unsafe extern "C" fn cass_date_time_to_epoch(
 pub const cass_false: cass_bool_t = 0;
 #[allow(non_upper_case_globals)]
 pub const cass_true: cass_bool_t = 1;
+
+//TODO: generate this and other enums at compile time using bindgen
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum CassConsistency {
+    CASS_CONSISTENCY_UNKNOWN = 65535,
+    CASS_CONSISTENCY_ANY = 0,
+    CASS_CONSISTENCY_ONE = 1,
+    CASS_CONSISTENCY_TWO = 2,
+    CASS_CONSISTENCY_THREE = 3,
+    CASS_CONSISTENCY_QUORUM = 4,
+    CASS_CONSISTENCY_ALL = 5,
+    CASS_CONSISTENCY_LOCAL_QUORUM = 6,
+    CASS_CONSISTENCY_EACH_QUORUM = 7,
+    CASS_CONSISTENCY_SERIAL = 8,
+    CASS_CONSISTENCY_LOCAL_SERIAL = 9,
+    CASS_CONSISTENCY_LOCAL_ONE = 10,
+}
+
+impl From<Consistency> for CassConsistency {
+    fn from(c: Consistency) -> CassConsistency {
+        match c {
+            Consistency::Any => CassConsistency::CASS_CONSISTENCY_ANY,
+            Consistency::One => CassConsistency::CASS_CONSISTENCY_ONE,
+            Consistency::Two => CassConsistency::CASS_CONSISTENCY_TWO,
+            Consistency::Three => CassConsistency::CASS_CONSISTENCY_THREE,
+            Consistency::Quorum => CassConsistency::CASS_CONSISTENCY_QUORUM,
+            Consistency::All => CassConsistency::CASS_CONSISTENCY_ALL,
+            Consistency::LocalQuorum => CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM,
+            Consistency::EachQuorum => CassConsistency::CASS_CONSISTENCY_EACH_QUORUM,
+            Consistency::Serial => CassConsistency::CASS_CONSISTENCY_SERIAL,
+            Consistency::LocalSerial => CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL,
+            Consistency::LocalOne => CassConsistency::CASS_CONSISTENCY_LOCAL_ONE,
+        }
+    }
+}
