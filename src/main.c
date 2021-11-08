@@ -132,6 +132,35 @@ int main() {
     cass_future_free(collection_statement_future);
     cass_statement_free(collection_statement);
 
+    CassStatement* batch_statement = cass_statement_new("INSERT INTO ks.t(pk, ck, v, v2) VALUES (?, ?, ?, ?)", 4);
+    cass_statement_bind_int32(batch_statement, 0, 900);
+    cass_statement_bind_int32(batch_statement, 1, 800);
+    cass_statement_bind_int32(batch_statement, 2, 700);
+
+    CassFuture* prepare_future = cass_session_prepare(session, "INSERT INTO ks.t(pk, ck, v, v2) VALUES (?, ?, ?, ?)");
+    const CassPrepared* prepared = cass_future_get_prepared(prepare_future);
+    CassStatement* batch_prepared_statement = cass_prepared_bind(prepared);
+    cass_statement_bind_int32(batch_prepared_statement, 0, 321);
+    cass_statement_bind_int32(batch_prepared_statement, 1, 654);
+    cass_statement_bind_int32(batch_prepared_statement, 2, 987);
+
+    CassBatch* batch = cass_batch_new(CASS_BATCH_TYPE_UNLOGGED);
+    cass_batch_add_statement(batch, batch_prepared_statement);
+    cass_batch_add_statement(batch, batch_statement);
+
+    CassFuture* batch_execute_future = cass_session_execute_batch(session, batch);
+    const CassErrorResult *err = cass_future_get_error_result(batch_execute_future);
+    if (err != NULL) {
+        print_error_result(err);
+    }
+    cass_error_result_free(err);
+    cass_future_free(batch_execute_future);
+
+    cass_batch_free(batch);
+    cass_statement_free(batch_prepared_statement);
+    cass_statement_free(batch_statement);
+    cass_prepared_free(prepared);
+
     CassStatement* select_statement = cass_statement_new("SELECT pk, ck, v, v2 FROM ks.t", 0);
     CassFuture* select_future = cass_session_execute(session, select_statement);
     printf("select code: %d\n", cass_future_error_code(select_future));

@@ -1,7 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::*;
 use crate::types::*;
-use scylla::statement::Consistency;
 use scylla::transport::errors::*;
 use std::sync::Arc;
 
@@ -9,42 +8,6 @@ pub type CassErrorResult = QueryError;
 pub type CassErrorResult_ = Arc<CassErrorResult>;
 
 //TODO: generate this and other enums at compile time using bindgen
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
-pub enum CassConsistency {
-    CASS_CONSISTENCY_UNKNOWN = 65535,
-    CASS_CONSISTENCY_ANY = 0,
-    CASS_CONSISTENCY_ONE = 1,
-    CASS_CONSISTENCY_TWO = 2,
-    CASS_CONSISTENCY_THREE = 3,
-    CASS_CONSISTENCY_QUORUM = 4,
-    CASS_CONSISTENCY_ALL = 5,
-    CASS_CONSISTENCY_LOCAL_QUORUM = 6,
-    CASS_CONSISTENCY_EACH_QUORUM = 7,
-    CASS_CONSISTENCY_SERIAL = 8,
-    CASS_CONSISTENCY_LOCAL_SERIAL = 9,
-    CASS_CONSISTENCY_LOCAL_ONE = 10,
-}
-
-impl From<Consistency> for CassConsistency {
-    fn from(c: Consistency) -> CassConsistency {
-        match c {
-            Consistency::Any => CassConsistency::CASS_CONSISTENCY_ANY,
-            Consistency::One => CassConsistency::CASS_CONSISTENCY_ONE,
-            Consistency::Two => CassConsistency::CASS_CONSISTENCY_TWO,
-            Consistency::Three => CassConsistency::CASS_CONSISTENCY_THREE,
-            Consistency::Quorum => CassConsistency::CASS_CONSISTENCY_QUORUM,
-            Consistency::All => CassConsistency::CASS_CONSISTENCY_ALL,
-            Consistency::LocalQuorum => CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM,
-            Consistency::EachQuorum => CassConsistency::CASS_CONSISTENCY_EACH_QUORUM,
-            Consistency::Serial => CassConsistency::CASS_CONSISTENCY_SERIAL,
-            Consistency::LocalSerial => CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL,
-            Consistency::LocalOne => CassConsistency::CASS_CONSISTENCY_LOCAL_ONE,
-        }
-    }
-}
-
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
