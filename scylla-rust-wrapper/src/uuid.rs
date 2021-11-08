@@ -1,7 +1,13 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::os::raw::c_char;
+use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 #[repr(C)]
@@ -9,6 +15,11 @@ use uuid::Uuid;
 pub struct CassUuid {
     pub time_and_version: cass_uint64_t,
     pub clock_seq_and_node: cass_uint64_t,
+}
+
+pub struct CassUuidGen {
+    pub clock_seq_and_node: cass_uint64_t,
+    pub last_timestamp: AtomicU64,
 }
 
 // Implementation directly ported from Cpp Driver implementation:
@@ -27,6 +38,35 @@ fn from_unix_timestamp(timestamp: u64) -> u64 {
 
 fn set_version(timestamp: u64, version: u8) -> u64 {
     (timestamp & 0x0FFFFFFFFFFFFFFF) | ((version as u64) << 60)
+}
+
+// Ported from UuidGen::set_clock_seq_and_node
+fn rand_clock_seq_and_node(node: u64) -> u64 {
+    let clock_seq: u64 = rand::random();
+    let mut result: u64 = 0;
+    result |= (clock_seq & 0x0000000000003FFF) << 48;
+    result |= 0x8000000000000000; // RFC4122 variant
+    result |= node;
+    result
+}
+
+// Ported from UuidGen::monotonic_timestamp, but simplified at
+// a cost of performance.
+fn monotonic_timestamp(last_timestamp: &mut AtomicU64) -> u64 {
+    loop {
+        let now = SystemTime::now();
+        let now = now.duration_since(UNIX_EPOCH).unwrap();
+        let now = from_unix_timestamp(now.as_millis() as u64);
+
+        let last = last_timestamp.load(Ordering::SeqCst);
+        if last < now
+            && last_timestamp
+                .compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        {
+            return now;
+        }
+    }
 }
 
 #[no_mangle]
@@ -60,6 +100,72 @@ pub unsafe extern "C" fn cass_uuid_max_from_time(
 
     output.time_and_version = set_version(from_unix_timestamp(timestamp), 1);
     output.clock_seq_and_node = MAX_CLOCK_SEQ_AND_NODE;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_new() -> *mut CassUuidGen {
+    // Inspired by C++ driver implementation in its intent.
+    // The original driver tries to generate a number that
+    // uniquely identifies this machine and the current process.
+
+    // In the original driver, it generates a number
+    // based on local IPs, CPU info and PID.
+    let machine_id = machine_uid::get().unwrap();
+    let pid = process::id();
+
+    let mut hasher = DefaultHasher::new();
+    machine_id.hash(&mut hasher);
+    pid.hash(&mut hasher);
+
+    // Masking the same way as in Cpp Driver.
+    let node: u64 = (hasher.finish() & 0x0000FFFFFFFFFFFF) | 0x0000010000000000 /* Multicast bit */;
+
+    Box::into_raw(Box::new(CassUuidGen {
+        clock_seq_and_node: rand_clock_seq_and_node(node),
+        last_timestamp: AtomicU64::new(0),
+    }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mut CassUuidGen {
+    Box::into_raw(Box::new(CassUuidGen {
+        clock_seq_and_node: rand_clock_seq_and_node(node & 0x0000FFFFFFFFFFFF),
+        last_timestamp: AtomicU64::new(0),
+    }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_time(uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
+    let uuid_gen = ptr_to_ref_mut(uuid_gen);
+    let output = ptr_to_ref_mut(output);
+
+    output.time_and_version = set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1);
+    output.clock_seq_and_node = uuid_gen.clock_seq_and_node;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
+    let output = ptr_to_ref_mut(output);
+
+    let time_and_version: u64 = rand::random();
+    let clock_seq_and_node: u64 = rand::random();
+
+    output.time_and_version = set_version(time_and_version, 4);
+    output.clock_seq_and_node = (clock_seq_and_node & 0x3FFFFFFFFFFFFFFF) | 0x8000000000000000;
+    // RFC4122 variant
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_from_time(
+    uuid_gen: *mut CassUuidGen,
+    timestamp: cass_uint64_t,
+    output: *mut CassUuid,
+) {
+    let uuid_gen = ptr_to_ref_mut(uuid_gen);
+    let output = ptr_to_ref_mut(output);
+
+    output.time_and_version = set_version(from_unix_timestamp(timestamp), 1);
+    output.clock_seq_and_node = uuid_gen.clock_seq_and_node;
 }
 
 // Implemented ourselves:
@@ -142,4 +248,9 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
         }
         None => CassError::CASS_ERROR_LIB_BAD_PARAMS,
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_uuid_gen_free(uuid_gen: *mut CassUuidGen) {
+    free_boxed(uuid_gen);
 }
