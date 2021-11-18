@@ -3,36 +3,22 @@ extern crate bindgen;
 use std::env;
 use std::path::PathBuf;
 
-// Here we use bindgen to create function declarations,
-// that can later be used as a starting point when writing wrapper.
-fn main() {
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=extern/cassandra.h");
-
-    // The bindgen::Builder is the main entry point
-    // to bindgen, and lets you build up options for
-    // the resulting bindings.
+fn prepare_full_bindings(out_path: &PathBuf) {
     let bindings = bindgen::Builder::default()
-        // The input header we would like to generate
-        // bindings for.
         .header("extern/cassandra.h")
-        // Tell cargo to invalidate the built crate whenever any of the
-        // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(false)
         .generate_comments(false)
         .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
-        // Finish the builder and generate the bindings.
         .generate()
-        // Unwrap the Result and panic on failure.
         .expect("Unable to generate bindings");
 
-    // Write the bindings to the $OUT_DIR/bindings.rs file.
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("cassandra_bindings.rs"))
         .expect("Couldn't write bindings!");
+}
 
+fn prepare_basic_types(out_path: &PathBuf) {
     let basic_bindings = bindgen::Builder::default()
         .header("extern/cassandra.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -41,7 +27,45 @@ fn main() {
         .allowlist_type("size_t")
         .generate()
         .expect("Unable to generate bindings");
+
     basic_bindings
         .write_to_file(out_path.join("basic_types.rs"))
         .expect("Couldn't write bindings!");
+}
+
+fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &PathBuf) {
+    let mut type_bindings = bindgen::Builder::default()
+        .header("extern/cassandra.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .layout_tests(true)
+        .generate_comments(false)
+        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false });
+    for t in allowed_types {
+        type_bindings = type_bindings.allowlist_type(t);
+    }
+    let type_bindings = type_bindings
+        .generate()
+        .expect("Unable to generate bindings");
+
+    type_bindings
+        .write_to_file(out_path.join(outfile))
+        .expect("Couldn't write bindings!");
+}
+
+fn main() {
+    println!("cargo:rerun-if-changed=extern/cassandra.h");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    prepare_full_bindings(&out_path);
+    prepare_basic_types(&out_path);
+
+    prepare_cppdriver_data(
+        "cppdriver_errors.rs",
+        &[
+            "CassErrorSource_",
+            "CassErrorSource",
+            "CassError_",
+            "CassError",
+        ],
+        &out_path,
+    );
 }
