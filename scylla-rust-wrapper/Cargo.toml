@@ -17,6 +17,8 @@ lazy_static = "1.4.0"
 uuid = "0.8.2"
 machine-uid = "0.2.0"
 rand = "0.8.4"
+num-traits = "0.2"
+num-derive = "0.3"
 
 [build-dependencies]
 bindgen = "0.59.1"

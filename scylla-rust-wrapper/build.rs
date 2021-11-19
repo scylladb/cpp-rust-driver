@@ -1,9 +1,9 @@
 extern crate bindgen;
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-fn prepare_full_bindings(out_path: &PathBuf) {
+fn prepare_full_bindings(out_path: &Path) {
     let bindings = bindgen::Builder::default()
         .header("extern/cassandra.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -18,7 +18,7 @@ fn prepare_full_bindings(out_path: &PathBuf) {
         .expect("Couldn't write bindings!");
 }
 
-fn prepare_basic_types(out_path: &PathBuf) {
+fn prepare_basic_types(out_path: &Path) {
     let basic_bindings = bindgen::Builder::default()
         .header("extern/cassandra.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -33,7 +33,7 @@ fn prepare_basic_types(out_path: &PathBuf) {
         .expect("Couldn't write bindings!");
 }
 
-fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &PathBuf) {
+fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path) {
     let mut type_bindings = bindgen::Builder::default()
         .header("extern/cassandra.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -66,6 +66,31 @@ fn main() {
             "CassError_",
             "CassError",
         ],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_data_collection.rs",
+        &["CassCollectionType_", "CassCollectionType"],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_data_inet.rs",
+        &["CassInet_", "CassInet"],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_data_query_error.rs",
+        &[
+            "CassConsistency_",
+            "CassConsistency",
+            "CassWriteType",
+            "CassWriteType_",
+        ],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_data_uuid.rs",
+        &["CassUuid_", "CassUuid"],
         &out_path,
     );
 }

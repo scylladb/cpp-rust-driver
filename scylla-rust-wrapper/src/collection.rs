@@ -5,20 +5,13 @@ use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
 use std::os::raw::c_char;
 
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
+
 #[derive(Clone)]
 pub struct CassCollection {
     pub collection_type: CassCollectionType,
     pub capacity: usize,
     pub items: Vec<CqlValue>,
-}
-
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum CassCollectionType {
-    CASS_COLLECTION_TYPE_LIST = 32,
-    CASS_COLLECTION_TYPE_MAP = 33,
-    CASS_COLLECTION_TYPE_SET = 34,
 }
 
 #[no_mangle]
@@ -171,6 +164,7 @@ impl From<CassCollection> for CqlValue {
                 Map(grouped_items)
             }
             CassCollectionType::CASS_COLLECTION_TYPE_SET => CqlValue::Set(collection.items),
+            _ => panic!("Collection with invalid type encountered!"),
         }
     }
 }

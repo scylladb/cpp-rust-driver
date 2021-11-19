@@ -1,25 +1,23 @@
+#![allow(non_camel_case_types)]
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use std::convert::TryInto;
 use std::net::IpAddr;
 use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 use std::str::FromStr;
 
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_inet.rs"));
+
 #[repr(u8)] // address_length field in CassInet is cass_uint8_t
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, FromPrimitive)]
 pub enum CassInetLength {
     CASS_INET_V4 = 4,
     CASS_INET_V6 = 16,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CassInet {
-    pub address: [cass_uint8_t; 16],
-    pub address_length: CassInetLength,
 }
 
 unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetLength) -> CassInet {
@@ -29,7 +27,7 @@ unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetL
 
     CassInet {
         address: array,
-        address_length,
+        address_length: address_length as u8,
     }
 }
 
@@ -97,21 +95,22 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
 
 impl From<CassInet> for IpAddr {
     fn from(inet: CassInet) -> Self {
-        match inet.address_length {
-            CassInetLength::CASS_INET_V4 => {
+        match FromPrimitive::from_u8(inet.address_length) {
+            Some(CassInetLength::CASS_INET_V4) => {
                 let addr_bytes: [cass_uint8_t; CassInetLength::CASS_INET_V4 as usize] = inet
                     .address[0..(CassInetLength::CASS_INET_V4 as usize)]
                     .try_into()
                     .unwrap();
                 IpAddr::V4(addr_bytes.into())
             }
-            CassInetLength::CASS_INET_V6 => {
+            Some(CassInetLength::CASS_INET_V6) => {
                 let addr_bytes: [cass_uint8_t; CassInetLength::CASS_INET_V6 as usize] = inet
                     .address[0..(CassInetLength::CASS_INET_V6 as usize)]
                     .try_into()
                     .unwrap();
                 IpAddr::V6(addr_bytes.into())
             }
+            None => panic!("Encountered CassInet with unknown type!"),
         }
     }
 }
@@ -126,7 +125,7 @@ impl From<IpAddr> for CassInet {
 
                 CassInet {
                     address,
-                    address_length: CassInetLength::CASS_INET_V4,
+                    address_length: CassInetLength::CASS_INET_V4 as u8,
                 }
             }
             IpAddr::V6(v6_addr) => {
@@ -136,7 +135,7 @@ impl From<IpAddr> for CassInet {
 
                 CassInet {
                     address,
-                    address_length: CassInetLength::CASS_INET_V6,
+                    address_length: CassInetLength::CASS_INET_V6 as u8,
                 }
             }
         }
