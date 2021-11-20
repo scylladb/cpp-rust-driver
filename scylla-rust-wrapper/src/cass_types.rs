@@ -3,40 +3,7 @@ use crate::cass_error::CassError;
 use crate::types::*;
 use std::os::raw::c_char;
 
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum CassValueType {
-    CASS_VALUE_TYPE_UNKNOWN = 65535,
-    CASS_VALUE_TYPE_CUSTOM = 0,
-    CASS_VALUE_TYPE_ASCII = 1,
-    CASS_VALUE_TYPE_BIGINT = 2,
-    CASS_VALUE_TYPE_BLOB = 3,
-    CASS_VALUE_TYPE_BOOLEAN = 4,
-    CASS_VALUE_TYPE_COUNTER = 5,
-    CASS_VALUE_TYPE_DECIMAL = 6,
-    CASS_VALUE_TYPE_DOUBLE = 7,
-    CASS_VALUE_TYPE_FLOAT = 8,
-    CASS_VALUE_TYPE_INT = 9,
-    CASS_VALUE_TYPE_TEXT = 10,
-    CASS_VALUE_TYPE_TIMESTAMP = 11,
-    CASS_VALUE_TYPE_UUID = 12,
-    CASS_VALUE_TYPE_VARCHAR = 13,
-    CASS_VALUE_TYPE_VARINT = 14,
-    CASS_VALUE_TYPE_TIMEUUID = 15,
-    CASS_VALUE_TYPE_INET = 16,
-    CASS_VALUE_TYPE_DATE = 17,
-    CASS_VALUE_TYPE_TIME = 18,
-    CASS_VALUE_TYPE_SMALL_INT = 19,
-    CASS_VALUE_TYPE_TINY_INT = 20,
-    CASS_VALUE_TYPE_DURATION = 21,
-    CASS_VALUE_TYPE_LIST = 32,
-    CASS_VALUE_TYPE_MAP = 33,
-    CASS_VALUE_TYPE_SET = 34,
-    CASS_VALUE_TYPE_UDT = 48,
-    CASS_VALUE_TYPE_TUPLE = 49,
-    CASS_VALUE_TYPE_LAST_ENTRY = 50,
-}
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
 
 #[derive(Clone)]
 pub struct UDTDataType {
