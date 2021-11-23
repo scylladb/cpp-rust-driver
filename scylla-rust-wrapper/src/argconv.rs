@@ -42,3 +42,10 @@ pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut 
     *c_str = s.as_ptr() as *const i8;
     *c_strlen = s.len() as u64;
 }
+
+pub unsafe fn strlen(ptr: *const c_char) -> size_t {
+    if ptr.is_null() {
+        return 0;
+    }
+    libc::strlen(ptr) as size_t
+}

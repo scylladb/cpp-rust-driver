@@ -19,6 +19,7 @@ machine-uid = "0.2.0"
 rand = "0.8.4"
 num-traits = "0.2"
 num-derive = "0.3"
+libc = "0.2.108"
 
 [build-dependencies]
 bindgen = "0.59.1"
