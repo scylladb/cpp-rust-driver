@@ -13,6 +13,7 @@ use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::Bytes;
+use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
@@ -185,7 +186,10 @@ macro_rules! make_binders {
             index: size_t,
             value: $t,
         ) -> CassError {
-            cass_statement_bind_cql_value(statement, index, ($e)(value))
+            match ($e)(value) {
+                Ok(v) => cass_statement_bind_cql_value(statement, index, v),
+                Err(e) => e,
+            }
         }
 
         #[no_mangle]
@@ -195,7 +199,10 @@ macro_rules! make_binders {
             name: *const c_char,
             value: $t,
         ) -> CassError {
-            cass_statement_bind_cql_value_by_name(statement, name, ($e)(value))
+            match ($e)(value) {
+                Ok(v) => cass_statement_bind_cql_value_by_name(statement, name, v),
+                Err(e) => e,
+            }
         }
 
         #[no_mangle]
@@ -206,7 +213,10 @@ macro_rules! make_binders {
             name_length: size_t,
             value: $t,
         ) -> CassError {
-            cass_statement_bind_cql_value_by_name_n(statement, name, name_length, ($e)(value))
+            match ($e)(value) {
+                Ok(v) => cass_statement_bind_cql_value_by_name_n(statement, name, name_length, v),
+                Err(e) => e,
+            }
         }
     };
 }
@@ -216,7 +226,7 @@ make_binders!(
     cass_statement_bind_int8_by_name,
     cass_statement_bind_int8_by_name_n,
     cass_int8_t,
-    |v| TinyInt(v)
+    |v| Ok(TinyInt(v))
 );
 
 make_binders!(
@@ -224,7 +234,7 @@ make_binders!(
     cass_statement_bind_int16_by_name,
     cass_statement_bind_int16_by_name_n,
     cass_int16_t,
-    |v| SmallInt(v)
+    |v| Ok(SmallInt(v))
 );
 
 make_binders!(
@@ -232,7 +242,7 @@ make_binders!(
     cass_statement_bind_int32_by_name,
     cass_statement_bind_int32_by_name_n,
     cass_int32_t,
-    |v| Int(v)
+    |v| Ok(Int(v))
 );
 
 // cass_statement_bind_uint32 is only used to set a DATE.
@@ -241,7 +251,7 @@ make_binders!(
     cass_statement_bind_uint32_by_name,
     cass_statement_bind_uint32_by_name_n,
     cass_uint32_t,
-    |v| Date(v)
+    |v| Ok(Date(v))
 );
 
 make_binders!(
@@ -249,7 +259,7 @@ make_binders!(
     cass_statement_bind_int64_by_name,
     cass_statement_bind_int64_by_name_n,
     cass_int64_t,
-    |v| BigInt(v)
+    |v| Ok(BigInt(v))
 );
 
 make_binders!(
@@ -257,7 +267,7 @@ make_binders!(
     cass_statement_bind_float_by_name,
     cass_statement_bind_float_by_name_n,
     cass_float_t,
-    |v| Float(v)
+    |v| Ok(Float(v))
 );
 
 make_binders!(
@@ -265,7 +275,7 @@ make_binders!(
     cass_statement_bind_double_by_name,
     cass_statement_bind_double_by_name_n,
     cass_double_t,
-    |v| Double(v)
+    |v| Ok(Double(v))
 );
 
 make_binders!(
@@ -273,7 +283,7 @@ make_binders!(
     cass_statement_bind_bool_by_name,
     cass_statement_bind_bool_by_name_n,
     cass_bool_t,
-    |v| Boolean(v != 0)
+    |v| Ok(Boolean(v != 0))
 );
 
 make_binders!(
@@ -281,7 +291,16 @@ make_binders!(
     cass_statement_bind_inet_by_name,
     cass_statement_bind_inet_by_name_n,
     CassInet,
-    |v: CassInet| Inet(v.into())
+    |v: CassInet| {
+        // Err if length in struct is invalid.
+        // cppdriver doesn't check this - it encodes any length given to it
+        // but it doesn't seem like something we wanna do. Also, rust driver can't
+        // really do it afaik.
+        match v.try_into() {
+            Ok(v) => Ok(Inet(v)),
+            Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
+        }
+    }
 );
 
 make_binders!(
@@ -289,7 +308,7 @@ make_binders!(
     cass_statement_bind_uuid_by_name,
     cass_statement_bind_uuid_by_name_n,
     CassUuid,
-    |v: CassUuid| Uuid(v.into())
+    |v: CassUuid| Ok(Uuid(v.into()))
 );
 
 make_binders!(
@@ -298,8 +317,10 @@ make_binders!(
     cass_statement_bind_collection_by_name_n,
     *const CassCollection,
     |p: *const CassCollection| {
-        let collection = ptr_to_ref(p).clone();
-        collection.into()
+        match ptr_to_ref(p).clone().try_into() {
+            Ok(v) => Ok(v),
+            Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
+        }
     }
 );
 
