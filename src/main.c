@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "cassandra.h"
 
@@ -66,6 +67,9 @@ void do_simple_query(CassSession* session, const char* query_text) {
 
 static void print_error_cb(CassFuture* future, void* data) {
     printf("code: %d\n", cass_future_error_code(future));
+    if (cass_future_error_code(future) != 0) {
+        exit(cass_future_error_code(future));
+    }
 }
 
 int main() {

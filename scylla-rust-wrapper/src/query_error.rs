@@ -5,27 +5,10 @@ use scylla::statement::Consistency;
 use scylla::transport::errors::*;
 use std::sync::Arc;
 
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
+
 pub type CassErrorResult = QueryError;
 pub type CassErrorResult_ = Arc<CassErrorResult>;
-
-//TODO: generate this and other enums at compile time using bindgen
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
-pub enum CassConsistency {
-    CASS_CONSISTENCY_UNKNOWN = 65535,
-    CASS_CONSISTENCY_ANY = 0,
-    CASS_CONSISTENCY_ONE = 1,
-    CASS_CONSISTENCY_TWO = 2,
-    CASS_CONSISTENCY_THREE = 3,
-    CASS_CONSISTENCY_QUORUM = 4,
-    CASS_CONSISTENCY_ALL = 5,
-    CASS_CONSISTENCY_LOCAL_QUORUM = 6,
-    CASS_CONSISTENCY_EACH_QUORUM = 7,
-    CASS_CONSISTENCY_SERIAL = 8,
-    CASS_CONSISTENCY_LOCAL_SERIAL = 9,
-    CASS_CONSISTENCY_LOCAL_ONE = 10,
-}
 
 impl From<Consistency> for CassConsistency {
     fn from(c: Consistency) -> CassConsistency {
@@ -43,21 +26,6 @@ impl From<Consistency> for CassConsistency {
             Consistency::LocalOne => CassConsistency::CASS_CONSISTENCY_LOCAL_ONE,
         }
     }
-}
-
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
-pub enum CassWriteType {
-    CASS_WRITE_TYPE_UNKNOWN = 0,
-    CASS_WRITE_TYPE_SIMPLE = 1,
-    CASS_WRITE_TYPE_BATCH = 2,
-    CASS_WRITE_TYPE_UNLOGGED_BATCH = 3,
-    CASS_WRITE_TYPE_COUNTER = 4,
-    CASS_WRITE_TYPE_BATCH_LOG = 5,
-    CASS_WRITE_TYPE_CAS = 6,
-    CASS_WRITE_TYPE_VIEW = 7,
-    CASS_WRITE_TYPE_CDC = 8,
 }
 
 impl From<&WriteType> for CassWriteType {

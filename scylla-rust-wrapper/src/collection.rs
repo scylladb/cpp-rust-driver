@@ -3,22 +3,16 @@ use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::response::result::CqlValue::*;
+use std::convert::TryFrom;
 use std::os::raw::c_char;
+
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
 
 #[derive(Clone)]
 pub struct CassCollection {
     pub collection_type: CassCollectionType,
     pub capacity: usize,
     pub items: Vec<CqlValue>,
-}
-
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum CassCollectionType {
-    CASS_COLLECTION_TYPE_LIST = 32,
-    CASS_COLLECTION_TYPE_MAP = 33,
-    CASS_COLLECTION_TYPE_SET = 34,
 }
 
 #[no_mangle]
@@ -153,11 +147,12 @@ pub unsafe extern "C" fn cass_collection_free(collection: *mut CassCollection) {
     free_boxed(collection);
 }
 
-impl From<CassCollection> for CqlValue {
-    fn from(collection: CassCollection) -> Self {
+impl TryFrom<CassCollection> for CqlValue {
+    type Error = ();
+    fn try_from(collection: CassCollection) -> Result<Self, Self::Error> {
         // FIXME: validate that collection items are correct
         match collection.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => List(collection.items),
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => Ok(List(collection.items)),
             CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
                 let mut grouped_items = Vec::new();
                 // FIXME: validate even number of items
@@ -168,9 +163,10 @@ impl From<CassCollection> for CqlValue {
                     grouped_items.push((key, value));
                 }
 
-                Map(grouped_items)
+                Ok(Map(grouped_items))
             }
-            CassCollectionType::CASS_COLLECTION_TYPE_SET => CqlValue::Set(collection.items),
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => Ok(CqlValue::Set(collection.items)),
+            _ => Err(()),
         }
     }
 }
