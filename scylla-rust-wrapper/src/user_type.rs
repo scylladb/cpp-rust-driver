@@ -22,7 +22,7 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     let data_type = ptr_to_ref(data_type_raw);
 
     match data_type {
-        CassDataType::UDTDataType(udt_data_type) => {
+        CassDataType::UDT(udt_data_type) => {
             let field_values = udt_data_type
                 .field_types
                 .iter()
