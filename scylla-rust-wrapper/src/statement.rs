@@ -437,7 +437,7 @@ pub unsafe extern "C" fn cass_statement_bind_user_type(
         CqlValue::UserDefinedType {
             keyspace: user_type.udt_data_type.keyspace.clone(),
             type_name: user_type.udt_data_type.name.clone(),
-            fields: user_type.field_values.clone().into_iter().collect(),
+            fields: user_type.field_values.clone(),
         },
     )
 }
