@@ -431,15 +431,7 @@ pub unsafe extern "C" fn cass_statement_bind_user_type(
     // FIXME: implement _by_name and _by_name_n variants
     let user_type = ptr_to_ref(user_type_raw);
 
-    cass_statement_bind_cql_value(
-        statement,
-        index,
-        CqlValue::UserDefinedType {
-            keyspace: user_type.udt_data_type.keyspace.clone(),
-            type_name: user_type.udt_data_type.name.clone(),
-            fields: user_type.field_values.clone(),
-        },
-    )
+    cass_statement_bind_cql_value(statement, index, user_type.into())
 }
 
 #[no_mangle]

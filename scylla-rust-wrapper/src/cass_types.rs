@@ -51,6 +51,12 @@ impl UDTDataType {
     }
 }
 
+impl Default for UDTDataType {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone)]
 pub enum CassDataType {
     Value(CassValueType),
@@ -278,7 +284,7 @@ pub unsafe extern "C" fn cass_data_type_class_name(
     let data_type = ptr_to_ref(data_type);
     match data_type {
         CassDataType::Custom(name) => {
-            write_str_to_c(&name, class_name, class_name_length);
+            write_str_to_c(name, class_name, class_name_length);
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
