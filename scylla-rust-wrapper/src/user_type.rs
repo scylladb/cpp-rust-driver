@@ -190,6 +190,12 @@ make_binders!(
     cass_user_type_set_collection_by_name_n
 );
 make_binders!(
+    tuple,
+    cass_user_type_set_tuple,
+    cass_user_type_set_tuple_by_name,
+    cass_user_type_set_tuple_by_name_n
+);
+make_binders!(
     user_type,
     cass_user_type_set_user_type,
     cass_user_type_set_user_type_by_name,

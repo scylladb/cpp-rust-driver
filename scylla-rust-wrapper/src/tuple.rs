@@ -5,6 +5,7 @@ use crate::cass_types::CassDataType;
 use crate::cass_types::CassDataTypeArc;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
@@ -46,6 +47,13 @@ impl CassTuple {
         self.items[index] = v;
 
         CassError::CASS_OK
+    }
+}
+
+impl TryFrom<&CassTuple> for CqlValue {
+    type Error = CassError;
+    fn try_from(tuple: &CassTuple) -> Result<Self, Self::Error> {
+        Ok(CqlValue::Tuple(tuple.items.clone()))
     }
 }
 
@@ -101,4 +109,5 @@ make_binders!(bytes, cass_tuple_set_bytes);
 make_binders!(uuid, cass_tuple_set_uuid);
 make_binders!(inet, cass_tuple_set_inet);
 make_binders!(collection, cass_tuple_set_collection);
+make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);
