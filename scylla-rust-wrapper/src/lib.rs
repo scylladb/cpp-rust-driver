@@ -16,6 +16,7 @@ pub mod query_error;
 pub mod query_result;
 pub mod session;
 pub mod statement;
+pub mod tuple;
 pub mod types;
 pub mod user_type;
 pub mod uuid;
