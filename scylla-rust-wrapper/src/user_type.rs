@@ -1,4 +1,5 @@
 use crate::argconv::*;
+use crate::binding::is_compatible_type;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::cass_types::{CassDataTypeArc, UDTDataType};
@@ -18,12 +19,6 @@ pub struct CassUserType {
 
     // Vec to preserve the order of fields
     pub field_values: Vec<Option<CqlValue>>,
-}
-
-fn is_compatible_type(_data_type: &CassDataType, _value: &Option<CqlValue>) -> bool {
-    // TODO: cppdriver actually checks types.
-    // TODO: this function should probably somewhere else
-    true
 }
 
 impl CassUserType {
@@ -248,8 +243,8 @@ make_binders!(@multi
     cass_user_type_set_string,
     cass_user_type_set_string_by_name,
     cass_user_type_set_string_by_name_n,
-    |v, n| Ok(Some(Text(ptr_to_cstr_n(v, n).unwrap().to_string()))),
-    [v @ *const c_char, n @ size_t],
+    |v| Ok(Some(Text(ptr_to_cstr(v).unwrap().to_string()))),
+    [v @ *const c_char],
     |v| Ok(Some(Text(ptr_to_cstr(v).unwrap().to_string()))),
     [v @ *const c_char],
     |v, n| Ok(Some(Text(ptr_to_cstr_n(v, n).unwrap().to_string()))),
