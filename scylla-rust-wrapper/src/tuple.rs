@@ -7,6 +7,7 @@ use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -36,6 +37,20 @@ impl CassTuple {
         self.items[index] = Set(v);
 
         CassError::CASS_OK
+    }
+}
+
+impl TryFrom<&CassTuple> for CqlValue {
+    type Error = CassError;
+    fn try_from(tuple: &CassTuple) -> Result<Self, Self::Error> {
+        let mut result: Vec<Option<CqlValue>> = Vec::with_capacity(tuple.items.len());
+        for item in tuple.items.iter() {
+            match item {
+                Set(v) => result.push(v.clone()),
+                Unset => return Err(CassError::CASS_ERROR_LIB_INTERNAL_ERROR),
+            }
+        }
+        Ok(CqlValue::Tuple(result))
     }
 }
 
@@ -89,4 +104,5 @@ make_binders!(bytes, cass_tuple_set_bytes);
 make_binders!(uuid, cass_tuple_set_uuid);
 make_binders!(inet, cass_tuple_set_inet);
 make_binders!(collection, cass_tuple_set_collection);
+make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);

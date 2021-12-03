@@ -216,6 +216,20 @@ macro_rules! binders_maker_types {
             [p @ *const crate::collection::CassCollection]
         );
     };
+    (tuple, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |p: *const crate::tuple::CassTuple| {
+                match std::convert::TryInto::try_into(ptr_to_ref(p)) {
+                    Ok(v) => Ok(Some(v)),
+                    Err(e) => Err(e),
+                }
+            },
+            [p @ *const crate::tuple::CassTuple]
+        );
+    };
     (user_type, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
         $macro_name!(
             $this,
