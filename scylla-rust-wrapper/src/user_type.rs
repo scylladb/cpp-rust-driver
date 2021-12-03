@@ -293,7 +293,7 @@ make_binders!(
     cass_user_type_set_collection_by_name,
     cass_user_type_set_collection_by_name_n,
     |p: *const CassCollection| {
-        match ptr_to_ref(p).clone().try_into() {
+        match ptr_to_ref(p).try_into() {
             Ok(v) => Ok(Some(v)),
             Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
         }

@@ -208,7 +208,7 @@ macro_rules! binders_maker_types {
             $consume_v,
             $fn,
             |p: *const crate::collection::CassCollection| {
-                match std::convert::TryInto::try_into(ptr_to_ref(p).clone()) {
+                match std::convert::TryInto::try_into(ptr_to_ref(p)) {
                     Ok(v) => Ok(Some(v)),
                     Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
                 }

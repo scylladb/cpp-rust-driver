@@ -317,7 +317,7 @@ make_binders!(
     cass_statement_bind_collection_by_name_n,
     *const CassCollection,
     |p: *const CassCollection| {
-        match ptr_to_ref(p).clone().try_into() {
+        match ptr_to_ref(p).try_into() {
             Ok(v) => Ok(v),
             Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
         }
