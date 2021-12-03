@@ -2,6 +2,8 @@
 use lazy_static::lazy_static;
 use tokio::runtime::Runtime;
 
+#[macro_use]
+mod binding;
 mod argconv;
 pub mod cass_error;
 pub mod cluster;
