@@ -69,6 +69,25 @@ macro_rules! make_name_n_binder {
     }
 }
 
+macro_rules! make_appender {
+    ($this:ty, $consume_v:expr, $fn_append:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
+        #[no_mangle]
+        #[allow(clippy::redundant_closure_call)]
+        pub unsafe extern "C" fn $fn_append(
+            this: *mut $this,
+            $($arg: $t), *
+        ) -> CassError {
+            // For some reason detected as unused, which is not true
+            #[allow(unused_imports)]
+            use scylla::frame::response::result::CqlValue::*;
+            match ($e)($($arg), *) {
+                Ok(v) => $consume_v(ptr_to_ref_mut(this), v),
+                Err(e) => e,
+            }
+        }
+    }
+}
+
 macro_rules! binders_maker_types {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
         $macro_name!($this, $consume_v, $fn, || Ok(None), []);
@@ -269,6 +288,14 @@ macro_rules! prepare_binders_macro {
             };
             (@name_n $t:ident, $fn_name_n:ident) => {
                 binders_maker_types!($t, make_name_n_binder, $this, $consume_v_name, $fn_name_n);
+            };
+        }
+    };
+
+    (@append $this:ty, $consume_v:expr) => {
+        macro_rules! make_binders {
+            ($t:ident, $fn:ident) => {
+                binders_maker_types!($t, make_appender, $this, $consume_v, $fn);
             };
         }
     };
