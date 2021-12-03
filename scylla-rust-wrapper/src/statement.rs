@@ -242,6 +242,12 @@ make_binders!(
     cass_statement_bind_collection_by_name_n
 );
 make_binders!(
+    tuple,
+    cass_statement_bind_tuple,
+    cass_statement_bind_tuple_by_name,
+    cass_statement_bind_tuple_by_name_n
+);
+make_binders!(
     user_type,
     cass_statement_bind_user_type,
     cass_statement_bind_user_type_by_name,
