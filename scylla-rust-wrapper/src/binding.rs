@@ -88,6 +88,11 @@ macro_rules! make_appender {
     }
 }
 
+// TODO: Types for which binding is not implemented yet:
+// custom - Not implemented in Rust driver?
+// decimal
+// duration - DURATION not implemented in Rust Driver
+
 macro_rules! binders_maker_types {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
         $macro_name!($this, $consume_v, $fn, || Ok(None), []);
