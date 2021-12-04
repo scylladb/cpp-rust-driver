@@ -35,13 +35,7 @@ pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
 ) -> *mut CassStatement {
-    let query_str = match ptr_to_cstr(query) {
-        Some(v) => v,
-        None => return std::ptr::null_mut(),
-    };
-    let query_length = query_str.len();
-
-    cass_statement_new_n(query, query_length as size_t, parameter_count)
+    cass_statement_new_n(query, strlen(query), parameter_count)
 }
 
 #[no_mangle]

@@ -220,10 +220,7 @@ pub unsafe extern "C" fn cass_uuid_from_string(
     value: *const c_char,
     output: *mut CassUuid,
 ) -> CassError {
-    let value_str = ptr_to_cstr(value).unwrap();
-    let value_length = value_str.len();
-
-    cass_uuid_from_string_n(value, value_length as size_t, output)
+    cass_uuid_from_string_n(value, strlen(value), output)
 }
 
 #[no_mangle]
