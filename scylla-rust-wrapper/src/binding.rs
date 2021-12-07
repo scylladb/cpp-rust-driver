@@ -142,7 +142,6 @@ macro_rules! make_appender {
 // decimal
 // duration - DURATION not implemented in Rust Driver
 // tuple - not implemented yet
-// UDT - not implemented yet
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -289,6 +288,15 @@ macro_rules! invoke_binder_maker_macro_with_type {
                 }
             },
             [p @ *const crate::collection::CassCollection]
+        );
+    };
+    (user_type, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |p: *const crate::user_type::CassUserType| Ok(Some(ptr_to_ref(p).into())),
+            [p @ *const crate::user_type::CassUserType]
         );
     };
 }
