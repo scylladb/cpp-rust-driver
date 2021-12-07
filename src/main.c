@@ -109,7 +109,9 @@ int main() {
     cass_statement_free(statement);
 
     do_simple_query(session, "DROP TABLE IF EXISTS ks.t2");
-    do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t2 (pk int, ck int, v list<int>, v2 map<text, float>, primary key (pk, ck))");
+    do_simple_query(session, "DROP TYPE IF EXISTS ks.my_type");
+    do_simple_query(session, "CREATE TYPE IF NOT EXISTS ks.my_type(c text, a int, b float)");
+    do_simple_query(session, "CREATE TABLE IF NOT EXISTS ks.t2 (pk int, ck int, v list<int>, v2 map<text, float>, v3 my_type, primary key (pk, ck))");
 
     CassCollection* list = cass_collection_new(CASS_COLLECTION_TYPE_LIST, 3);
     cass_collection_append_int32(list, 123);
@@ -122,13 +124,26 @@ int main() {
     cass_collection_append_string(map, "k2");
     cass_collection_append_float(map, 20.0);
 
-    CassStatement* collection_statement = cass_statement_new("INSERT INTO ks.t2(pk, ck, v, v2) VALUES (?, ?, ?, ?)", 4);
+    CassDataType* udt_type = cass_data_type_new_udt(3);
+    cass_data_type_add_sub_value_type_by_name(udt_type, "c", CASS_VALUE_TYPE_TEXT);
+    cass_data_type_add_sub_value_type_by_name(udt_type, "a", CASS_VALUE_TYPE_INT);
+    cass_data_type_add_sub_value_type_by_name(udt_type, "b", CASS_VALUE_TYPE_FLOAT);
+
+    CassUserType* user_type = cass_user_type_new_from_data_type(udt_type);
+    cass_data_type_free(udt_type);
+    cass_user_type_set_string_by_name(user_type, "c", "UDT!");
+    cass_user_type_set_int32_by_name(user_type, "a", 15);
+    cass_user_type_set_float_by_name(user_type, "b", 3.14);
+
+    CassStatement* collection_statement = cass_statement_new("INSERT INTO ks.t2(pk, ck, v, v2, v3) VALUES (?, ?, ?, ?, ?)", 5);
     cass_statement_bind_int32(collection_statement, 0, 1);
     cass_statement_bind_int32(collection_statement, 1, 2);
     cass_statement_bind_collection(collection_statement, 2, list);
     cass_statement_bind_collection(collection_statement, 3, map);
+    cass_statement_bind_user_type(collection_statement, 4, user_type);
     cass_collection_free(list);
     cass_collection_free(map);
+    cass_user_type_free(user_type);
 
     CassFuture* collection_statement_future = cass_session_execute(session, collection_statement);
     cass_future_set_callback(collection_statement_future, print_error_cb, NULL);
