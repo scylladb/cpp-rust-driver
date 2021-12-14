@@ -1,19 +1,14 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::collection::CassCollection;
-use crate::inet::CassInet;
 use crate::query_result::CassResult;
 use crate::types::*;
-use crate::uuid::CassUuid;
 use scylla::frame::response::result::CqlValue;
-use scylla::frame::response::result::CqlValue::*;
 use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::Bytes;
-use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
@@ -156,291 +151,93 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     CassError::CASS_OK
 }
 
-// TODO: Bind methods currently not implemented:
-// cass_statement_bind_decimal
-//
-// cass_statement_bind_duration - DURATION not implemented in Rust Driver
-//
-// (methods requiring implementing cpp driver data structures)
-// cass_statement_bind_user_type
-// cass_statement_bind_custom
-// cass_statement_bind_custom_n
-// cass_statement_bind_tuple
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_null(
-    statement: *mut CassStatement,
-    index: size_t,
-) -> CassError {
-    ptr_to_ref_mut(statement).bind_cql_value(index as usize, None)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_null_by_name(
-    statement: *mut CassStatement,
-    name: *const c_char,
-) -> CassError {
-    cass_statement_bind_null_by_name_n(statement, name, strlen(name))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_null_by_name_n(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-) -> CassError {
-    ptr_to_ref_mut(statement)
-        .bind_cql_value_by_name(ptr_to_cstr_n(name, name_length).unwrap(), None)
-}
-
-macro_rules! make_binders {
-    ($fn_by_idx:ident, $fn_by_name:ident, $fn_by_name_n:ident, $t:ty, $e:expr) => {
-        #[no_mangle]
-        #[allow(clippy::redundant_closure_call)]
-        pub unsafe extern "C" fn $fn_by_idx(
-            statement: *mut CassStatement,
-            index: size_t,
-            value: $t,
-        ) -> CassError {
-            match ($e)(value) {
-                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(v)),
-                Err(e) => e,
-            }
-        }
-
-        #[no_mangle]
-        #[allow(clippy::redundant_closure_call)]
-        pub unsafe extern "C" fn $fn_by_name(
-            statement: *mut CassStatement,
-            name: *const c_char,
-            value: $t,
-        ) -> CassError {
-            match ($e)(value) {
-                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value_by_name(ptr_to_cstr(name).unwrap(), Some(v)),
-                Err(e) => e,
-            }
-        }
-
-        #[no_mangle]
-        #[allow(clippy::redundant_closure_call)]
-        pub unsafe extern "C" fn $fn_by_name_n(
-            statement: *mut CassStatement,
-            name: *const c_char,
-            name_length: size_t,
-            value: $t,
-        ) -> CassError {
-            match ($e)(value) {
-                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value_by_name(ptr_to_cstr_n(name, name_length).unwrap(), Some(v)),
-                Err(e) => e,
-            }
-        }
-    };
-}
-
+prepare_binders_macro!(@index_and_name CassStatement,
+    |s: &mut CassStatement, idx, v| s.bind_cql_value(idx, v),
+    |s: &mut CassStatement, name, v| s.bind_cql_value_by_name(name, v));
 make_binders!(
+    null,
+    cass_statement_bind_null,
+    cass_statement_bind_null_by_name,
+    cass_statement_bind_null_by_name_n
+);
+make_binders!(
+    int8,
     cass_statement_bind_int8,
     cass_statement_bind_int8_by_name,
-    cass_statement_bind_int8_by_name_n,
-    cass_int8_t,
-    |v| Ok(TinyInt(v))
+    cass_statement_bind_int8_by_name_n
 );
-
 make_binders!(
+    int16,
     cass_statement_bind_int16,
     cass_statement_bind_int16_by_name,
-    cass_statement_bind_int16_by_name_n,
-    cass_int16_t,
-    |v| Ok(SmallInt(v))
+    cass_statement_bind_int16_by_name_n
 );
-
 make_binders!(
+    int32,
     cass_statement_bind_int32,
     cass_statement_bind_int32_by_name,
-    cass_statement_bind_int32_by_name_n,
-    cass_int32_t,
-    |v| Ok(Int(v))
+    cass_statement_bind_int32_by_name_n
 );
-
-// cass_statement_bind_uint32 is only used to set a DATE.
 make_binders!(
+    uint32,
     cass_statement_bind_uint32,
     cass_statement_bind_uint32_by_name,
-    cass_statement_bind_uint32_by_name_n,
-    cass_uint32_t,
-    |v| Ok(Date(v))
+    cass_statement_bind_uint32_by_name_n
 );
-
 make_binders!(
+    int64,
     cass_statement_bind_int64,
     cass_statement_bind_int64_by_name,
-    cass_statement_bind_int64_by_name_n,
-    cass_int64_t,
-    |v| Ok(BigInt(v))
+    cass_statement_bind_int64_by_name_n
 );
-
 make_binders!(
+    float,
     cass_statement_bind_float,
     cass_statement_bind_float_by_name,
-    cass_statement_bind_float_by_name_n,
-    cass_float_t,
-    |v| Ok(Float(v))
+    cass_statement_bind_float_by_name_n
 );
-
 make_binders!(
+    double,
     cass_statement_bind_double,
     cass_statement_bind_double_by_name,
-    cass_statement_bind_double_by_name_n,
-    cass_double_t,
-    |v| Ok(Double(v))
+    cass_statement_bind_double_by_name_n
 );
-
 make_binders!(
+    bool,
     cass_statement_bind_bool,
     cass_statement_bind_bool_by_name,
-    cass_statement_bind_bool_by_name_n,
-    cass_bool_t,
-    |v| Ok(Boolean(v != 0))
+    cass_statement_bind_bool_by_name_n
 );
-
 make_binders!(
-    cass_statement_bind_inet,
-    cass_statement_bind_inet_by_name,
-    cass_statement_bind_inet_by_name_n,
-    CassInet,
-    |v: CassInet| {
-        // Err if length in struct is invalid.
-        // cppdriver doesn't check this - it encodes any length given to it
-        // but it doesn't seem like something we wanna do. Also, rust driver can't
-        // really do it afaik.
-        match v.try_into() {
-            Ok(v) => Ok(Inet(v)),
-            Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
-        }
-    }
+    string,
+    cass_statement_bind_string,
+    string,
+    cass_statement_bind_string_by_name,
+    string_n,
+    cass_statement_bind_string_by_name_n
 );
-
+make_binders!(@index string_n, cass_statement_bind_string_n);
 make_binders!(
+    bytes,
+    cass_statement_bind_bytes,
+    cass_statement_bind_bytes_by_name,
+    cass_statement_bind_bytes_by_name_n
+);
+make_binders!(
+    uuid,
     cass_statement_bind_uuid,
     cass_statement_bind_uuid_by_name,
-    cass_statement_bind_uuid_by_name_n,
-    CassUuid,
-    |v: CassUuid| Ok(Uuid(v.into()))
+    cass_statement_bind_uuid_by_name_n
 );
-
 make_binders!(
+    inet,
+    cass_statement_bind_inet,
+    cass_statement_bind_inet_by_name,
+    cass_statement_bind_inet_by_name_n
+);
+make_binders!(
+    collection,
     cass_statement_bind_collection,
     cass_statement_bind_collection_by_name,
-    cass_statement_bind_collection_by_name_n,
-    *const CassCollection,
-    |p: *const CassCollection| {
-        match ptr_to_ref(p).try_into() {
-            Ok(v) => Ok(v),
-            Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
-        }
-    }
+    cass_statement_bind_collection_by_name_n
 );
-
-// The following four functions cannot be realized with make_binders!
-// because of the string length for the value
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_string(
-    statement: *mut CassStatement,
-    index: size_t,
-    value: *const c_char,
-) -> CassError {
-    let value_str = ptr_to_cstr(value).unwrap();
-    let value_length = value_str.len();
-
-    cass_statement_bind_string_n(statement, index, value, value_length as size_t)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_string_by_name(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    value: *const c_char,
-) -> CassError {
-    let value_str = ptr_to_cstr(value).unwrap();
-    let value_length = value_str.len();
-
-    let name_str = ptr_to_cstr(name).unwrap();
-    let name_length = name_str.len();
-
-    cass_statement_bind_string_by_name_n(
-        statement,
-        name,
-        name_length as size_t,
-        value,
-        value_length as size_t,
-    )
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_string_n(
-    statement: *mut CassStatement,
-    index: size_t,
-    value: *const c_char,
-    value_length: size_t,
-) -> CassError {
-    // TODO: Error handling
-    let value_string = ptr_to_cstr_n(value, value_length).unwrap().to_string();
-    ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(Text(value_string)))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_string_by_name_n(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-    value: *const c_char,
-    value_length: size_t,
-) -> CassError {
-    // TODO: Error handling
-    let value_string = ptr_to_cstr_n(value, value_length).unwrap().to_string();
-    ptr_to_ref_mut(statement).bind_cql_value_by_name(
-        ptr_to_cstr_n(name, name_length).unwrap(),
-        Some(Text(value_string)),
-    )
-}
-
-// The following three functions cannot be realized with make_binders!
-// because of the bytes length for the value
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_bytes(
-    statement: *mut CassStatement,
-    index: size_t,
-    value: *const cass_byte_t,
-    value_size: size_t,
-) -> CassError {
-    let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(Blob(value_vec)))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_bytes_by_name(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    value: *const cass_byte_t,
-    value_size: size_t,
-) -> CassError {
-    let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    ptr_to_ref_mut(statement)
-        .bind_cql_value_by_name(ptr_to_cstr(name).unwrap(), Some(Blob(value_vec)))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_bind_bytes_by_name_n(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-    value: *const cass_byte_t,
-    value_size: size_t,
-) -> CassError {
-    let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    ptr_to_ref_mut(statement).bind_cql_value_by_name(
-        ptr_to_cstr_n(name, name_length).unwrap(),
-        Some(Blob(value_vec)),
-    )
-}
