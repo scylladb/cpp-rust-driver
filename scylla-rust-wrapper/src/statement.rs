@@ -30,6 +30,31 @@ pub struct CassStatement {
     pub paging_state: Option<Bytes>,
 }
 
+impl CassStatement {
+    fn bind_cql_value(&mut self, index: usize, value: Option<CqlValue>) -> CassError {
+        if index as usize >= self.bound_values.len() {
+            CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
+        } else {
+            self.bound_values[index] = Set(value);
+            CassError::CASS_OK
+        }
+    }
+
+    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
+        match &self.statement {
+            Statement::Prepared(prepared) => {
+                for (i, col) in prepared.get_metadata().col_specs.iter().enumerate() {
+                    if col.name == name {
+                        return self.bind_cql_value(i, value);
+                    }
+                }
+                CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
+            }
+            Statement::Simple(_) => CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST,
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
@@ -142,85 +167,12 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
 // cass_statement_bind_custom_n
 // cass_statement_bind_tuple
 
-unsafe fn cass_statement_bind_maybe_unset(
-    statement_raw: *mut CassStatement,
-    index: size_t,
-    value: MaybeUnset<Option<CqlValue>>,
-) -> CassError {
-    let statement = ptr_to_ref_mut(statement_raw);
-
-    if index as usize >= statement.bound_values.len() {
-        CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
-    } else {
-        statement.bound_values[index as usize] = value;
-        CassError::CASS_OK
-    }
-}
-
-unsafe fn cass_statement_bind_maybe_unset_by_name(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    value: MaybeUnset<Option<CqlValue>>,
-) -> CassError {
-    let name_str = ptr_to_cstr(name).unwrap();
-    let name_length = name_str.len();
-
-    cass_statement_bind_maybe_unset_by_name_n(statement, name, name_length as size_t, value)
-}
-
-unsafe fn cass_statement_bind_maybe_unset_by_name_n(
-    statement_raw: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-    value: MaybeUnset<Option<CqlValue>>,
-) -> CassError {
-    let name_str = ptr_to_cstr_n(name, name_length).unwrap();
-    let statement = &ptr_to_ref_mut(statement_raw).statement;
-
-    match &statement {
-        Statement::Prepared(prepared) => {
-            for (i, col) in prepared.get_metadata().col_specs.iter().enumerate() {
-                if col.name == name_str {
-                    return cass_statement_bind_maybe_unset(statement_raw, i as size_t, value);
-                }
-            }
-            CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
-        }
-        Statement::Simple(_) => CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST,
-    }
-}
-
-unsafe fn cass_statement_bind_cql_value(
-    statement: *mut CassStatement,
-    index: size_t,
-    value: CqlValue,
-) -> CassError {
-    cass_statement_bind_maybe_unset(statement, index, Set(Some(value)))
-}
-
-unsafe fn cass_statement_bind_cql_value_by_name(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    value: CqlValue,
-) -> CassError {
-    cass_statement_bind_maybe_unset_by_name(statement, name, Set(Some(value)))
-}
-
-unsafe fn cass_statement_bind_cql_value_by_name_n(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-    value: CqlValue,
-) -> CassError {
-    cass_statement_bind_maybe_unset_by_name_n(statement, name, name_length, Set(Some(value)))
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_bind_null(
     statement: *mut CassStatement,
     index: size_t,
 ) -> CassError {
-    cass_statement_bind_maybe_unset(statement, index, Set(None))
+    ptr_to_ref_mut(statement).bind_cql_value(index as usize, None)
 }
 
 #[no_mangle]
@@ -228,7 +180,7 @@ pub unsafe extern "C" fn cass_statement_bind_null_by_name(
     statement: *mut CassStatement,
     name: *const c_char,
 ) -> CassError {
-    cass_statement_bind_maybe_unset_by_name(statement, name, Set(None))
+    cass_statement_bind_null_by_name_n(statement, name, strlen(name))
 }
 
 #[no_mangle]
@@ -237,7 +189,8 @@ pub unsafe extern "C" fn cass_statement_bind_null_by_name_n(
     name: *const c_char,
     name_length: size_t,
 ) -> CassError {
-    cass_statement_bind_maybe_unset_by_name_n(statement, name, name_length, Set(None))
+    ptr_to_ref_mut(statement)
+        .bind_cql_value_by_name(ptr_to_cstr_n(name, name_length).unwrap(), None)
 }
 
 macro_rules! make_binders {
@@ -250,7 +203,7 @@ macro_rules! make_binders {
             value: $t,
         ) -> CassError {
             match ($e)(value) {
-                Ok(v) => cass_statement_bind_cql_value(statement, index, v),
+                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(v)),
                 Err(e) => e,
             }
         }
@@ -263,7 +216,7 @@ macro_rules! make_binders {
             value: $t,
         ) -> CassError {
             match ($e)(value) {
-                Ok(v) => cass_statement_bind_cql_value_by_name(statement, name, v),
+                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value_by_name(ptr_to_cstr(name).unwrap(), Some(v)),
                 Err(e) => e,
             }
         }
@@ -277,7 +230,7 @@ macro_rules! make_binders {
             value: $t,
         ) -> CassError {
             match ($e)(value) {
-                Ok(v) => cass_statement_bind_cql_value_by_name_n(statement, name, name_length, v),
+                Ok(v) => ptr_to_ref_mut(statement).bind_cql_value_by_name(ptr_to_cstr_n(name, name_length).unwrap(), Some(v)),
                 Err(e) => e,
             }
         }
@@ -432,7 +385,7 @@ pub unsafe extern "C" fn cass_statement_bind_string_n(
 ) -> CassError {
     // TODO: Error handling
     let value_string = ptr_to_cstr_n(value, value_length).unwrap().to_string();
-    cass_statement_bind_cql_value(statement, index, Text(value_string))
+    ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(Text(value_string)))
 }
 
 #[no_mangle]
@@ -445,7 +398,10 @@ pub unsafe extern "C" fn cass_statement_bind_string_by_name_n(
 ) -> CassError {
     // TODO: Error handling
     let value_string = ptr_to_cstr_n(value, value_length).unwrap().to_string();
-    cass_statement_bind_cql_value_by_name_n(statement, name, name_length, Text(value_string))
+    ptr_to_ref_mut(statement).bind_cql_value_by_name(
+        ptr_to_cstr_n(name, name_length).unwrap(),
+        Some(Text(value_string)),
+    )
 }
 
 // The following three functions cannot be realized with make_binders!
@@ -459,7 +415,7 @@ pub unsafe extern "C" fn cass_statement_bind_bytes(
     value_size: size_t,
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    cass_statement_bind_cql_value(statement, index, Blob(value_vec))
+    ptr_to_ref_mut(statement).bind_cql_value(index as usize, Some(Blob(value_vec)))
 }
 
 #[no_mangle]
@@ -470,7 +426,8 @@ pub unsafe extern "C" fn cass_statement_bind_bytes_by_name(
     value_size: size_t,
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    cass_statement_bind_cql_value_by_name(statement, name, Blob(value_vec))
+    ptr_to_ref_mut(statement)
+        .bind_cql_value_by_name(ptr_to_cstr(name).unwrap(), Some(Blob(value_vec)))
 }
 
 #[no_mangle]
@@ -482,5 +439,8 @@ pub unsafe extern "C" fn cass_statement_bind_bytes_by_name_n(
     value_size: size_t,
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
-    cass_statement_bind_cql_value_by_name_n(statement, name, name_length, Blob(value_vec))
+    ptr_to_ref_mut(statement).bind_cql_value_by_name(
+        ptr_to_cstr_n(name, name_length).unwrap(),
+        Some(Blob(value_vec)),
+    )
 }
