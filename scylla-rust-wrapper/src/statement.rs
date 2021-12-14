@@ -62,6 +62,75 @@ pub unsafe extern "C" fn cass_statement_new_n(
     }))
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
+    free_boxed(statement_raw);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_paging_size(
+    statement_raw: *mut CassStatement,
+    page_size: c_int,
+) -> CassError {
+    // TODO: validate page_size
+    match &mut ptr_to_ref_mut(statement_raw).statement {
+        Statement::Simple(inner) => {
+            if page_size == -1 {
+                inner.disable_paging()
+            } else {
+                inner.set_page_size(page_size)
+            }
+        }
+        Statement::Prepared(inner) => {
+            if page_size == -1 {
+                Arc::make_mut(inner).disable_paging()
+            } else {
+                Arc::make_mut(inner).set_page_size(page_size)
+            }
+        }
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_paging_state(
+    statement: *mut CassStatement,
+    result: *const CassResult,
+) -> CassError {
+    let statement = ptr_to_ref_mut(statement);
+    let result = ptr_to_ref(result);
+
+    statement.paging_state = result.paging_state.clone();
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_is_idempotent(
+    statement_raw: *mut CassStatement,
+    is_idempotent: cass_bool_t,
+) -> CassError {
+    match &mut ptr_to_ref_mut(statement_raw).statement {
+        Statement::Simple(inner) => inner.set_is_idempotent(is_idempotent != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_tracing(
+    statement_raw: *mut CassStatement,
+    enabled: cass_bool_t,
+) -> CassError {
+    match &mut ptr_to_ref_mut(statement_raw).statement {
+        Statement::Simple(inner) => inner.set_tracing(enabled != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
+    }
+
+    CassError::CASS_OK
+}
+
 // TODO: Bind methods currently not implemented:
 // cass_statement_bind_decimal
 //
@@ -414,73 +483,4 @@ pub unsafe extern "C" fn cass_statement_bind_bytes_by_name_n(
 ) -> CassError {
     let value_vec = std::slice::from_raw_parts(value, value_size as usize).to_vec();
     cass_statement_bind_cql_value_by_name_n(statement, name, name_length, Blob(value_vec))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_tracing(
-    statement_raw: *mut CassStatement,
-    enabled: cass_bool_t,
-) -> CassError {
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => inner.set_tracing(enabled != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
-    }
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_paging_size(
-    statement_raw: *mut CassStatement,
-    page_size: c_int,
-) -> CassError {
-    // TODO: validate page_size
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => {
-            if page_size == -1 {
-                inner.disable_paging()
-            } else {
-                inner.set_page_size(page_size)
-            }
-        }
-        Statement::Prepared(inner) => {
-            if page_size == -1 {
-                Arc::make_mut(inner).disable_paging()
-            } else {
-                Arc::make_mut(inner).set_page_size(page_size)
-            }
-        }
-    }
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_paging_state(
-    statement: *mut CassStatement,
-    result: *const CassResult,
-) -> CassError {
-    let statement = ptr_to_ref_mut(statement);
-    let result = ptr_to_ref(result);
-
-    statement.paging_state = result.paging_state.clone();
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_is_idempotent(
-    statement_raw: *mut CassStatement,
-    is_idempotent: cass_bool_t,
-) -> CassError {
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => inner.set_is_idempotent(is_idempotent != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
-    }
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
-    free_boxed(statement_raw);
 }
