@@ -4,20 +4,33 @@ use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
-use scylla::QueryResult;
+use scylla::Bytes;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use scylla::frame::response::result::ColumnSpec;
 
-pub type CassResult = QueryResult;
+pub struct CassResult {
+    pub rows: Option<Vec<CassRow>>,
+    pub result_metadata: CassResultMetadata_,
+}
 pub type CassResult_ = Arc<CassResult>;
+
+pub struct CassResultMetadata {
+    pub paging_state: Option<Bytes>,
+    pub col_specs: Vec<ColumnSpec>,
+}
+pub type CassResultMetadata_ = Arc<CassResultMetadata>;
 
 pub struct CassIterator {
     result: CassResult_,
     position: Option<usize>,
 }
 
-pub type CassRow = Row;
+pub struct CassRow {
+    pub row: Row,
+    pub result_metadata: CassResultMetadata_,
+}
 
 pub type CassValue = Option<CqlValue>;
 
@@ -44,7 +57,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    result.paging_state.is_some() as cass_bool_t
+    result.result_metadata.paging_state.is_some() as cass_bool_t
 }
 
 #[no_mangle]
@@ -79,7 +92,7 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
         None => return std::ptr::null(),
     };
 
-    let row: &Row = match iter
+    let row = match iter
         .result
         .rows
         .as_ref()
@@ -100,12 +113,47 @@ pub unsafe extern "C" fn cass_row_get_column(
     let row: &CassRow = ptr_to_ref(row_raw);
 
     let index_usize: usize = index.try_into().unwrap();
-    let column_value: &Option<CqlValue> = match row.columns.get(index_usize) {
+    let column_value: &Option<CqlValue> = match row.row.columns.get(index_usize) {
         Some(val) => val,
         None => return std::ptr::null(),
     };
 
     column_value
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_row_get_column_by_name(
+    row: *const CassRow,
+    name: *const c_char,
+) -> *const CassValue {
+    let name_str = ptr_to_cstr(name).unwrap();
+    let name_length = name_str.len();
+
+    cass_row_get_column_by_name_n(row, name, name_length as size_t)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_row_get_column_by_name_n(
+    row: *const CassRow,
+    name: *const c_char,
+    name_length: size_t,
+) -> *const CassValue {
+    let mut name_str = ptr_to_cstr_n(name, name_length).unwrap().to_lowercase();
+    if name_str.starts_with("\"") {
+        name_str = name_str.strip_prefix("\"").unwrap().to_string();
+    }
+    if name_str.ends_with("\"") {
+        name_str = name_str.strip_suffix("\"").unwrap().to_string();
+    }
+
+    let row = ptr_to_ref(row);
+    let col_specs = &row.result_metadata.col_specs;
+
+    println!("{:?} query: {:?}", col_specs, name_str);
+
+    col_specs.iter().enumerate().filter(|(_, spec)| spec.name.to_lowercase() == name_str).next().map(|(index, _)| {
+        cass_row_get_column(row, index as size_t)
+    }).unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
@@ -513,23 +561,6 @@ extern "C" {
 }
 extern "C" {
     pub fn cass_iterator_get_meta_field_value(iterator: *const CassIterator) -> *const CassValue;
-}
-*/
-
-// CassRow functions:
-/*
-extern "C" {
-    pub fn cass_row_get_column_by_name(
-        row: *const CassRow,
-        name: *const ::std::os::raw::c_char,
-    ) -> *const CassValue;
-}
-extern "C" {
-    pub fn cass_row_get_column_by_name_n(
-        row: *const CassRow,
-        name: *const ::std::os::raw::c_char,
-        name_length: size_t,
-    ) -> *const CassValue;
 }
 */
 

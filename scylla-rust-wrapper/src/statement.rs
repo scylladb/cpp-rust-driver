@@ -111,7 +111,14 @@ unsafe fn cass_statement_bind_maybe_unset_by_name_n(
     name_length: size_t,
     value: MaybeUnset<Option<CqlValue>>,
 ) -> CassError {
-    let name_str = ptr_to_cstr_n(name, name_length).unwrap();
+    let mut name_str = ptr_to_cstr_n(name, name_length).unwrap().to_lowercase();
+    if name_str.starts_with("\"") {
+        name_str = name_str.strip_prefix("\"").unwrap().to_string();
+    }
+    if name_str.ends_with("\"") {
+        name_str = name_str.strip_suffix("\"").unwrap().to_string();
+    }
+
     let statement = &ptr_to_ref_mut(statement_raw).statement;
 
     match &statement {
@@ -469,7 +476,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement.paging_state = result.paging_state.clone();
+    statement.paging_state = result.result_metadata.paging_state.clone();
     CassError::CASS_OK
 }
 
