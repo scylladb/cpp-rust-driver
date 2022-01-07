@@ -97,14 +97,7 @@ pub unsafe extern "C" fn cass_session_prepare(
     session: *mut CassSession,
     query: *const c_char,
 ) -> *const CassFuture {
-    // TODO: error handling
-    let query_str = match ptr_to_cstr(query) {
-        Some(v) => v,
-        None => return std::ptr::null(),
-    };
-    let query_length = query_str.len();
-
-    cass_session_prepare_n(session, query, query_length as size_t)
+    cass_session_prepare_n(session, query, strlen(query))
 }
 
 #[no_mangle]

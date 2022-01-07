@@ -84,10 +84,7 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points(
     cluster: *mut CassCluster,
     contact_points: *const c_char,
 ) -> CassError {
-    let contact_points_str = ptr_to_cstr(contact_points).unwrap();
-    let contact_points_length = contact_points_str.len();
-
-    cass_cluster_set_contact_points_n(cluster, contact_points, contact_points_length as size_t)
+    cass_cluster_set_contact_points_n(cluster, contact_points, strlen(contact_points))
 }
 
 #[no_mangle]
@@ -164,19 +161,12 @@ pub unsafe extern "C" fn cass_cluster_set_credentials(
     username: *const c_char,
     password: *const c_char,
 ) {
-    // TODO: string error handling
-    let username_str = ptr_to_cstr(username).unwrap();
-    let username_length = username_str.len();
-
-    let password_str = ptr_to_cstr(password).unwrap();
-    let password_length = password_str.len();
-
     cass_cluster_set_credentials_n(
         cluster,
         username,
-        username_length as size_t,
+        strlen(username),
         password,
-        password_length as size_t,
+        strlen(password),
     )
 }
 
@@ -211,14 +201,10 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
     used_hosts_per_remote_dc: c_uint,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    // TODO: string error handling
-    let local_dc_str = ptr_to_cstr(local_dc).unwrap();
-    let local_dc_length = local_dc_str.len();
-
     cass_cluster_set_load_balance_dc_aware_n(
         cluster,
         local_dc,
-        local_dc_length as size_t,
+        strlen(local_dc),
         used_hosts_per_remote_dc,
         allow_remote_dcs_for_local_cl,
     )

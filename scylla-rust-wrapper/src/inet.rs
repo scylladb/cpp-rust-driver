@@ -66,10 +66,7 @@ pub unsafe extern "C" fn cass_inet_from_string(
     input: *const c_char,
     inet: *mut CassInet,
 ) -> CassError {
-    let input_str = ptr_to_cstr(input).unwrap();
-    let input_length = input_str.len();
-
-    cass_inet_from_string_n(input, input_length as size_t, inet)
+    cass_inet_from_string_n(input, strlen(input), inet)
 }
 
 #[no_mangle]
