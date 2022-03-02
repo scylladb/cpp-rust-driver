@@ -271,8 +271,7 @@ set_target_properties(scylla-cpp-driver PROPERTIES
 add_dependencies(scylla-cpp-driver scylla-rust-cpp-driver)
 target_include_directories(scylla-cpp-driver INTERFACE "${CMAKE_SOURCE_DIR}/include")
 
-add_executable(main src/main.c)
-target_link_libraries(main scylla-cpp-driver)
+add_subdirectory(src)
 
 if(CASS_BUILD_EXAMPLES)
   add_subdirectory(examples)
