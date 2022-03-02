@@ -158,6 +158,3 @@ if(CASS_BUILD_INTEGRATION_TESTS)
   add_subdirectory(src/integration)
 endif()
 
-if(CASS_BUILD_UNIT_TESTS)
-  add_subdirectory(src/unit)
-endif()
