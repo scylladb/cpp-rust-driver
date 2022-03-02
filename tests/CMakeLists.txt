@@ -110,7 +110,27 @@ set(CPP_DRIVER_HEADER_SOURCE_ATOMIC_FILES ${CASS_SRC_DIR}/atomic/atomic_boost.hp
   ${CASS_SRC_DIR}/atomic/atomic_intrinsics.hpp
   ${CASS_SRC_DIR}/atomic/atomic_intrinsics_gcc.hpp
   ${CASS_SRC_DIR}/atomic/atomic_intrinsics_msvc.hpp)
-set(CPP_DRIVER_SOURCE_FILES ${CASS_SRC_DIR}/utils.cpp)
+set(CPP_DRIVER_SOURCE_FILES
+    ${CASS_SRC_DIR}/utils.cpp
+    ${CASS_SRC_DIR}/driver_info.cpp
+    ${CASS_SRC_DIR}/murmur3.cpp
+    ${CASS_SRC_DIR}/allocated.cpp
+    ${CASS_SRC_DIR}/get_time-mac.cpp
+    ${CASS_SRC_DIR}/get_time-unix.cpp
+    ${CASS_SRC_DIR}/get_time-win.cpp
+    ${CASS_SRC_DIR}/address.cpp
+    ${CASS_SRC_DIR}/memory.cpp
+    ${CASS_SRC_DIR}/timestamp_generator.cpp
+    ${CASS_SRC_DIR}/testing.cpp
+    ${CASS_SRC_DIR}/ssl.cpp
+    )
+if(APPLE)
+  list(REMOVE_ITEM CPP_DRIVER_SOURCE_FILES ${CASS_SRC_DIR}/get_time-unix.cpp ${CASS_SRC_DIR}/get_time-win.cpp)
+elseif(UNIX)
+  list(REMOVE_ITEM CPP_DRIVER_SOURCE_FILES ${CASS_SRC_DIR}/get_time-mac.cpp ${CASS_SRC_DIR}/get_time-win.cpp)
+elseif(WIN32)
+  list(REMOVE_ITEM CPP_DRIVER_SOURCE_FILES ${CASS_SRC_DIR}/get_time-mac.cpp ${CASS_SRC_DIR}/get_time-unix.cpp)
+endif()
 source_group("Header Files\\driver" FILES ${CASS_API_HEADER_FILES})
 source_group("Header Files\\driver" FILES ${CPP_DRIVER_HEADER_SOURCE_FILES})
 source_group("Header Files\\driver\\atomic" FILES ${CPP_DRIVER_HEADER_SOURCE_ATOMIC_FILES})
