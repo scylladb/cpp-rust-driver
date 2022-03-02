@@ -18,8 +18,8 @@
 
 #include "logger.hpp"
 #include "macros.hpp"
-#include "row.hpp"
-#include "value.hpp"
+//#include "row.hpp"
+//#include "value.hpp"
 
 using namespace datastax;
 using namespace datastax::internal::core;
@@ -176,18 +176,18 @@ String Address::to_string(bool with_port) const {
 
 namespace datastax { namespace internal { namespace core {
 
-String determine_listen_address(const Address& address, const Row* row) {
-  const Value* v = row->get_by_name("peer");
-  if (v != NULL) {
-    Address listen_address;
-    if (v->decoder().as_inet(v->size(), address.port(), &listen_address)) {
-      return listen_address.to_string();
-    } else {
-      LOG_WARN("Invalid address format for listen address for host %s",
-               address.to_string().c_str());
-    }
-  }
-  return "";
-}
+// String determine_listen_address(const Address& address, const Row* row) {
+//   const Value* v = row->get_by_name("peer");
+//   if (v != NULL) {
+//     Address listen_address;
+//     if (v->decoder().as_inet(v->size(), address.port(), &listen_address)) {
+//       return listen_address.to_string();
+//     } else {
+//       LOG_WARN("Invalid address format for listen address for host %s",
+//                address.to_string().c_str());
+//     }
+//   }
+//   return "";
+// }
 
 }}} // namespace datastax::internal::core

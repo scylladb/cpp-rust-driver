@@ -18,7 +18,7 @@
 
 #include "bridge.hpp"
 #include "options.hpp"
-#include "ssl.hpp"
+//#include "ssl.hpp"
 #include "win_debug.hpp"
 
 #include "cassandra.h"
@@ -26,7 +26,7 @@
 
 #include <ostream>
 
-using datastax::internal::core::SslContextFactory;
+//using datastax::internal::core::SslContextFactory;
 
 /**
  * Bootstrap listener for handling start and end of the integration tests.
@@ -68,9 +68,9 @@ public:
     }
   }
 
-  void OnTestStart(const testing::TestInfo& test_information) { SslContextFactory::init(); }
+//  void OnTestStart(const testing::TestInfo& test_information) { SslContextFactory::init(); }
 
-  void OnTestEnd(const testing::TestInfo& test_information) { SslContextFactory::cleanup(); }
+//  void OnTestEnd(const testing::TestInfo& test_information) { SslContextFactory::cleanup(); }
 
 private:
   /**

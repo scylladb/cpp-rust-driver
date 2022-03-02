@@ -16,7 +16,7 @@
 
 #include "cassandra.h"
 #include "integration.hpp"
-#include "result_response.hpp"
+//#include "result_response.hpp"
 
 /****
  * TODO: As integration tests are migrated from Boost to GTest,
@@ -27,7 +27,7 @@
 // Name of materialized view used in this test file.
 #define VIEW_NAME "my_view"
 
-using namespace datastax::internal::core;
+//using namespace datastax::internal::core;
 
 /**
  * Null string api args test, without initially creating a connection.
@@ -645,21 +645,21 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, UserTypeFunctions) {
  *   setting the class name in a custom-payload to null succeeds client-side,
  *   though it will certainly fail when processing on a node.
  */
-CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, MiscellaneousFunctions) {
-  CHECK_VERSION(2.2.0);
-  ResultResponse response;
-  datastax::internal::core::Row r(&response);
-  CassRow* row = CassRow::to(&r);
-  EXPECT_EQ(NULL, cass_row_get_column_by_name(row, NULL));
-
-  CassUuid uuid;
-  EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS, cass_uuid_from_string(NULL, &uuid));
-
-  CassCustomPayload* payload = cass_custom_payload_new();
-  cass_custom_payload_set(payload, NULL, reinterpret_cast<const cass_byte_t*>("a"), 1);
-  cass_custom_payload_remove(payload, NULL);
-  cass_custom_payload_free(payload);
-
-  CassInet inet;
-  EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS, cass_inet_from_string(NULL, &inet));
-}
+// CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, MiscellaneousFunctions) {
+//   CHECK_VERSION(2.2.0);
+//   ResultResponse response;
+//   datastax::internal::core::Row r(&response);
+//   CassRow* row = CassRow::to(&r);
+//   EXPECT_EQ(NULL, cass_row_get_column_by_name(row, NULL));
+// 
+//   CassUuid uuid;
+//   EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS, cass_uuid_from_string(NULL, &uuid));
+// 
+//   CassCustomPayload* payload = cass_custom_payload_new();
+//   cass_custom_payload_set(payload, NULL, reinterpret_cast<const cass_byte_t*>("a"), 1);
+//   cass_custom_payload_remove(payload, NULL);
+//   cass_custom_payload_free(payload);
+// 
+//   CassInet inet;
+//   EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS, cass_inet_from_string(NULL, &inet));
+// }
