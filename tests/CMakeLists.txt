@@ -122,7 +122,8 @@ set(CPP_DRIVER_SOURCE_FILES
     ${CASS_SRC_DIR}/memory.cpp
     ${CASS_SRC_DIR}/timestamp_generator.cpp
     ${CASS_SRC_DIR}/testing.cpp
-    ${CASS_SRC_DIR}/ssl.cpp
+    ${CASS_SRC_DIR}/logger.cpp
+    ${CASS_SRC_DIR}/testing_unimplemented.cpp
     )
 if(APPLE)
   list(REMOVE_ITEM CPP_DRIVER_SOURCE_FILES ${CASS_SRC_DIR}/get_time-unix.cpp ${CASS_SRC_DIR}/get_time-win.cpp)
