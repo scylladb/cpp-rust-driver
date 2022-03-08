@@ -14,7 +14,7 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-type CassSession = RwLock<Option<Session>>;
+pub type CassSession = RwLock<Option<Session>>;
 type CassSession_ = Arc<CassSession>;
 
 #[no_mangle]
