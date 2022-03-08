@@ -17,66 +17,33 @@
 #include "testing.hpp"
 
 #include "address.hpp"
-#include "cluster_config.hpp"
 #include "external.hpp"
-#include "future.hpp"
 #include "get_time.hpp"
 #include "logger.hpp"
-#include "metadata.hpp"
 #include "murmur3.hpp"
-#include "request_handler.hpp"
-#include "result_response.hpp"
-#include "session.hpp"
-#include "statement.hpp"
 
 namespace datastax { namespace internal { namespace testing {
 
 using namespace core;
 
 String get_host_from_future(CassFuture* future) {
-  if (future->type() != Future::FUTURE_TYPE_RESPONSE) {
-    return "";
-  }
-  ResponseFuture* response_future = static_cast<ResponseFuture*>(future->from());
-  return response_future->address().hostname_or_address();
+  throw std::runtime_error("Unimplemented 'get_host_from_future'!");
 }
 
 StringVec get_attempted_hosts_from_future(CassFuture* future) {
-  if (future->type() != Future::FUTURE_TYPE_RESPONSE) {
-    return StringVec();
-  }
-  StringVec attempted_hosts;
-  ResponseFuture* response_future = static_cast<ResponseFuture*>(future->from());
-
-  AddressVec attempted_addresses = response_future->attempted_addresses();
-  for (AddressVec::iterator it = attempted_addresses.begin(); it != attempted_addresses.end();
-       ++it) {
-    attempted_hosts.push_back(it->to_string());
-  }
-  std::sort(attempted_hosts.begin(), attempted_hosts.end());
-  return attempted_hosts;
+  throw std::runtime_error("Unimplemented 'get_attempted_hosts_from_future'!");
 }
 
 unsigned get_connect_timeout_from_cluster(CassCluster* cluster) {
-  return cluster->config().connect_timeout_ms();
+  throw std::runtime_error("Unimplemented 'get_connect_timeout_from_cluster'!");
 }
 
-int get_port_from_cluster(CassCluster* cluster) { return cluster->config().port(); }
+int get_port_from_cluster(CassCluster* cluster) {
+  throw std::runtime_error("Unimplemented 'get_port_from_cluster'!");
+}
 
 String get_contact_points_from_cluster(CassCluster* cluster) {
-  String str;
-
-  const AddressVec& contact_points = cluster->config().contact_points();
-
-  for (AddressVec::const_iterator it = contact_points.begin(), end = contact_points.end();
-       it != end; ++it) {
-    if (str.size() > 0) {
-      str.push_back(',');
-    }
-    str.append(it->hostname_or_address());
-  }
-
-  return str;
+  throw std::runtime_error("Unimplemented 'get_contact_points_from_cluster'!");
 }
 
 int64_t create_murmur3_hash_from_string(const String& value) {
@@ -86,39 +53,31 @@ int64_t create_murmur3_hash_from_string(const String& value) {
 uint64_t get_time_since_epoch_in_ms() { return internal::get_time_since_epoch_ms(); }
 
 uint64_t get_host_latency_average(CassSession* session, String ip_address, int port) {
-  Address address(ip_address, port);
-  if (address.is_valid()) {
-    Host::Ptr host(session->cluster()->find_host(address));
-    return host ? host->get_current_average().average : 0;
-  }
-  return 0;
+  throw std::runtime_error("Unimplemented 'get_host_latency_average'!");
 }
 
 CassConsistency get_consistency(const CassStatement* statement) {
-  return statement->from()->consistency();
+  throw std::runtime_error("Unimplemented 'get_consistency'!");
 }
 
 CassConsistency get_serial_consistency(const CassStatement* statement) {
-  return statement->from()->serial_consistency();
+  throw std::runtime_error("Unimplemented 'get_serial_consistency'!");
 }
 
 uint64_t get_request_timeout_ms(const CassStatement* statement) {
-  return statement->from()->request_timeout_ms();
+  throw std::runtime_error("Unimplemented 'get_request_timeout_ms'!");
 }
 
 const CassRetryPolicy* get_retry_policy(const CassStatement* statement) {
-  return CassRetryPolicy::to(statement->from()->retry_policy().get());
+  throw std::runtime_error("Unimplemented 'get_retry_policy'!");
 }
 
 String get_server_name(CassFuture* future) {
-  if (future->type() != Future::FUTURE_TYPE_RESPONSE) {
-    return "";
-  }
-  return static_cast<ResponseFuture*>(future->from())->address().server_name();
+  throw std::runtime_error("Unimplemented 'get_server_name'!");
 }
 
 void set_record_attempted_hosts(CassStatement* statement, bool enable) {
-  static_cast<Statement*>(statement->from())->set_record_attempted_addresses(enable);
+  throw std::runtime_error("Unimplemented 'set_record_attempted_hosts'!");
 }
 
 }}} // namespace datastax::internal::testing
