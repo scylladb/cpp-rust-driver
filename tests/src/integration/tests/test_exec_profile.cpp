@@ -25,7 +25,8 @@ class ExecutionProfileTest : public Integration {
 public:
   ExecutionProfileTest()
       : insert_(NULL)
-      , child_retry_policy_(IgnoreRetryPolicy::policy()) // Used for counting retry
+      //, child_retry_policy_(IgnoreRetryPolicy::policy()) // Used for counting retry
+      , child_retry_policy_(DefaultRetryPolicy())
       , logging_retry_policy_(child_retry_policy_)
       , skip_base_execution_profile_(false) {
     replication_factor_ = 2;
