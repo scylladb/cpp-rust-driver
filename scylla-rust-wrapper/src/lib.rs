@@ -6,6 +6,7 @@ use tokio::runtime::Runtime;
 mod binding;
 mod argconv;
 pub mod cass_error;
+pub mod cass_types;
 pub mod cluster;
 pub mod collection;
 pub mod future;
@@ -15,7 +16,9 @@ pub mod query_error;
 pub mod query_result;
 pub mod session;
 pub mod statement;
+pub mod tuple;
 pub mod types;
+pub mod user_type;
 pub mod uuid;
 
 lazy_static! {

@@ -47,6 +47,13 @@
 //!     It can be used for binding named parameter in CassStatement or field by name in CassUserType.
 //!  * Functions from make_appender don't take any extra argument, as they are for use by CassCollection
 //!     functions - values are appended to collection.
+use crate::cass_types::CassDataType;
+use scylla::frame::response::result::CqlValue;
+
+pub fn is_compatible_type(_data_type: &CassDataType, _value: &Option<CqlValue>) -> bool {
+    // TODO: cppdriver actually checks types.
+    true
+}
 
 macro_rules! make_index_binder {
     ($this:ty, $consume_v:expr, $fn_by_idx:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
@@ -134,8 +141,6 @@ macro_rules! make_appender {
 // custom - Not implemented in Rust driver?
 // decimal
 // duration - DURATION not implemented in Rust Driver
-// tuple - not implemented yet
-// UDT - not implemented yet
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -282,6 +287,26 @@ macro_rules! invoke_binder_maker_macro_with_type {
                 }
             },
             [p @ *const crate::collection::CassCollection]
+        );
+    };
+    (tuple, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |p: *const crate::tuple::CassTuple| {
+                std::convert::TryInto::try_into(ptr_to_ref(p)).map(Some)
+            },
+            [p @ *const crate::tuple::CassTuple]
+        );
+    };
+    (user_type, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |p: *const crate::user_type::CassUserType| Ok(Some(ptr_to_ref(p).into())),
+            [p @ *const crate::user_type::CassUserType]
         );
     };
 }
