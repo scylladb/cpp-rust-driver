@@ -28,15 +28,15 @@ endif()
 #---------------
 
 option(CASS_BUILD_EXAMPLES "Build examples" OFF)
-option(CASS_BUILD_INTEGRATION_TESTS "Build integration tests" OFF)
+option(CASS_BUILD_INTEGRATION_TESTS "Build integration tests" ON)
 option(CASS_BUILD_SHARED "Build shared library" ON)
 option(CASS_BUILD_STATIC "Build static library" OFF)
 option(CASS_BUILD_TESTS "Build tests" OFF)
 option(CASS_BUILD_UNIT_TESTS "Build unit tests" OFF)
 option(CASS_DEBUG_CUSTOM_ALLOC "Debug custom allocator" OFF)
-option(CASS_INSTALL_HEADER "Install header file" ON)
+option(CASS_INSTALL_HEADER "Install header file" OFF)
 option(CASS_INSTALL_HEADER_IN_SUBDIR "Install header file under 'include/cassandra'" OFF)
-option(CASS_INSTALL_PKG_CONFIG "Install pkg-config file(s)" ON)
+option(CASS_INSTALL_PKG_CONFIG "Install pkg-config file(s)" OFF)
 option(CASS_MULTICORE_COMPILATION "Enable multicore compilation" ON)
 option(CASS_USE_BOOST_ATOMIC "Use Boost atomics library" OFF)
 option(CASS_USE_KERBEROS "Use Kerberos" OFF)
@@ -256,6 +256,7 @@ ExternalProject_Add(
     BUILD_ALWAYS TRUE)
 
 add_library(scylla-cpp-driver SHARED IMPORTED)
+set_target_properties(scylla-cpp-driver PROPERTIES IMPORTED_NO_SONAME TRUE)
 set_property(TARGET scylla-cpp-driver APPEND PROPERTY IMPORTED_CONFIGURATIONS DEBUG)
 set_target_properties(scylla-cpp-driver PROPERTIES
   IMPORTED_LOCATION_DEBUG "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/debug/libscylla_cpp_driver.so"
