@@ -562,8 +562,8 @@ CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_default_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_default_new\n");
 }
-CASS_EXPORT CASS_DEPRECATED(CassRetryPolicy*
-cass_retry_policy_downgrading_consistency_new()){
+CASS_EXPORT CassRetryPolicy*
+cass_retry_policy_downgrading_consistency_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_downgrading_consistency_new\n");
 }
 CASS_EXPORT CassRetryPolicy*
