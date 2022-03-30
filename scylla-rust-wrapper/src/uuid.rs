@@ -29,7 +29,7 @@ fn to_milliseconds(timestamp: u64) -> u64 {
 }
 
 fn from_unix_timestamp(timestamp: u64) -> u64 {
-    (timestamp * 10000).wrapping_add(TIME_OFFSET_BETWEEN_UTC_AND_EPOCH)
+    (timestamp.wrapping_mul(10000)).wrapping_add(TIME_OFFSET_BETWEEN_UTC_AND_EPOCH)
 }
 
 fn set_version(timestamp: u64, version: u8) -> u64 {
