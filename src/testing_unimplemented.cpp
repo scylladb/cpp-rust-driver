@@ -98,12 +98,6 @@ cass_cluster_set_blacklist_filtering(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_blacklist_filtering\n");
 }
 CASS_EXPORT CassError
-cass_cluster_set_cloud_secure_connection_bundle_n(CassCluster* cluster,
-                                                  const char* path,
-                                                  size_t path_length){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_cloud_secure_connection_bundle_n\n");
-}
-CASS_EXPORT CassError
 cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init(CassCluster* cluster,
                                                                 const char* path){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init\n");
@@ -133,12 +127,6 @@ cass_cluster_set_execution_profile(CassCluster* cluster,
                                    const char* name,
                                    CassExecProfile* profile){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_execution_profile\n");
-}
-CASS_EXPORT CassError
-cass_cluster_set_exponential_reconnect(CassCluster* cluster,
-                                       cass_uint64_t base_delay_ms,
-                                       cass_uint64_t max_delay_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_exponential_reconnect\n");
 }
 CASS_EXPORT CassError
 cass_cluster_set_host_listener_callback(CassCluster* cluster,
@@ -204,11 +192,6 @@ CASS_EXPORT void
 cass_cluster_set_timestamp_gen(CassCluster* cluster,
                                CassTimestampGen* timestamp_gen){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_timestamp_gen\n");
-}
-CASS_EXPORT CassError
-cass_cluster_set_use_beta_protocol_version(CassCluster* cluster,
-                                           cass_bool_t enable){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_use_beta_protocol_version\n");
 }
 CASS_EXPORT void
 cass_cluster_set_whitelist_dc_filtering(CassCluster* cluster,
@@ -672,12 +655,6 @@ cass_statement_bind_duration_by_name(CassStatement* statement,
                                      cass_int32_t days,
                                      cass_int64_t nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_duration_by_name\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_consistency(CassStatement* statement,
-                               CassConsistency consistency){
-//	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_consistency\n");
-    return CassError::CASS_OK;
 }
 CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,

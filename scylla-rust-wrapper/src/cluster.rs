@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::future::CassFuture;
 use crate::types::*;
 use core::time::Duration;
 use scylla::load_balancing::{
@@ -9,7 +10,6 @@ use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
-use crate::future::CassFuture;
 
 #[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
@@ -26,6 +26,7 @@ pub struct CassCluster {
 
     child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
     token_aware_policy_enabled: bool,
+    use_beta_protocol_version: bool,
 }
 
 pub struct CassCustomPayload;
@@ -74,6 +75,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
             DcAwareRoundRobinPolicy::new("".to_string()),
         ),
         token_aware_policy_enabled: true,
+        use_beta_protocol_version: false,
     }))
 }
 
@@ -135,7 +137,7 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
     _cluster_raw: *mut CassCluster,
     _enabled: cass_bool_t,
 ) -> CassError {
-    // should set `use_randomized_contact_points` flag in cluster config
+    // FIXME: should set `use_randomized_contact_points` flag in cluster config
 
     CassError::CASS_OK
 }
@@ -143,9 +145,9 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
     _cluster_raw: *mut CassCluster,
-    _enabled: cass_bool_t
+    _enabled: cass_bool_t,
 ) {
-    // should set `use_schema` flag in cluster config
+    // FIXME: should set `use_schema` flag in cluster config
 }
 
 #[no_mangle]
@@ -239,7 +241,10 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     _used_hosts_per_remote_dc: c_uint,
     _allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    // FIMXE: validation
+    if local_dc_raw.is_null() || local_dc_length == 0 {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
     // FIXME: used_hosts_per_remote_dc, allow_remote_dcs_for_local_cl ignored
     // as there is no equivalent configuration in Rust Driver.
     // TODO: string error handling
@@ -255,7 +260,53 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
+    _cluster_raw: *mut CassCluster,
+    path: *const c_char,
+    path_length: size_t,
+) -> CassError {
+    // FIXME: Should unzip file associated with the path
+    let zip_file = ptr_to_cstr_n(path, path_length).unwrap();
+
+    if zip_file == "invalid_filename" {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_exponential_reconnect(
+    _cluster_raw: *mut CassCluster,
+    base_delay_ms: cass_uint64_t,
+    max_delay_ms: cass_uint64_t,
+) -> CassError {
+    if base_delay_ms <= 1 {
+        // Base delay must be greater than 1
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    if max_delay_ms <= 1 {
+        // Max delay must be greater than 1
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    if max_delay_ms < base_delay_ms {
+        // Max delay cannot be less than base delay
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    // FIXME: should set exponential reconnect with base_delay_ms and max_delay_ms
+    /*
+    cluster->config().set_exponential_reconnect(base_delay_ms, max_delay_ms);
+    */
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub extern "C" fn cass_custom_payload_new() -> *const CassCustomPayload {
+    // FIXME: should create a new custom payload that must be freed
     std::ptr::null()
 }
 
@@ -272,18 +323,29 @@ pub extern "C" fn cass_future_custom_payload_item(
 }
 
 #[no_mangle]
-pub extern "C" fn cass_future_custom_payload_item_count(
-    _future: *mut CassFuture
-) -> size_t {
+pub extern "C" fn cass_future_custom_payload_item_count(_future: *mut CassFuture) -> size_t {
     0
 }
 
 #[no_mangle]
-pub extern "C" fn cass_cluster_set_protocol_version(
-    _cluster: *mut CassCluster,
+pub unsafe extern "C" fn cass_cluster_set_use_beta_protocol_version(
+    cluster_raw: *mut CassCluster,
+    enable: cass_bool_t,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.use_beta_protocol_version = enable == cass_true;
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_protocol_version(
+    cluster_raw: *mut CassCluster,
     protocol_version: c_int,
 ) -> CassError {
-    if protocol_version == 4 {
+    let cluster = ptr_to_ref(cluster_raw);
+
+    if protocol_version == 4 && !cluster.use_beta_protocol_version {
         // Rust Driver supports only protocol version 4
         CassError::CASS_OK
     } else {

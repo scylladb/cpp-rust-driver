@@ -301,7 +301,7 @@ pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) ->
     let result = ptr_to_ref(result_raw);
 
     if result.rows.as_ref().is_none() {
-        return 0
+        return 0;
     }
 
     result.rows.as_ref().unwrap().len() as size_t
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult)
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.is_some() || result.rows.as_ref().unwrap().len() > 0 {
+    if result.rows.is_some() || result.rows.as_ref().unwrap().is_empty() {
         return result.rows.as_ref().unwrap().first().unwrap();
     }
 
