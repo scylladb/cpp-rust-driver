@@ -210,16 +210,6 @@ cass_cluster_set_use_beta_protocol_version(CassCluster* cluster,
                                            cass_bool_t enable){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_use_beta_protocol_version\n");
 }
-CASS_EXPORT CassError
-cass_cluster_set_use_randomized_contact_points(CassCluster* cluster,
-                                               cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_use_randomized_contact_points\n");
-}
-CASS_EXPORT void
-cass_cluster_set_use_schema(CassCluster* cluster,
-                            cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_use_schema\n");
-}
 CASS_EXPORT void
 cass_cluster_set_whitelist_dc_filtering(CassCluster* cluster,
                                         const char* dcs){
@@ -263,10 +253,6 @@ cass_column_meta_field_by_name(const CassColumnMeta* column_meta,
 CASS_EXPORT void
 cass_custom_payload_free(CassCustomPayload* payload){
 	throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_free\n");
-}
-CASS_EXPORT CassCustomPayload*
-cass_custom_payload_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_new\n");
 }
 CASS_EXPORT void
 cass_custom_payload_set(CassCustomPayload* payload,
@@ -413,19 +399,6 @@ cass_future_coordinator(CassFuture* future){
 	throw std::runtime_error("UNIMPLEMENTED cass_future_coordinator\n");
 }
 CASS_EXPORT CassError
-cass_future_custom_payload_item(CassFuture* future,
-                                size_t index,
-                                const char** name,
-                                size_t* name_length,
-                                const cass_byte_t** value,
-                                size_t* value_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_future_custom_payload_item\n");
-}
-CASS_EXPORT size_t
-cass_future_custom_payload_item_count(CassFuture* future){
-	throw std::runtime_error("UNIMPLEMENTED cass_future_custom_payload_item_count\n");
-}
-CASS_EXPORT CassError
 cass_future_tracing_id(CassFuture* future,
                        CassUuid* tracing_id){
 	throw std::runtime_error("UNIMPLEMENTED cass_future_tracing_id\n");
@@ -533,10 +506,6 @@ cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared,
                                           const char* name){
 	throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
 }
-CASS_EXPORT size_t
-cass_result_column_count(const CassResult* result){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_column_count\n");
-}
 CASS_EXPORT CassError
 cass_result_column_name(const CassResult *result,
                         size_t index,
@@ -544,19 +513,11 @@ cass_result_column_name(const CassResult *result,
                         size_t* name_length){
 	throw std::runtime_error("UNIMPLEMENTED cass_result_column_name\n");
 }
-CASS_EXPORT const CassRow*
-cass_result_first_row(const CassResult* result){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_first_row\n");
-}
 CASS_EXPORT CassError
 cass_result_paging_state_token(const CassResult* result,
                                const char** paging_state,
                                size_t* paging_state_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_result_paging_state_token\n");
-}
-CASS_EXPORT size_t
-cass_result_row_count(const CassResult* result){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_row_count\n");
 }
 CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_default_new(){
@@ -715,7 +676,8 @@ cass_statement_bind_duration_by_name(CassStatement* statement,
 CASS_EXPORT CassError
 cass_statement_set_consistency(CassStatement* statement,
                                CassConsistency consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_consistency\n");
+//	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_consistency\n");
+    return CassError::CASS_OK;
 }
 CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,

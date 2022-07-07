@@ -9,6 +9,7 @@ use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
+use crate::future::CassFuture;
 
 #[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
@@ -26,6 +27,8 @@ pub struct CassCluster {
     child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
     token_aware_policy_enabled: bool,
 }
+
+pub struct CassCustomPayload;
 
 pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
     let known_nodes: Vec<_> = cluster
@@ -125,6 +128,24 @@ unsafe fn cluster_set_contact_points(
             .filter(|cp| !cp.is_empty()),
     );
     Ok(())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
+    _cluster_raw: *mut CassCluster,
+    _enabled: cass_bool_t,
+) -> CassError {
+    // should set `use_randomized_contact_points` flag in cluster config
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_use_schema(
+    _cluster_raw: *mut CassCluster,
+    _enabled: cass_bool_t
+) {
+    // should set `use_schema` flag in cluster config
 }
 
 #[no_mangle]
@@ -231,6 +252,30 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         ));
 
     CassError::CASS_OK
+}
+
+#[no_mangle]
+pub extern "C" fn cass_custom_payload_new() -> *const CassCustomPayload {
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub extern "C" fn cass_future_custom_payload_item(
+    _future: *mut CassFuture,
+    _i: size_t,
+    _name: *const c_char,
+    _name_length: size_t,
+    _value: *const cass_byte_t,
+    _value_size: size_t,
+) -> CassError {
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub extern "C" fn cass_future_custom_payload_item_count(
+    _future: *mut CassFuture
+) -> size_t {
+    0
 }
 
 #[no_mangle]
