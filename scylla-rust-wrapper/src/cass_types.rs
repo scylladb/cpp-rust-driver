@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use scylla::frame::response::result::CqlValue;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
@@ -125,6 +126,40 @@ impl CassDataType {
             CassDataType::UDT(udt) => udt,
             _ => panic!("Can get UDT out of non-UDT data type"),
         }
+    }
+}
+
+pub fn get_type_from_value(value: &Option<CqlValue>) -> CassDataType {
+    match value {
+        Some(CqlValue::Ascii(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
+        Some(CqlValue::Boolean(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
+        Some(CqlValue::Blob(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
+        Some(CqlValue::Counter(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_COUNTER),
+        Some(CqlValue::Decimal(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DECIMAL),
+        Some(CqlValue::Date(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DATE),
+        Some(CqlValue::Double(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DOUBLE),
+        Some(CqlValue::Float(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_FLOAT),
+        Some(CqlValue::Int(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INT),
+        Some(CqlValue::BigInt(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BIGINT),
+        Some(CqlValue::Text(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
+        Some(CqlValue::Timestamp(_)) => {
+            CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP)
+        }
+        Some(CqlValue::Inet(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INET),
+        Some(CqlValue::List(_)) => CassDataType::List(None),
+        Some(CqlValue::Map(_)) => CassDataType::Map(None, None),
+        Some(CqlValue::Set(_)) => CassDataType::Set(None),
+        Some(CqlValue::UserDefinedType { .. }) => CassDataType::UDT(Default::default()),
+        Some(CqlValue::SmallInt(_)) => {
+            CassDataType::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT)
+        }
+        Some(CqlValue::TinyInt(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT),
+        Some(CqlValue::Time(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIME),
+        Some(CqlValue::Timeuuid(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
+        Some(CqlValue::Tuple(_)) => CassDataType::Tuple(vec![]),
+        Some(CqlValue::Uuid(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UUID),
+        Some(CqlValue::Varint(_)) => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
+        _ => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
     }
 }
 

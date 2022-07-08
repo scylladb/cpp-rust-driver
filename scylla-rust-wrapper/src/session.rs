@@ -1,9 +1,10 @@
 use crate::argconv::*;
 use crate::cass_error::*;
+use crate::cass_types::get_type_from_value;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
-use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow};
+use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow, CassValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
@@ -115,7 +116,7 @@ fn populate_cass_rows_from_rows(
             let cass_rows = rs
                 .iter()
                 .map(|r| CassRow {
-                    columns: r.columns.clone(),
+                    columns: populate_cass_row_columns(r),
                     result_: metadata.clone(),
                 })
                 .collect();
@@ -124,6 +125,16 @@ fn populate_cass_rows_from_rows(
         }
         None => None,
     }
+}
+
+fn populate_cass_row_columns(row: &Row) -> Vec<CassValue> {
+    row.columns
+        .iter()
+        .map(|col| CassValue {
+            value: col.clone(),
+            value_type: get_type_from_value(col),
+        })
+        .collect()
 }
 
 #[no_mangle]
