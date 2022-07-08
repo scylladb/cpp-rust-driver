@@ -244,10 +244,6 @@ cass_custom_payload_set(CassCustomPayload* payload,
                         size_t value_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_set\n");
 }
-CASS_EXPORT const char*
-cass_error_desc(CassError error){
-	throw std::runtime_error("UNIMPLEMENTED cass_error_desc\n");
-}
 CASS_EXPORT void
 cass_execution_profile_free(CassExecProfile* profile){
 	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_free\n");
@@ -405,16 +401,8 @@ cass_iterator_from_collection(const CassValue* value){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_collection\n");
 }
 CASS_EXPORT CassIterator*
-cass_iterator_from_row(const CassRow* row){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_row\n");
-}
-CASS_EXPORT CassIterator*
 cass_iterator_from_tuple(const CassValue* value){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_tuple\n");
-}
-CASS_EXPORT const CassValue*
-cass_iterator_get_column(const CassIterator* iterator){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_get_column\n");
 }
 CASS_EXPORT CassError
 cass_iterator_get_user_type_field_name(const CassIterator* iterator,
@@ -819,10 +807,6 @@ cass_user_type_set_duration_by_name(CassUserType* user_type,
                                     cass_int64_t nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_duration_by_name\n");
 }
-CASS_EXPORT const CassDataType*
-cass_value_data_type(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_data_type\n");
-}
 CASS_EXPORT CassError
 cass_value_get_bytes(const CassValue* value,
                      const cass_byte_t** output,
@@ -858,8 +842,4 @@ cass_value_primary_sub_type(const CassValue* collection){
 CASS_EXPORT CassValueType
 cass_value_secondary_sub_type(const CassValue* collection){
 	throw std::runtime_error("UNIMPLEMENTED cass_value_secondary_sub_type\n");
-}
-CASS_EXPORT CassValueType
-cass_value_type(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_type\n");
 }
