@@ -12,6 +12,8 @@ use scylla::Bytes;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
+
 #[derive(Clone)]
 pub enum Statement {
     Simple(Query),
@@ -85,6 +87,15 @@ pub unsafe extern "C" fn cass_statement_new_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
     free_boxed(statement_raw);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_consistency(
+    _statement: *mut CassStatement,
+    _consistency: CassConsistency,
+) -> CassError {
+    // FIXME: should return CASS_OK if successful, otherwise an error occurred.
+    CassError::CASS_OK
 }
 
 #[no_mangle]
