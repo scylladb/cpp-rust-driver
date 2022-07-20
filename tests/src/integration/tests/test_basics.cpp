@@ -254,7 +254,7 @@ CASSANDRA_INTEGRATION_TEST_F(BasicsTests, UnsetParameters) {
 
   // Execute the insert statement and validate the error code
   Result result = session_.execute(insert_statement, false);
-  if (server_version_ >= "2.2.0") {
+  if (server_version_ >= "release:2.2.0") {
     // Cassandra v2.2+ uses the value UNSET; making this a no-op
     ASSERT_EQ(CASS_OK, result.error_code());
   } else {

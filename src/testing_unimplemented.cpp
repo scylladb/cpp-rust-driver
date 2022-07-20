@@ -477,19 +477,6 @@ cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared,
                                           const char* name){
 	throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
 }
-CASS_EXPORT CassError
-cass_result_column_name(const CassResult *result,
-                        size_t index,
-                        const char** name,
-                        size_t* name_length){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_column_name\n");
-}
-CASS_EXPORT CassError
-cass_result_paging_state_token(const CassResult* result,
-                               const char** paging_state,
-                               size_t* paging_state_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_paging_state_token\n");
-}
 CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_default_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_default_new\n");
@@ -527,10 +514,6 @@ cass_schema_meta_keyspace_by_name(const CassSchemaMeta* schema_meta,
 CASS_EXPORT CassVersion
 cass_schema_meta_version(const CassSchemaMeta* schema_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_close(CassSession* session){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_close\n");
 }
 CASS_EXPORT CassFuture*
 cass_session_connect_keyspace(CassSession* session,
@@ -677,12 +660,6 @@ cass_statement_set_node(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
 }
 CASS_EXPORT CassError
-cass_statement_set_paging_state_token(CassStatement* statement,
-                                      const char* paging_state,
-                                      size_t paging_state_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_paging_state_token\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_request_timeout(CassStatement* statement,
                                    cass_uint64_t timeout_ms){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_request_timeout\n");
@@ -806,12 +783,6 @@ cass_user_type_set_duration_by_name(CassUserType* user_type,
                                     cass_int32_t days,
                                     cass_int64_t nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_duration_by_name\n");
-}
-CASS_EXPORT CassError
-cass_value_get_bytes(const CassValue* value,
-                     const cass_byte_t** output,
-                     size_t* output_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_get_bytes\n");
 }
 CASS_EXPORT CassError
 cass_value_get_decimal(const CassValue* value,
