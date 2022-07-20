@@ -14,5 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Setup Python 3
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Setup environment
+      run: |
+        sudo sh -c "echo 'deb http://security.ubuntu.com/ubuntu xenial-security main' >> /etc/apt/sources.list"
+        sudo apt-get update
+        sudo apt-get install libssl1.0.0 libuv1-dev libkrb5-dev libc6-dbg
+        sudo snap install valgrind --classic
+        pip3 install https://github.com/scylladb/scylla-ccm/archive/master.zip
+        sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+
     - name: Build
-      run: cmake . && make
+      run: cmake -DCASS_BUILD_INTEGRATION_TESTS=ON . && make
+
+    - name: Run integration tests on Scylla 5.0.0
+      run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=release:5.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="ClusterTests.*"
