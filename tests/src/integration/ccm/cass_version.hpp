@@ -278,7 +278,11 @@ private:
    */
   void from_string(const std::string& version_string) {
     // Clean up the string for tokens
+    std::string scylla_version_prefix = "release:";
     std::string version(version_string);
+    if (version.compare(0, scylla_version_prefix.size(), scylla_version_prefix) == 0) {
+      version = "3.0.8";
+    }
     std::replace(version.begin(), version.end(), '.', ' ');
     std::size_t found = version.find("-");
     if (found != std::string::npos) {

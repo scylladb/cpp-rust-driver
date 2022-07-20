@@ -182,3 +182,22 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
     free_arced(session_raw);
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const CassFuture {
+    let session_opt = ptr_to_ref(session);
+
+    CassFuture::make_raw(async move {
+        let mut session_guard = session_opt.write().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                "Already closing or closed".msg(),
+            ));
+        }
+
+        *session_guard = None;
+
+        Ok(CassResultValue::Empty)
+    })
+}
