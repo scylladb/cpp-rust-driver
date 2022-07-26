@@ -203,7 +203,7 @@ impl From<Uuid> for CassUuid {
 pub unsafe extern "C" fn cass_uuid_string(uuid_raw: CassUuid, output: *mut c_char) {
     let uuid: Uuid = uuid_raw.into();
 
-    let string_representation = uuid.to_hyphenated().to_string();
+    let string_representation = uuid.hyphenated().to_string();
     std::ptr::copy_nonoverlapping(
         string_representation.as_ptr(),
         output as *mut u8,

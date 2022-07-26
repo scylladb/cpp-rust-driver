@@ -56,13 +56,13 @@ pub struct CassFuture {
 
 impl CassFuture {
     pub fn make_raw(
-        fut: impl Future<Output = CassFutureResult> + Send + Sync + 'static,
+        fut: impl Future<Output = CassFutureResult> + Send + 'static,
     ) -> *const CassFuture {
         Self::new_from_future(fut).into_raw()
     }
 
     pub fn new_from_future(
-        fut: impl Future<Output = CassFutureResult> + Send + Sync + 'static,
+        fut: impl Future<Output = CassFutureResult> + Send + 'static,
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
             state: Mutex::new(Default::default()),
