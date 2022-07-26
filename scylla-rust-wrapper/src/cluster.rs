@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
-    RoundRobinPolicy(RoundRobinPolicy),
-    DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy),
+    RoundRobinPolicy,
+    DcAwareRoundRobinPolicy { local_dc: String },
 }
 
 #[derive(Clone)]
@@ -39,25 +39,27 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
         .map(|cp| format!("{}:{}", cp, cluster.port))
         .collect();
 
-    let load_balancing: Arc<dyn LoadBalancingPolicy> = match &cluster.child_load_balancing_policy {
-        CassClusterChildLoadBalancingPolicy::RoundRobinPolicy(policy) => {
-            if cluster.token_aware_policy_enabled {
-                Arc::new(TokenAwarePolicy::new(Box::new(policy.clone())))
-            } else {
-                Arc::new(policy.clone())
+    let load_balancing: Arc<dyn LoadBalancingPolicy> =
+        match cluster.child_load_balancing_policy.clone() {
+            CassClusterChildLoadBalancingPolicy::RoundRobinPolicy => {
+                if cluster.token_aware_policy_enabled {
+                    Arc::new(TokenAwarePolicy::new(Box::new(RoundRobinPolicy::new())))
+                } else {
+                    Arc::new(RoundRobinPolicy::new())
+                }
             }
-        }
-        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(policy) => {
-            if cluster.token_aware_policy_enabled {
-                Arc::new(TokenAwarePolicy::new(Box::new(policy.clone())))
-            } else {
-                Arc::new(policy.clone())
+            CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy { local_dc } => {
+                if cluster.token_aware_policy_enabled {
+                    Arc::new(TokenAwarePolicy::new(Box::new(
+                        DcAwareRoundRobinPolicy::new(local_dc),
+                    )))
+                } else {
+                    Arc::new(DcAwareRoundRobinPolicy::new(local_dc))
+                }
             }
-        }
-    };
+        };
 
-    cluster
-        .session_builder
+    (&cluster.session_builder)
         .clone()
         .known_nodes(&known_nodes)
         .load_balancing(load_balancing)
@@ -71,9 +73,9 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
         // defaults to using Datacenter-aware load balancing with token-aware routing.
-        child_load_balancing_policy: CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(
-            DcAwareRoundRobinPolicy::new("".to_string()),
-        ),
+        child_load_balancing_policy: CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
+            local_dc: "".to_string(),
+        },
         token_aware_policy_enabled: true,
         use_beta_protocol_version: false,
     }))
@@ -213,8 +215,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.child_load_balancing_policy =
-        CassClusterChildLoadBalancingPolicy::RoundRobinPolicy(RoundRobinPolicy::new());
+    cluster.child_load_balancing_policy = CassClusterChildLoadBalancingPolicy::RoundRobinPolicy;
 }
 
 #[no_mangle]
@@ -248,13 +249,13 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     // FIXME: used_hosts_per_remote_dc, allow_remote_dcs_for_local_cl ignored
     // as there is no equivalent configuration in Rust Driver.
     // TODO: string error handling
-    let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length).unwrap();
+    let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length)
+        .unwrap()
+        .to_string();
 
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.child_load_balancing_policy =
-        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy(DcAwareRoundRobinPolicy::new(
-            local_dc.to_string(),
-        ));
+        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy { local_dc };
 
     CassError::CASS_OK
 }

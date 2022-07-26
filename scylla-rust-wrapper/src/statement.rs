@@ -40,7 +40,12 @@ impl CassStatement {
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
         match &self.statement {
             Statement::Prepared(prepared) => {
-                for (i, col) in prepared.get_metadata().col_specs.iter().enumerate() {
+                for (i, col) in prepared
+                    .get_prepared_metadata()
+                    .col_specs
+                    .iter()
+                    .enumerate()
+                {
                     if col.name == name {
                         return self.bind_cql_value(i, value);
                     }
