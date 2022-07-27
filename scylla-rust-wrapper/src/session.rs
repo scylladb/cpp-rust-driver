@@ -3,9 +3,11 @@ use crate::cass_error::*;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
+use scylla::frame::response::result::Row;
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -86,10 +88,38 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+            Ok(result) => {
+                let metadata = Arc::new(CassResultData {
+                    paging_state: result.paging_state,
+                    col_specs: result.col_specs,
+                });
+                let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
+                let cass_result: CassResult_ = Arc::new(CassResult {
+                    rows: cass_rows,
+                    metadata,
+                });
+
+                Ok(CassResultValue::QueryResult(cass_result))
+            }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })
+}
+
+fn create_cass_rows_from_rows(
+    rows: Option<Vec<Row>>,
+    metadata: &Arc<CassResultData>,
+) -> Option<Vec<CassRow>> {
+    let rows = rows?;
+    let cass_rows = rows
+        .into_iter()
+        .map(|r| CassRow {
+            columns: r.columns,
+            result_metadata: metadata.clone(),
+        })
+        .collect();
+
+    Some(cass_rows)
 }
 
 #[no_mangle]
