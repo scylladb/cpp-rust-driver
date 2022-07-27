@@ -3,13 +3,22 @@ use crate::cass_error::CassError;
 use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
-use scylla::frame::response::result::{CqlValue, Row};
-use scylla::QueryResult;
+use scylla::frame::response::result::{ColumnSpec, CqlValue};
+use scylla::Bytes;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-pub type CassResult = QueryResult;
+pub struct CassResult {
+    pub rows: Option<Vec<CassRow>>,
+    pub metadata: Arc<CassResultData>,
+}
+
+pub struct CassResultData {
+    pub paging_state: Option<Bytes>,
+    pub col_specs: Vec<ColumnSpec>,
+}
+
 pub type CassResult_ = Arc<CassResult>;
 
 pub struct CassIterator {
@@ -17,7 +26,10 @@ pub struct CassIterator {
     position: Option<usize>,
 }
 
-pub type CassRow = Row;
+pub struct CassRow {
+    pub columns: Vec<CassValue>,
+    pub result_metadata: Arc<CassResultData>,
+}
 
 pub type CassValue = Option<CqlValue>;
 
@@ -44,7 +56,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    result.paging_state.is_some() as cass_bool_t
+    result.metadata.paging_state.is_some() as cass_bool_t
 }
 
 #[no_mangle]
@@ -79,7 +91,7 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
         None => return std::ptr::null(),
     };
 
-    let row: &Row = match iter
+    let row: &CassRow = match iter
         .result
         .rows
         .as_ref()
@@ -311,7 +323,7 @@ pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) ->
 pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    result.col_specs.len() as size_t
+    result.metadata.col_specs.len() as size_t
 }
 
 #[no_mangle]
