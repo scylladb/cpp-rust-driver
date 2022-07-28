@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::query_result::CassResult;
+use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::types::LegacyConsistency::{Regular, Serial};
@@ -174,6 +175,26 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.set_tracing(enabled != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_retry_policy(
+    statement: *mut CassStatement,
+    retry_policy: *const CassRetryPolicy,
+) -> CassError {
+    let retry_policy_from_raw: &dyn scylla::retry_policy::RetryPolicy =
+        match ptr_to_ref(retry_policy) {
+            CassRetryPolicy::DefaultRetryPolicy(default) => default,
+            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough,
+        };
+    let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
+
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_retry_policy(boxed_retry_policy),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_retry_policy(boxed_retry_policy),
     }
 
     CassError::CASS_OK
