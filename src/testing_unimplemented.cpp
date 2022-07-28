@@ -540,11 +540,6 @@ cass_session_get_speculative_execution_metrics(const CassSession* session,
                                                CassSpeculativeExecutionMetrics* output){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_get_speculative_execution_metrics\n");
 }
-CASS_EXPORT CassFuture*
-cass_session_prepare_from_existing(CassSession* session,
-                                   CassStatement* statement){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_prepare_from_existing\n");
-}
 CASS_EXPORT CassError
 cass_ssl_add_trusted_cert(CassSsl* ssl,
                           const char* cert){
