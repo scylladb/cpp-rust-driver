@@ -1,11 +1,14 @@
 use crate::argconv::*;
 use crate::cass_error::*;
+use crate::cass_types::get_type_from_value;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow, CassValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
+use scylla::frame::response::result::Row;
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -86,10 +89,52 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+            Ok(result) => {
+                let metadata = Arc::new(CassResultData {
+                    paging_state: result.paging_state,
+                    col_specs: result.col_specs,
+                });
+                let cass_rows = populate_cass_rows_from_rows(&result.rows, &metadata);
+                let cass_result: CassResult_ = Arc::new(CassResult {
+                    rows: cass_rows,
+                    metadata,
+                });
+
+                Ok(CassResultValue::QueryResult(cass_result))
+            }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })
+}
+
+fn populate_cass_rows_from_rows(
+    rows: &Option<Vec<Row>>,
+    metadata: &Arc<CassResultData>,
+) -> Option<Vec<CassRow>> {
+    match rows {
+        Some(rs) => {
+            let cass_rows = rs
+                .iter()
+                .map(|r| CassRow {
+                    columns: populate_cass_row_columns(r),
+                    result_: metadata.clone(),
+                })
+                .collect();
+
+            Some(cass_rows)
+        }
+        None => None,
+    }
+}
+
+fn populate_cass_row_columns(row: &Row) -> Vec<CassValue> {
+    row.columns
+        .iter()
+        .map(|col| CassValue {
+            value: col.clone(),
+            value_type: get_type_from_value(col),
+        })
+        .collect()
 }
 
 #[no_mangle]
@@ -139,4 +184,23 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
     free_arced(session_raw);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const CassFuture {
+    let session_opt = ptr_to_ref(session);
+
+    CassFuture::make_raw(async move {
+        let mut session_guard = session_opt.write().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                "Already closing or closed".msg(),
+            ));
+        }
+
+        *session_guard = None;
+
+        Ok(CassResultValue::Empty)
+    })
 }
