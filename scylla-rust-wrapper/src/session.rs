@@ -138,6 +138,79 @@ fn populate_cass_row_columns(row: &Row) -> Vec<CassValue> {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_session_prepare_from_existing(
+    cass_session: *mut CassSession,
+    statement: *const CassStatement,
+) -> *const CassFuture {
+    let session_opt = ptr_to_ref(cass_session);
+    let statement_opt = ptr_to_ref(statement);
+    let statement = statement_opt.statement.clone();
+
+    let query = match statement.clone() {
+        Statement::Simple(q) => q.get_contents().to_string(),
+        Statement::Prepared(ps) => ps.get_statement().to_string(),
+    };
+
+    CassFuture::make_raw(async move {
+        let session_guard = session_opt.read().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                "Session is not connected".msg(),
+            ));
+        }
+        let session = session_guard.as_ref().unwrap();
+        let mut prepared = session
+            .prepare(query)
+            .await
+            .map_err(|err| (CassError::from(&err), err.msg()))?;
+
+        match statement.clone() {
+            Statement::Simple(q) => {
+                prepared.set_consistency(q.get_consistency());
+                prepared.set_is_idempotent(q.get_is_idempotent());
+                prepared.set_tracing(q.get_tracing());
+
+                if q.get_page_size().is_none() {
+                    prepared.disable_paging();
+                } else {
+                    prepared.set_page_size(q.get_page_size().unwrap());
+                }
+
+                prepared.set_timestamp(q.get_timestamp());
+
+                if q.get_retry_policy().is_some() {
+                    prepared.set_retry_policy(q.get_retry_policy().clone().unwrap());
+                }
+
+                prepared.set_serial_consistency(q.get_serial_consistency());
+            }
+            Statement::Prepared(ps) => {
+                prepared.set_consistency(ps.get_consistency());
+                prepared.set_is_idempotent(ps.get_is_idempotent());
+                prepared.set_tracing(ps.get_tracing());
+
+                if ps.get_page_size().is_none() {
+                    prepared.disable_paging();
+                } else {
+                    prepared.set_page_size(ps.get_page_size().unwrap());
+                }
+
+                prepared.set_timestamp(ps.get_timestamp());
+
+                if ps.get_retry_policy().is_some() {
+                    prepared.set_retry_policy(ps.get_retry_policy().clone().unwrap());
+                }
+
+                prepared.set_serial_consistency(ps.get_serial_consistency());
+            }
+        }
+
+        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+    })
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_session_prepare(
     session: *mut CassSession,
     query: *const c_char,
