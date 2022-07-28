@@ -8,11 +8,12 @@ use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow, Cass
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
-use scylla::frame::response::result::Row;
+use scylla::frame::response::result::{ColumnSpec, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::{QueryResult, Session};
+use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -92,7 +93,8 @@ pub unsafe extern "C" fn cass_session_execute(
             Ok(result) => {
                 let metadata = Arc::new(CassResultData {
                     paging_state: result.paging_state,
-                    col_specs: result.col_specs,
+                    col_specs: result.col_specs.clone(),
+                    col_index_mapping: populate_col_index_mapping(&result.col_specs),
                 });
                 let cass_rows = populate_cass_rows_from_rows(&result.rows, &metadata);
                 let cass_result: CassResult_ = Arc::new(CassResult {
@@ -105,6 +107,16 @@ pub unsafe extern "C" fn cass_session_execute(
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     })
+}
+
+fn populate_col_index_mapping(col_specs: &[ColumnSpec]) -> HashMap<String, usize> {
+    let mut col_index_mapping = HashMap::new();
+
+    for (index, col_spec) in col_specs.iter().enumerate() {
+        col_index_mapping.insert(col_spec.name.clone(), index);
+    }
+
+    col_index_mapping
 }
 
 fn populate_cass_rows_from_rows(

@@ -7,6 +7,7 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
 use scylla::{Bytes, BytesMut};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::slice;
@@ -20,6 +21,7 @@ pub struct CassResult {
 pub struct CassResultData {
     pub paging_state: Option<Bytes>,
     pub col_specs: Vec<ColumnSpec>,
+    pub col_index_mapping: HashMap<String, usize>,
 }
 
 pub type CassResult_ = Arc<CassResult>;
@@ -183,6 +185,38 @@ pub unsafe extern "C" fn cass_row_get_column(
     };
 
     column_value as *const CassValue
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_row_get_column_by_name(
+    row: *const CassRow,
+    name: *const c_char,
+) -> *const CassValue {
+    let name_str = ptr_to_cstr(name).unwrap();
+    let name_length = name_str.len();
+
+    cass_row_get_column_by_name_n(row, name, name_length as size_t)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_row_get_column_by_name_n(
+    row: *const CassRow,
+    name: *const c_char,
+    name_length: size_t,
+) -> *const CassValue {
+    let row_from_raw = ptr_to_ref(row);
+    let col_index_mapping = &row_from_raw.result_.col_index_mapping;
+    let name_str = ptr_to_cstr_n(name, name_length).unwrap().to_lowercase();
+
+    let index_in_row_columns = col_index_mapping.get(name_str.as_str());
+
+    match index_in_row_columns {
+        Some(index) => match row_from_raw.columns.get(*index) {
+            Some(value) => value as *const CassValue,
+            None => std::ptr::null(),
+        },
+        None => std::ptr::null(),
+    }
 }
 
 #[no_mangle]
