@@ -33,4 +33,4 @@ jobs:
       run: cmake -DCASS_BUILD_INTEGRATION_TESTS=ON . && make
 
     - name: Run integration tests on Scylla 5.0.0
-      run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=release:5.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="ClusterTests.*:BasicsTests.*"
+      run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=release:5.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="ClusterTests.*:BasicsTests.*:PreparedTests.*:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare"
