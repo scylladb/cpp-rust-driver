@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::query_result::CassResult;
+use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use scylla::frame::types::Consistency;
@@ -91,10 +92,16 @@ pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) 
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_consistency(
-    _statement: *mut CassStatement,
-    _consistency: CassConsistency,
+    statement: *mut CassStatement,
+    consistency: CassConsistency,
 ) -> CassError {
-    // FIXME: should return CASS_OK if successful, otherwise an error occurred.
+    let consistency_opt = get_consistency_from_cass_consistency(consistency);
+
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_serial_consistency(consistency_opt),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_serial_consistency(consistency_opt),
+    }
+
     CassError::CASS_OK
 }
 
@@ -132,7 +139,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement.paging_state = result.paging_state.clone();
+    statement.paging_state = result.metadata.paging_state.clone();
     CassError::CASS_OK
 }
 
@@ -157,6 +164,71 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.set_tracing(enabled != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_serial_consistency(
+    statement: *mut CassStatement,
+    serial_consistency: CassConsistency,
+) -> CassError {
+    let consistency = get_consistency_from_cass_consistency(serial_consistency);
+
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_serial_consistency(consistency),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_serial_consistency(consistency),
+    }
+
+    CassError::CASS_OK
+}
+
+fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option<Consistency> {
+    match consistency {
+        CassConsistency::CASS_CONSISTENCY_ANY => Some(Consistency::Any),
+        CassConsistency::CASS_CONSISTENCY_ONE => Some(Consistency::One),
+        CassConsistency::CASS_CONSISTENCY_TWO => Some(Consistency::Two),
+        CassConsistency::CASS_CONSISTENCY_THREE => Some(Consistency::Three),
+        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Consistency::Quorum),
+        CassConsistency::CASS_CONSISTENCY_ALL => Some(Consistency::All),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Consistency::LocalQuorum),
+        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Consistency::EachQuorum),
+        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Consistency::Serial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Some(Consistency::LocalSerial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Consistency::LocalOne),
+        _ => None,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_request_timeout(
+    statement: *mut CassStatement,
+    timeout_ms: cass_uint64_t,
+) -> CassError {
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_timestamp(Some(timeout_ms as i64)),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_timestamp(Some(timeout_ms as i64)),
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_retry_policy(
+    statement: *mut CassStatement,
+    retry_policy: *const CassRetryPolicy,
+) -> CassError {
+    let retry_policy_from_raw: &dyn scylla::retry_policy::RetryPolicy =
+        match ptr_to_ref(retry_policy) {
+            CassRetryPolicy::DefaultRetryPolicy(default) => default,
+            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough,
+        };
+    let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
+
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_retry_policy(boxed_retry_policy),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_retry_policy(boxed_retry_policy),
     }
 
     CassError::CASS_OK

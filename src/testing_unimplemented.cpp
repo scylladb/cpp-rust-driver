@@ -244,10 +244,6 @@ cass_custom_payload_set(CassCustomPayload* payload,
                         size_t value_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_set\n");
 }
-CASS_EXPORT const char*
-cass_error_desc(CassError error){
-	throw std::runtime_error("UNIMPLEMENTED cass_error_desc\n");
-}
 CASS_EXPORT void
 cass_execution_profile_free(CassExecProfile* profile){
 	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_free\n");
@@ -405,16 +401,8 @@ cass_iterator_from_collection(const CassValue* value){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_collection\n");
 }
 CASS_EXPORT CassIterator*
-cass_iterator_from_row(const CassRow* row){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_row\n");
-}
-CASS_EXPORT CassIterator*
 cass_iterator_from_tuple(const CassValue* value){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_tuple\n");
-}
-CASS_EXPORT const CassValue*
-cass_iterator_get_column(const CassIterator* iterator){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_get_column\n");
 }
 CASS_EXPORT CassError
 cass_iterator_get_user_type_field_name(const CassIterator* iterator,
@@ -489,23 +477,6 @@ cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared,
                                           const char* name){
 	throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
 }
-CASS_EXPORT CassError
-cass_result_column_name(const CassResult *result,
-                        size_t index,
-                        const char** name,
-                        size_t* name_length){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_column_name\n");
-}
-CASS_EXPORT CassError
-cass_result_paging_state_token(const CassResult* result,
-                               const char** paging_state,
-                               size_t* paging_state_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_result_paging_state_token\n");
-}
-CASS_EXPORT CassRetryPolicy*
-cass_retry_policy_default_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_default_new\n");
-}
 CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_downgrading_consistency_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_downgrading_consistency_new\n");
@@ -514,18 +485,9 @@ CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_fallthrough_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_fallthrough_new\n");
 }
-CASS_EXPORT void
-cass_retry_policy_free(CassRetryPolicy* policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_free\n");
-}
 CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_logging_new\n");
-}
-CASS_EXPORT const CassValue*
-cass_row_get_column_by_name(const CassRow* row,
-                            const char* name){
-	throw std::runtime_error("UNIMPLEMENTED cass_row_get_column_by_name\n");
 }
 CASS_EXPORT void
 cass_schema_meta_free(const CassSchemaMeta* schema_meta){
@@ -539,10 +501,6 @@ cass_schema_meta_keyspace_by_name(const CassSchemaMeta* schema_meta,
 CASS_EXPORT CassVersion
 cass_schema_meta_version(const CassSchemaMeta* schema_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_close(CassSession* session){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_close\n");
 }
 CASS_EXPORT CassFuture*
 cass_session_connect_keyspace(CassSession* session,
@@ -568,11 +526,6 @@ CASS_EXPORT void
 cass_session_get_speculative_execution_metrics(const CassSession* session,
                                                CassSpeculativeExecutionMetrics* output){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_get_speculative_execution_metrics\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_prepare_from_existing(CassSession* session,
-                                   CassStatement* statement){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_prepare_from_existing\n");
 }
 CASS_EXPORT CassError
 cass_ssl_add_trusted_cert(CassSsl* ssl,
@@ -689,27 +642,6 @@ cass_statement_set_node(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
 }
 CASS_EXPORT CassError
-cass_statement_set_paging_state_token(CassStatement* statement,
-                                      const char* paging_state,
-                                      size_t paging_state_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_paging_state_token\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_request_timeout(CassStatement* statement,
-                                   cass_uint64_t timeout_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_request_timeout\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_retry_policy(CassStatement* statement,
-                                CassRetryPolicy* retry_policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_retry_policy\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_serial_consistency(CassStatement* statement,
-                                      CassConsistency serial_consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_serial_consistency\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_timestamp(CassStatement* statement,
                              cass_int64_t timestamp){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_timestamp\n");
@@ -819,16 +751,6 @@ cass_user_type_set_duration_by_name(CassUserType* user_type,
                                     cass_int64_t nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_duration_by_name\n");
 }
-CASS_EXPORT const CassDataType*
-cass_value_data_type(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_data_type\n");
-}
-CASS_EXPORT CassError
-cass_value_get_bytes(const CassValue* value,
-                     const cass_byte_t** output,
-                     size_t* output_size){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_get_bytes\n");
-}
 CASS_EXPORT CassError
 cass_value_get_decimal(const CassValue* value,
                        const cass_byte_t** varint,
@@ -858,8 +780,4 @@ cass_value_primary_sub_type(const CassValue* collection){
 CASS_EXPORT CassValueType
 cass_value_secondary_sub_type(const CassValue* collection){
 	throw std::runtime_error("UNIMPLEMENTED cass_value_secondary_sub_type\n");
-}
-CASS_EXPORT CassValueType
-cass_value_type(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_type\n");
 }
