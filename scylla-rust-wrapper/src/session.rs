@@ -149,6 +149,40 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_session_prepare_from_existing(
+    cass_session: *mut CassSession,
+    statement: *const CassStatement,
+) -> *const CassFuture {
+    let session = ptr_to_ref(cass_session);
+    let cass_statement = ptr_to_ref(statement);
+    let statement = cass_statement.statement.clone();
+
+    CassFuture::make_raw(async move {
+        let query = match &statement {
+            Statement::Simple(q) => q,
+            Statement::Prepared(ps) => {
+                return Ok(CassResultValue::Prepared(ps.clone()));
+            }
+        };
+
+        let session_guard = session.read().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                "Session is not connected".msg(),
+            ));
+        }
+        let session = session_guard.as_ref().unwrap();
+        let prepared = session
+            .prepare(query.clone())
+            .await
+            .map_err(|err| (CassError::from(&err), err.msg()))?;
+
+        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+    })
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_session_prepare(
     session: *mut CassSession,
     query: *const c_char,
