@@ -9,6 +9,7 @@ pub mod cass_error;
 pub mod cass_types;
 pub mod cluster;
 pub mod collection;
+mod external;
 pub mod future;
 pub mod inet;
 pub mod prepared;
