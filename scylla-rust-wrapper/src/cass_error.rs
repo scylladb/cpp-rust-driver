@@ -11,6 +11,8 @@ impl From<&QueryError> for CassError {
             QueryError::ProtocolError(_str) => CassError::CASS_ERROR_LAST_ENTRY,
             QueryError::InvalidMessage(_string) => CassError::CASS_ERROR_LAST_ENTRY,
             QueryError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
+            QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -35,7 +37,7 @@ impl From<&DbError> for CassError {
             DbError::Invalid => CassError::CASS_ERROR_SERVER_INVALID_QUERY,
             DbError::ConfigError => CassError::CASS_ERROR_SERVER_CONFIG_ERROR,
             DbError::AlreadyExists { .. } => CassError::CASS_ERROR_SERVER_ALREADY_EXISTS,
-            DbError::Unprepared => CassError::CASS_ERROR_SERVER_UNPREPARED,
+            DbError::Unprepared { .. } => CassError::CASS_ERROR_SERVER_UNPREPARED,
             DbError::Other(num) => {
                 CassError((CassErrorSource::CASS_ERROR_SOURCE_SERVER.0 << 24) | *num as u32)
             }
@@ -71,6 +73,8 @@ impl From<&NewSessionError> for CassError {
             }
             NewSessionError::InvalidMessage(_string) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
+            NewSessionError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
