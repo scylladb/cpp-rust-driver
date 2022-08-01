@@ -1,6 +1,8 @@
 use crate::argconv::*;
 use crate::cass_error::*;
 use crate::types::*;
+use scylla::batch::SerialConsistency;
+use scylla::frame::types::LegacyConsistency;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
 use std::sync::Arc;
@@ -21,8 +23,6 @@ impl From<Consistency> for CassConsistency {
             Consistency::All => CassConsistency::CASS_CONSISTENCY_ALL,
             Consistency::LocalQuorum => CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM,
             Consistency::EachQuorum => CassConsistency::CASS_CONSISTENCY_EACH_QUORUM,
-            Consistency::Serial => CassConsistency::CASS_CONSISTENCY_SERIAL,
-            Consistency::LocalSerial => CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL,
             Consistency::LocalOne => CassConsistency::CASS_CONSISTENCY_LOCAL_ONE,
         }
     }
@@ -62,21 +62,31 @@ pub unsafe extern "C" fn cass_error_result_consistency(
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
         QueryError::DbError(DbError::Unavailable { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
+            get_cass_consistency_from_legacy(consistency)
         }
         QueryError::DbError(DbError::ReadTimeout { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
+            get_cass_consistency_from_legacy(consistency)
         }
         QueryError::DbError(DbError::WriteTimeout { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
+            get_cass_consistency_from_legacy(consistency)
         }
         QueryError::DbError(DbError::ReadFailure { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
+            get_cass_consistency_from_legacy(consistency)
         }
         QueryError::DbError(DbError::WriteFailure { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
+            get_cass_consistency_from_legacy(consistency)
         }
         _ => CassConsistency::CASS_CONSISTENCY_UNKNOWN,
+    }
+}
+
+fn get_cass_consistency_from_legacy(consistency: &LegacyConsistency) -> CassConsistency {
+    match consistency {
+        LegacyConsistency::Regular(regular) => CassConsistency::from(*regular),
+        LegacyConsistency::Serial(serial) => match serial {
+            SerialConsistency::Serial => CassConsistency::CASS_CONSISTENCY_SERIAL,
+            SerialConsistency::LocalSerial => CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL,
+        },
     }
 }
 
