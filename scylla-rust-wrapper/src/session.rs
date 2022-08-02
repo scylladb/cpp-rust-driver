@@ -84,7 +84,9 @@ pub unsafe extern "C" fn cass_session_execute(
 
         let query_res: Result<QueryResult, QueryError> = match statement {
             Statement::Simple(query) => {
-                session.query_paged(query, bound_values, paging_state).await
+                session
+                    .query_paged(query.query, bound_values, paging_state)
+                    .await
             }
             Statement::Prepared(prepared) => {
                 session
@@ -268,7 +270,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         }
         let session = session_guard.as_ref().unwrap();
         let prepared = session
-            .prepare(query.clone())
+            .prepare(query.query.clone())
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
