@@ -492,6 +492,60 @@ pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_boo
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t {
+    let val = ptr_to_ref(value);
+
+    match val.value {
+        Some(Value::CollectionValue(Collection::List(_))) => true as cass_bool_t,
+        Some(Value::CollectionValue(Collection::Set(_))) => true as cass_bool_t,
+        Some(Value::CollectionValue(Collection::Map(_))) => true as cass_bool_t,
+        _ => false as cass_bool_t,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_item_count(collection: *const CassValue) -> size_t {
+    let val = ptr_to_ref(collection);
+
+    match &val.value {
+        Some(Value::CollectionValue(Collection::List(list))) => list.len() as size_t,
+        Some(Value::CollectionValue(Collection::Map(map))) => map.len() as size_t,
+        Some(Value::CollectionValue(Collection::Set(set))) => set.len() as size_t,
+        Some(Value::CollectionValue(Collection::Tuple(tuple))) => tuple.len() as size_t,
+        Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
+            fields.len() as size_t
+        }
+        _ => 0 as size_t,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_primary_sub_type(
+    collection: *const CassValue,
+) -> CassValueType {
+    let val = ptr_to_ref(collection);
+
+    match val.value_type.as_ref() {
+        CassDataType::List(Some(list)) => list.get_value_type(),
+        CassDataType::Set(Some(set)) => set.get_value_type(),
+        CassDataType::Map(Some(key), _) => key.get_value_type(),
+        _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_secondary_sub_type(
+    collection: *const CassValue,
+) -> CassValueType {
+    let val = ptr_to_ref(collection);
+
+    match val.value_type.as_ref() {
+        CassDataType::Map(_, Some(value)) => value.get_value_type(),
+        _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 

@@ -760,19 +760,3 @@ cass_value_get_duration(const CassValue* value,
                         cass_int64_t* nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_value_get_duration\n");
 }
-CASS_EXPORT cass_bool_t
-cass_value_is_collection(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_is_collection\n");
-}
-CASS_EXPORT size_t
-cass_value_item_count(const CassValue* collection){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_item_count\n");
-}
-CASS_EXPORT CassValueType
-cass_value_primary_sub_type(const CassValue* collection){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_primary_sub_type\n");
-}
-CASS_EXPORT CassValueType
-cass_value_secondary_sub_type(const CassValue* collection){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_secondary_sub_type\n");
-}
