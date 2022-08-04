@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
 use crate::inet::CassInet;
 use crate::statement::CassStatement;
 use crate::types::*;
@@ -31,9 +31,26 @@ pub struct CassRow {
     pub result_metadata: Arc<CassResultData>,
 }
 
+pub enum Value {
+    RegularValue(CqlValue),
+    CollectionValue(Collection),
+}
+
+pub enum Collection {
+    List(Vec<CassValue>),
+    Map(Vec<(CassValue, CassValue)>),
+    Set(Vec<CassValue>),
+    UserDefinedType {
+        keyspace: String,
+        type_name: String,
+        fields: Vec<(String, Option<CassValue>)>,
+    },
+    Tuple(Vec<Option<CassValue>>),
+}
+
 pub struct CassValue {
-    pub value: Option<CqlValue>,
-    pub value_type: CassDataType,
+    pub value: Option<Value>,
+    pub value_type: CassDataTypeArc,
 }
 
 pub struct CassResultIterator {
@@ -245,14 +262,14 @@ pub unsafe extern "C" fn cass_result_column_name(
 pub unsafe extern "C" fn cass_value_type(value: *const CassValue) -> CassValueType {
     let value_from_raw = ptr_to_ref(value);
 
-    cass_data_type_type(&value_from_raw.value_type)
+    cass_data_type_type(Arc::as_ptr(&value_from_raw.value_type))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_data_type(value: *const CassValue) -> *const CassDataType {
     let value_from_raw = ptr_to_ref(value);
 
-    &value_from_raw.value_type as *const CassDataType
+    Arc::as_ptr(&value_from_raw.value_type)
 }
 
 #[no_mangle]
@@ -263,7 +280,7 @@ pub unsafe extern "C" fn cass_value_get_float(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_float_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Float(f)) => *out = f,
+        Some(Value::RegularValue(CqlValue::Float(f))) => *out = f,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -279,7 +296,7 @@ pub unsafe extern "C" fn cass_value_get_double(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_double_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Double(d)) => *out = d,
+        Some(Value::RegularValue(CqlValue::Double(d))) => *out = d,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -295,7 +312,7 @@ pub unsafe extern "C" fn cass_value_get_bool(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_bool_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Boolean(b)) => *out = b as cass_bool_t,
+        Some(Value::RegularValue(CqlValue::Boolean(b))) => *out = b as cass_bool_t,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -311,7 +328,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int8_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::TinyInt(i)) => *out = i,
+        Some(Value::RegularValue(CqlValue::TinyInt(i))) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -327,7 +344,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int16_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::SmallInt(i)) => *out = i,
+        Some(Value::RegularValue(CqlValue::SmallInt(i))) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -343,7 +360,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_uint32_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Date(u)) => *out = u, // FIXME: hack
+        Some(Value::RegularValue(CqlValue::Date(u))) => *out = u, // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -359,7 +376,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int32_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Int(i)) => *out = i,
+        Some(Value::RegularValue(CqlValue::Int(i))) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -375,8 +392,8 @@ pub unsafe extern "C" fn cass_value_get_int64(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int64_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::BigInt(i)) => *out = i,
-        Some(CqlValue::Counter(i)) => *out = i.0 as cass_int64_t,
+        Some(Value::RegularValue(CqlValue::BigInt(i))) => *out = i,
+        Some(Value::RegularValue(CqlValue::Counter(i))) => *out = i.0 as cass_int64_t,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -392,8 +409,8 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut CassUuid = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Uuid(uuid)) => *out = uuid.into(),
-        Some(CqlValue::Timeuuid(uuid)) => *out = uuid.into(),
+        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => *out = uuid.into(),
+        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => *out = uuid.into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -409,7 +426,7 @@ pub unsafe extern "C" fn cass_value_get_inet(
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut CassInet = ptr_to_ref_mut(output);
     match val.value {
-        Some(CqlValue::Inet(inet)) => *out = inet.into(),
+        Some(Value::RegularValue(CqlValue::Inet(inet))) => *out = inet.into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -429,8 +446,12 @@ pub unsafe extern "C" fn cass_value_get_string(
         // on any type and get internal represenation. I don't see how to do it easily in
         // a compatible way in rust, so let's do something sensible - only return result
         // for string values.
-        Some(CqlValue::Ascii(s)) => write_str_to_c(s.as_str(), output, output_size),
-        Some(CqlValue::Text(s)) => write_str_to_c(s.as_str(), output, output_size),
+        Some(Value::RegularValue(CqlValue::Ascii(s))) => {
+            write_str_to_c(s.as_str(), output, output_size)
+        }
+        Some(Value::RegularValue(CqlValue::Text(s))) => {
+            write_str_to_c(s.as_str(), output, output_size)
+        }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     }
@@ -453,7 +474,7 @@ pub unsafe extern "C" fn cass_value_get_bytes(
     // FIXME: This should be implemented for all CQL types
     // Note: currently rust driver does not allow to get raw bytes of the CQL value.
     match &value_from_raw.value {
-        Some(CqlValue::Blob(bytes)) => {
+        Some(Value::RegularValue(CqlValue::Blob(bytes))) => {
             *output = bytes.as_ptr() as *const cass_byte_t;
             *output_size = bytes.len() as u64;
         }
