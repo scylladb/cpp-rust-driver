@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use scylla::frame::response::result::ColumnType;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
@@ -125,6 +126,59 @@ impl CassDataType {
             CassDataType::UDT(udt) => udt,
             _ => panic!("Can get UDT out of non-UDT data type"),
         }
+    }
+}
+
+pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
+    match column_type {
+        ColumnType::Custom(s) => CassDataType::Custom((*s).clone()),
+        ColumnType::Ascii => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
+        ColumnType::Boolean => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
+        ColumnType::Blob => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
+        ColumnType::Counter => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_COUNTER),
+        ColumnType::Decimal => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DECIMAL),
+        ColumnType::Date => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DATE),
+        ColumnType::Double => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DOUBLE),
+        ColumnType::Float => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_FLOAT),
+        ColumnType::Int => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INT),
+        ColumnType::BigInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BIGINT),
+        ColumnType::Text => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
+        ColumnType::Timestamp => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
+        ColumnType::Inet => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INET),
+        ColumnType::List(boxed_type) => {
+            CassDataType::List(Some(Arc::new(get_column_type(boxed_type.as_ref()))))
+        }
+        ColumnType::Map(key, value) => CassDataType::Map(
+            Some(Arc::new(get_column_type(key.as_ref()))),
+            Some(Arc::new(get_column_type(value.as_ref()))),
+        ),
+        ColumnType::Set(boxed_type) => {
+            CassDataType::Set(Some(Arc::new(get_column_type(boxed_type.as_ref()))))
+        }
+        ColumnType::UserDefinedType {
+            type_name,
+            keyspace,
+            field_types,
+        } => CassDataType::UDT(UDTDataType {
+            field_types: field_types
+                .iter()
+                .map(|(name, col_type)| ((*name).clone(), Arc::new(get_column_type(col_type))))
+                .collect(),
+            keyspace: (*keyspace).clone(),
+            name: (*type_name).clone(),
+        }),
+        ColumnType::SmallInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
+        ColumnType::TinyInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT),
+        ColumnType::Time => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIME),
+        ColumnType::Timeuuid => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
+        ColumnType::Tuple(v) => CassDataType::Tuple(
+            v.iter()
+                .map(|col_type| Arc::new(get_column_type(col_type)))
+                .collect(),
+        ),
+        ColumnType::Uuid => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UUID),
+        ColumnType::Varint => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
+        _ => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
     }
 }
 

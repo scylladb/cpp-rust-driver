@@ -1,50 +1,52 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
-use scylla::frame::response::result::{CqlValue, Row};
-use scylla::QueryResult;
+use scylla::frame::response::result::{ColumnSpec, CqlValue};
+use scylla::Bytes;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-pub type CassResult = QueryResult;
+pub struct CassResult {
+    pub rows: Option<Vec<CassRow>>,
+    pub metadata: Arc<CassResultData>,
+}
+
+pub struct CassResultData {
+    pub paging_state: Option<Bytes>,
+    pub col_specs: Vec<ColumnSpec>,
+}
+
 pub type CassResult_ = Arc<CassResult>;
 
-pub struct CassIterator {
+pub type CassRow_ = &'static CassRow;
+
+pub struct CassRow {
+    pub columns: Vec<CassValue>,
+    pub result_metadata: Arc<CassResultData>,
+}
+
+pub struct CassValue {
+    pub value: Option<CqlValue>,
+    pub value_type: CassDataType,
+}
+
+pub struct CassResultIterator {
     result: CassResult_,
     position: Option<usize>,
 }
 
-pub type CassRow = Row;
-
-pub type CassValue = Option<CqlValue>;
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_result(
-    result_raw: *const CassResult,
-) -> *mut CassIterator {
-    let result: CassResult_ = clone_arced(result_raw);
-
-    let iterator = CassIterator {
-        result,
-        position: None,
-    };
-
-    Box::into_raw(Box::new(iterator))
+pub struct CassRowIterator {
+    row: CassRow_,
+    position: Option<usize>,
 }
 
-// This was const for some reason, seems like a mistake in cpp driver
-#[no_mangle]
-pub unsafe extern "C" fn cass_result_free(result_raw: *mut CassResult) {
-    free_arced(result_raw);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
-    let result = ptr_to_ref(result);
-    result.paging_state.is_some() as cass_bool_t
+pub enum CassIterator {
+    CassResultIterator(CassResultIterator),
+    CassRowIterator(CassRowIterator),
 }
 
 #[no_mangle]
@@ -55,41 +57,113 @@ pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
 // After creating an iterator we have to call next() before accessing the value
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass_bool_t {
-    let iter: &mut CassIterator = ptr_to_ref_mut(iterator);
+    let mut iter = ptr_to_ref_mut(iterator);
 
-    let new_pos: usize = match iter.position {
-        Some(prev_pos) => prev_pos + 1,
-        None => 0,
-    };
+    match &mut iter {
+        CassIterator::CassResultIterator(result_iterator) => {
+            let new_pos: usize = result_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-    iter.position = Some(new_pos);
+            result_iterator.position = Some(new_pos);
 
-    match &iter.result.rows {
-        Some(rs) => (new_pos < rs.len()) as cass_bool_t,
-        None => false as cass_bool_t,
+            match &result_iterator.result.rows {
+                Some(rs) => (new_pos < rs.len()) as cass_bool_t,
+                None => false as cass_bool_t,
+            }
+        }
+        CassIterator::CassRowIterator(row_iterator) => {
+            let new_pos: usize = row_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            row_iterator.position = Some(new_pos);
+
+            (new_pos < row_iterator.row.columns.len()) as cass_bool_t
+        }
     }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) -> *const CassRow {
-    let iter: &CassIterator = ptr_to_ref(iterator);
+    let iter = ptr_to_ref(iterator);
 
-    let iter_position: usize = match iter.position {
-        Some(pos) => pos,
-        None => return std::ptr::null(),
+    // Defined only for result iterator, for other types should return null
+    if let CassIterator::CassResultIterator(result_iterator) = iter {
+        let iter_position = match result_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let row: &CassRow = match result_iterator
+            .result
+            .rows
+            .as_ref()
+            .and_then(|rs| rs.get(iter_position))
+        {
+            Some(row) => row,
+            None => return std::ptr::null(),
+        };
+
+        return row;
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_column(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    // Defined only for row iterator, for other types should return null
+    if let CassIterator::CassRowIterator(row_iterator) = iter {
+        let iter_position = match row_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let value = match row_iterator.row.columns.get(iter_position) {
+            Some(col) => col,
+            None => return std::ptr::null(),
+        };
+
+        return value as *const CassValue;
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
+    let result_from_raw: CassResult_ = clone_arced(result);
+
+    let iterator = CassResultIterator {
+        result: result_from_raw,
+        position: None,
     };
 
-    let row: &Row = match iter
-        .result
-        .rows
-        .as_ref()
-        .and_then(|rs| rs.get(iter_position))
-    {
-        Some(row) => row,
-        None => return std::ptr::null(),
+    Box::into_raw(Box::new(CassIterator::CassResultIterator(iterator)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut CassIterator {
+    let row_from_raw: CassRow_ = ptr_to_ref(row);
+
+    let iterator = CassRowIterator {
+        row: row_from_raw,
+        position: None,
     };
 
-    row
+    Box::into_raw(Box::new(CassIterator::CassRowIterator(iterator)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
+    free_arced(result_raw);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
+    let result = ptr_to_ref(result);
+    result.metadata.paging_state.is_some() as cass_bool_t
 }
 
 #[no_mangle]
@@ -100,12 +174,48 @@ pub unsafe extern "C" fn cass_row_get_column(
     let row: &CassRow = ptr_to_ref(row_raw);
 
     let index_usize: usize = index.try_into().unwrap();
-    let column_value: &Option<CqlValue> = match row.columns.get(index_usize) {
+    let column_value = match row.columns.get(index_usize) {
         Some(val) => val,
         None => return std::ptr::null(),
     };
 
-    column_value
+    column_value as *const CassValue
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_column_name(
+    result: *const CassResult,
+    index: size_t,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) -> CassError {
+    let result_from_raw = ptr_to_ref(result);
+    let index_usize: usize = index.try_into().unwrap();
+
+    if index_usize >= result_from_raw.metadata.col_specs.len() {
+        return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
+    }
+
+    let column_spec: &ColumnSpec = result_from_raw.metadata.col_specs.get(index_usize).unwrap();
+    let column_name = column_spec.name.as_str();
+
+    write_str_to_c(column_name, name, name_length);
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_type(value: *const CassValue) -> CassValueType {
+    let value_from_raw = ptr_to_ref(value);
+
+    cass_data_type_type(&value_from_raw.value_type)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_data_type(value: *const CassValue) -> *const CassDataType {
+    let value_from_raw = ptr_to_ref(value);
+
+    &value_from_raw.value_type as *const CassDataType
 }
 
 #[no_mangle]
@@ -115,8 +225,8 @@ pub unsafe extern "C" fn cass_value_get_float(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_float_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Float(f)) => *out = *f,
+    match val.value {
+        Some(CqlValue::Float(f)) => *out = f,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -131,8 +241,8 @@ pub unsafe extern "C" fn cass_value_get_double(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_double_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Double(d)) => *out = *d,
+    match val.value {
+        Some(CqlValue::Double(d)) => *out = d,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -147,8 +257,8 @@ pub unsafe extern "C" fn cass_value_get_bool(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_bool_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Boolean(b)) => *out = (*b) as cass_bool_t,
+    match val.value {
+        Some(CqlValue::Boolean(b)) => *out = b as cass_bool_t,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -163,8 +273,8 @@ pub unsafe extern "C" fn cass_value_get_int8(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int8_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::TinyInt(i)) => *out = *i,
+    match val.value {
+        Some(CqlValue::TinyInt(i)) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -179,8 +289,8 @@ pub unsafe extern "C" fn cass_value_get_int16(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int16_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::SmallInt(i)) => *out = *i,
+    match val.value {
+        Some(CqlValue::SmallInt(i)) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -195,8 +305,8 @@ pub unsafe extern "C" fn cass_value_get_uint32(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_uint32_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Date(u)) => *out = *u, // FIXME: hack
+    match val.value {
+        Some(CqlValue::Date(u)) => *out = u, // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -211,8 +321,8 @@ pub unsafe extern "C" fn cass_value_get_int32(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int32_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Int(i)) => *out = *i,
+    match val.value {
+        Some(CqlValue::Int(i)) => *out = i,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -227,8 +337,9 @@ pub unsafe extern "C" fn cass_value_get_int64(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut cass_int64_t = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::BigInt(i)) => *out = *i,
+    match val.value {
+        Some(CqlValue::BigInt(i)) => *out = i,
+        Some(CqlValue::Counter(i)) => *out = i.0 as cass_int64_t,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -243,9 +354,9 @@ pub unsafe extern "C" fn cass_value_get_uuid(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut CassUuid = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Uuid(uuid)) => *out = (*uuid).into(),
-        Some(CqlValue::Timeuuid(uuid)) => *out = (*uuid).into(),
+    match val.value {
+        Some(CqlValue::Uuid(uuid)) => *out = uuid.into(),
+        Some(CqlValue::Timeuuid(uuid)) => *out = uuid.into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -260,8 +371,8 @@ pub unsafe extern "C" fn cass_value_get_inet(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     let out: &mut CassInet = ptr_to_ref_mut(output);
-    match val {
-        Some(CqlValue::Inet(inet)) => *out = (*inet).into(),
+    match val.value {
+        Some(CqlValue::Inet(inet)) => *out = inet.into(),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -276,13 +387,13 @@ pub unsafe extern "C" fn cass_value_get_string(
     output_size: *mut size_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    match val {
+    match &val.value {
         // It seems that cpp driver doesn't check the type - you can call _get_string
         // on any type and get internal represenation. I don't see how to do it easily in
         // a compatible way in rust, so let's do something sensible - only return result
         // for string values.
-        Some(CqlValue::Ascii(s)) => write_str_to_c(s, output, output_size),
-        Some(CqlValue::Text(s)) => write_str_to_c(s, output, output_size),
+        Some(CqlValue::Ascii(s)) => write_str_to_c(s.as_str(), output, output_size),
+        Some(CqlValue::Text(s)) => write_str_to_c(s.as_str(), output, output_size),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     }
@@ -293,7 +404,7 @@ pub unsafe extern "C" fn cass_value_get_string(
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
     let val: &CassValue = ptr_to_ref(value);
-    val.is_none() as cass_bool_t
+    val.value.is_none() as cass_bool_t
 }
 
 #[no_mangle]
@@ -311,7 +422,7 @@ pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) ->
 pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    result.col_specs.len() as size_t
+    result.metadata.col_specs.len() as size_t
 }
 
 #[no_mangle]
