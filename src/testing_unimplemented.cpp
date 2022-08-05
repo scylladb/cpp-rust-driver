@@ -396,14 +396,6 @@ CASS_EXPORT CassIterator*
 cass_iterator_fields_from_user_type(const CassValue* value){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_fields_from_user_type\n");
 }
-CASS_EXPORT CassIterator*
-cass_iterator_from_collection(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_collection\n");
-}
-CASS_EXPORT CassIterator*
-cass_iterator_from_tuple(const CassValue* value){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_from_tuple\n");
-}
 CASS_EXPORT CassError
 cass_iterator_get_user_type_field_name(const CassIterator* iterator,
                                        const char** name,
@@ -413,10 +405,6 @@ cass_iterator_get_user_type_field_name(const CassIterator* iterator,
 CASS_EXPORT const CassValue*
 cass_iterator_get_user_type_field_value(const CassIterator* iterator){
 	throw std::runtime_error("UNIMPLEMENTED cass_iterator_get_user_type_field_value\n");
-}
-CASS_EXPORT const CassValue*
-cass_iterator_get_value(const CassIterator* iterator){
-	throw std::runtime_error("UNIMPLEMENTED cass_iterator_get_value\n");
 }
 CASS_EXPORT const CassAggregateMeta*
 cass_keyspace_meta_aggregate_by_name(const CassKeyspaceMeta* keyspace_meta,

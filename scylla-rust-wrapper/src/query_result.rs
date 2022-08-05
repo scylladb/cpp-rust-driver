@@ -24,7 +24,12 @@ pub struct CassResultData {
 
 pub type CassResult_ = Arc<CassResult>;
 
+/// The lifetime of CassRow is bound to CassResult.
+/// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub type CassRow_ = &'static CassRow;
+
+/// The lifetime of CassValue is bound to CassRow.
+pub type CassValue_ = &'static CassValue;
 
 pub struct CassRow {
     pub columns: Vec<CassValue>,
@@ -63,9 +68,16 @@ pub struct CassRowIterator {
     position: Option<usize>,
 }
 
+pub struct CassCollectionIterator {
+    value: CassValue_,
+    count: u64,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
+    CassCollectionIterator(CassCollectionIterator),
 }
 
 #[no_mangle]
@@ -95,6 +107,15 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
             row_iterator.position = Some(new_pos);
 
             (new_pos < row_iterator.row.columns.len()) as cass_bool_t
+        }
+        CassIterator::CassCollectionIterator(collection_iterator) => {
+            let new_pos: usize = collection_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            collection_iterator.position = Some(new_pos);
+
+            (new_pos < collection_iterator.count.try_into().unwrap()) as cass_bool_t
         }
     }
 }
@@ -151,6 +172,38 @@ pub unsafe extern "C" fn cass_iterator_get_column(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_value(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    // Defined only for collections(list and set) or tuple iterator, for other types should return null
+    if let CassIterator::CassCollectionIterator(collection_iterator) = iter {
+        let iter_position = match collection_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let value = match &collection_iterator.value.value {
+            Some(Value::CollectionValue(Collection::List(list))) => list.get(iter_position),
+            Some(Value::CollectionValue(Collection::Set(set))) => set.get(iter_position),
+            Some(Value::CollectionValue(Collection::Tuple(tuple))) => {
+                tuple.get(iter_position).and_then(|x| x.as_ref())
+            }
+            _ => return std::ptr::null(),
+        };
+
+        if value.is_none() {
+            return std::ptr::null();
+        }
+
+        return value.unwrap() as *const CassValue;
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw: CassResult_ = clone_arced(result);
 
@@ -172,6 +225,46 @@ pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut Cas
     };
 
     Box::into_raw(Box::new(CassIterator::CassRowIterator(iterator)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_collection(
+    value: *const CassValue,
+) -> *mut CassIterator {
+    let is_collection = cass_value_is_collection(value) != 0;
+
+    if value.is_null() || !is_collection {
+        return std::ptr::null_mut();
+    }
+
+    let val = ptr_to_ref(value);
+    let item_count = cass_value_item_count(value);
+
+    let iterator = CassCollectionIterator {
+        value: val,
+        count: item_count,
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator {
+    let tuple = ptr_to_ref(value);
+
+    if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
+        let item_count = val.len();
+        let iterator = CassCollectionIterator {
+            value: tuple,
+            count: item_count as u64,
+            position: None,
+        };
+
+        return Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)));
+    }
+
+    std::ptr::null_mut()
 }
 
 #[no_mangle]
@@ -394,6 +487,13 @@ pub unsafe extern "C" fn cass_value_get_int64(
     match val.value {
         Some(Value::RegularValue(CqlValue::BigInt(i))) => *out = i,
         Some(Value::RegularValue(CqlValue::Counter(i))) => *out = i.0 as cass_int64_t,
+        Some(Value::RegularValue(CqlValue::Time(d))) => match d.num_nanoseconds() {
+            Some(nanos) => *out = nanos as cass_int64_t,
+            None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+        },
+        Some(Value::RegularValue(CqlValue::Timestamp(d))) => {
+            *out = d.num_milliseconds() as cass_int64_t
+        }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };

@@ -488,8 +488,29 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-    List<TypeParam> result_list(result.first_row().next().as<List<TypeParam> >());
-    ASSERT_EQ(list.value(), result_list.value());
+//    List<TypeParam> result_list(result.first_row().next().as<List<TypeParam> >());
+//    ASSERT_EQ(list.value(), result_list.value());
+    const CassValue *result_list(result.first_row().next().get_value());
+
+    bool is_collection = cass_value_is_collection(result_list);
+    EXPECT_TRUE(is_collection);
+
+    size_t collection_size = cass_value_item_count(result_list);
+    ASSERT_EQ(list.size(), collection_size);
+
+    CassIterator* collection_iterator = cass_iterator_from_collection(result_list);
+    std::vector<TypeParam> list_vector = list.value();
+
+    for (size_t j = 0; j < collection_size; ++j) {
+      if (cass_iterator_next(collection_iterator)) {
+        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
+        ASSERT_EQ(value, list_vector[j]);
+      } else {
+        throw Exception("No more values available");
+      }
+    }
+
+    cass_iterator_free(collection_iterator);
   }
 }
 
@@ -542,8 +563,29 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-    Set<TypeParam> result_set = result.first_row().next().as<Set<TypeParam> >();
-    ASSERT_EQ(set.value(), result_set.value());
+//    Set<TypeParam> result_set = result.first_row().next().as<Set<TypeParam> >();
+//    ASSERT_EQ(set.value(), result_set.value());
+    const CassValue *result_set(result.first_row().next().get_value());
+
+    bool is_collection = cass_value_is_collection(result_set);
+    EXPECT_TRUE(is_collection);
+
+    size_t collection_size = cass_value_item_count(result_set);
+    ASSERT_EQ(set.size(), collection_size);
+
+    CassIterator* collection_iterator = cass_iterator_from_collection(result_set);
+    std::set<TypeParam> set_elems = set.value();
+
+    for (size_t j = 0; j < collection_size; ++j) {
+      if (cass_iterator_next(collection_iterator)) {
+        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
+        EXPECT_TRUE(set_elems.find(value) != set_elems.end());
+      } else {
+        throw Exception("No more values available");
+      }
+    }
+
+    cass_iterator_free(collection_iterator);
   }
 }
 
@@ -691,8 +733,25 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-    Tuple result_tuple(result.first_row().next().as<Tuple>());
-    ASSERT_EQ(values, result_tuple.values<TypeParam>());
+//    Tuple result_tuple(result.first_row().next().as<Tuple>());
+//    ASSERT_EQ(values, result_tuple.values<TypeParam>());
+    const CassValue *result_tuple(result.first_row().next().get_value());
+
+    size_t collection_size = cass_value_item_count(result_tuple);
+    ASSERT_EQ(tuple.size(), collection_size);
+
+    CassIterator* collection_iterator = cass_iterator_from_tuple(result_tuple);
+
+    for (size_t j = 0; j < collection_size; ++j) {
+      if (cass_iterator_next(collection_iterator)) {
+        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
+        ASSERT_EQ(value, values[j]);
+      } else {
+        throw Exception("No more values available");
+      }
+    }
+
+    cass_iterator_free(collection_iterator);
   }
 }
 
