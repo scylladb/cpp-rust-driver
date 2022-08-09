@@ -636,9 +636,30 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
       select_statement.bind<Map<TypeParam, TypeParam> >(0, map);
       Result result = this->session_.execute(select_statement);
       ASSERT_EQ(1u, result.row_count());
-      Column column = result.first_row().next();
-      Map<TypeParam, TypeParam> result_map(column.as<Map<TypeParam, TypeParam> >());
-      ASSERT_EQ(map_values, result_map.value());
+//    Map<TypeParam, TypeParam> result_map(column.as<Map<TypeParam, TypeParam> >());
+//    ASSERT_EQ(map_values, result_map.value());
+      const CassValue *result_map = result.first_row().next().get_value();
+
+      bool is_collection = cass_value_is_collection(result_map);
+      EXPECT_TRUE(is_collection);
+
+      size_t collection_size = cass_value_item_count(result_map);
+      ASSERT_EQ(map.size(), collection_size);
+
+      CassIterator* collection_iterator = cass_iterator_from_collection(result_map);
+      std::map<TypeParam, TypeParam> map_entries = map.value();
+
+      for (size_t j = 0; j < collection_size; ++j) {
+        if (cass_iterator_next(collection_iterator)) {
+          TypeParam key = TypeParam(cass_iterator_get_map_key(collection_iterator));
+          TypeParam value = TypeParam(cass_iterator_get_map_value(collection_iterator));
+          ASSERT_EQ(value, map_entries[key]);
+        } else {
+          throw Exception("No more values available");
+        }
+      }
+
+      cass_iterator_free(collection_iterator);
     }
   } else {
     // Initialize the table and assign the values for the map

@@ -74,10 +74,17 @@ pub struct CassCollectionIterator {
     position: Option<usize>,
 }
 
+pub struct CassMapIterator {
+    value: CassValue_,
+    count: u64,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
     CassCollectionIterator(CassCollectionIterator),
+    CassMapIterator(CassMapIterator),
 }
 
 #[no_mangle]
@@ -116,6 +123,13 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
             collection_iterator.position = Some(new_pos);
 
             (new_pos < collection_iterator.count.try_into().unwrap()) as cass_bool_t
+        }
+        CassIterator::CassMapIterator(map_iterator) => {
+            let new_pos: usize = map_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            map_iterator.position = Some(new_pos);
+
+            (new_pos < map_iterator.count.try_into().unwrap()) as cass_bool_t
         }
     }
 }
@@ -204,6 +218,60 @@ pub unsafe extern "C" fn cass_iterator_get_value(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_map_key(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassMapIterator(map_iterator) = iter {
+        let iter_position = match map_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let entry = match &map_iterator.value.value {
+            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
+            _ => return std::ptr::null(),
+        };
+
+        if entry.is_none() {
+            return std::ptr::null();
+        }
+
+        return &entry.unwrap().0 as *const CassValue;
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_map_value(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassMapIterator(map_iterator) = iter {
+        let iter_position = match map_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let entry = match &map_iterator.value.value {
+            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
+            _ => return std::ptr::null(),
+        };
+
+        if entry.is_none() {
+            return std::ptr::null();
+        }
+
+        return &entry.unwrap().1 as *const CassValue;
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw: CassResult_ = clone_arced(result);
 
@@ -237,6 +305,11 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
         return std::ptr::null_mut();
     }
 
+    let map_iterator = cass_iterator_from_map(value);
+    if !map_iterator.is_null() {
+        return map_iterator;
+    }
+
     let val = ptr_to_ref(value);
     let item_count = cass_value_item_count(value);
 
@@ -262,6 +335,24 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *m
         };
 
         return Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)));
+    }
+
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut CassIterator {
+    let map = ptr_to_ref(value);
+
+    if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
+        let item_count = val.len();
+        let iterator = CassMapIterator {
+            value: map,
+            count: item_count as u64,
+            position: None,
+        };
+
+        return Box::into_raw(Box::new(CassIterator::CassMapIterator(iterator)));
     }
 
     std::ptr::null_mut()
