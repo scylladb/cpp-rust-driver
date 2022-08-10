@@ -3,11 +3,13 @@ use crate::cass_error::CassError;
 use crate::query_result::CassResult;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
-use scylla::frame::types::Consistency;
+use scylla::frame::types::LegacyConsistency::{Regular, Serial};
+use scylla::frame::types::{Consistency, LegacyConsistency};
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
+use scylla::statement::SerialConsistency;
 use scylla::Bytes;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
@@ -25,6 +27,7 @@ pub struct CassStatement {
     pub statement: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
     pub paging_state: Option<Bytes>,
+    pub request_timeout_ms: Option<cass_uint64_t>,
 }
 
 impl CassStatement {
@@ -86,6 +89,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         statement: Statement::Simple(query),
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: None,
+        request_timeout_ms: None,
     }))
 }
 
@@ -96,10 +100,18 @@ pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) 
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_consistency(
-    _statement: *mut CassStatement,
-    _consistency: CassConsistency,
+    statement: *mut CassStatement,
+    consistency: CassConsistency,
 ) -> CassError {
-    // FIXME: should return CASS_OK if successful, otherwise an error occurred.
+    let consistency_opt = get_consistency_from_cass_consistency(consistency);
+
+    if let Some(Regular(regular_consistency)) = consistency_opt {
+        match &mut ptr_to_ref_mut(statement).statement {
+            Statement::Simple(inner) => inner.set_consistency(regular_consistency),
+            Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(regular_consistency),
+        }
+    }
+
     CassError::CASS_OK
 }
 
@@ -163,6 +175,81 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
         Statement::Simple(inner) => inner.set_tracing(enabled != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
     }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_serial_consistency(
+    statement: *mut CassStatement,
+    serial_consistency: CassConsistency,
+) -> CassError {
+    let consistency = get_consistency_from_cass_consistency(serial_consistency);
+
+    let serial_consistency = match consistency {
+        Some(Serial(s)) => Some(s),
+        _ => None,
+    };
+
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_serial_consistency(serial_consistency),
+        Statement::Prepared(inner) => {
+            Arc::make_mut(inner).set_serial_consistency(serial_consistency)
+        }
+    }
+
+    CassError::CASS_OK
+}
+
+fn get_consistency_from_cass_consistency(
+    consistency: CassConsistency,
+) -> Option<LegacyConsistency> {
+    match consistency {
+        CassConsistency::CASS_CONSISTENCY_ANY => Some(Regular(Consistency::Any)),
+        CassConsistency::CASS_CONSISTENCY_ONE => Some(Regular(Consistency::One)),
+        CassConsistency::CASS_CONSISTENCY_TWO => Some(Regular(Consistency::Two)),
+        CassConsistency::CASS_CONSISTENCY_THREE => Some(Regular(Consistency::Three)),
+        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Regular(Consistency::Quorum)),
+        CassConsistency::CASS_CONSISTENCY_ALL => Some(Regular(Consistency::All)),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Regular(Consistency::LocalQuorum)),
+        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Regular(Consistency::EachQuorum)),
+        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Serial(SerialConsistency::Serial)),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => {
+            Some(Serial(SerialConsistency::LocalSerial))
+        }
+        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Regular(Consistency::LocalOne)),
+        _ => None,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_timestamp(
+    statement: *mut CassStatement,
+    timestamp: cass_int64_t,
+) -> CassError {
+    match &mut ptr_to_ref_mut(statement).statement {
+        Statement::Simple(inner) => inner.set_timestamp(Some(timestamp)),
+        Statement::Prepared(inner) => Arc::make_mut(inner).set_timestamp(Some(timestamp)),
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_request_timeout(
+    statement: *mut CassStatement,
+    timeout_ms: cass_uint64_t,
+) -> CassError {
+    // The maximum duration for a sleep is 68719476734 milliseconds (approximately 2.2 years).
+    // Note: this is limited by tokio::time:timout
+    // https://github.com/tokio-rs/tokio/blob/4b1c4801b1383800932141d0f6508d5b3003323e/tokio/src/time/driver/wheel/mod.rs#L44-L50
+    let request_timeout_limit = (2_u64.pow(36) - 1) as u64;
+    if timeout_ms >= request_timeout_limit {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    let statement_from_raw = ptr_to_ref_mut(statement);
+    statement_from_raw.request_timeout_ms = Some(timeout_ms);
 
     CassError::CASS_OK
 }

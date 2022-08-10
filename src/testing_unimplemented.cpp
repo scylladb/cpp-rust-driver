@@ -660,24 +660,9 @@ cass_statement_set_node(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
 }
 CASS_EXPORT CassError
-cass_statement_set_request_timeout(CassStatement* statement,
-                                   cass_uint64_t timeout_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_request_timeout\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_retry_policy(CassStatement* statement,
                                 CassRetryPolicy* retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_retry_policy\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_serial_consistency(CassStatement* statement,
-                                      CassConsistency serial_consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_serial_consistency\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_timestamp(CassStatement* statement,
-                             cass_int64_t timestamp){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_timestamp\n");
 }
 CASS_EXPORT size_t
 cass_table_meta_clustering_key_count(const CassTableMeta* table_meta){
