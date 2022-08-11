@@ -18,7 +18,7 @@ pub unsafe extern "C" fn cass_prepared_free(prepared_raw: *const CassPrepared) {
 pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: *const CassPrepared,
 ) -> *mut CassStatement {
-    let prepared: Arc<_> = Arc::from_raw(prepared_raw);
+    let prepared: Arc<_> = clone_arced(prepared_raw);
     let bound_values_size = prepared.get_prepared_metadata().col_count;
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate

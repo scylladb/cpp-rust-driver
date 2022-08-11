@@ -2,12 +2,14 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
+use crate::statement::CassStatement;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
-use scylla::Bytes;
+use scylla::{BufMut, Bytes, BytesMut};
 use std::convert::TryInto;
 use std::os::raw::c_char;
+use std::slice;
 use std::sync::Arc;
 
 pub struct CassResult {
@@ -402,6 +404,32 @@ pub unsafe extern "C" fn cass_value_get_string(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_get_bytes(
+    value: *const CassValue,
+    output: *mut *const cass_byte_t,
+    output_size: *mut size_t,
+) -> CassError {
+    if value.is_null() {
+        return CassError::CASS_ERROR_LIB_NULL_VALUE;
+    }
+
+    let value_from_raw: &CassValue = ptr_to_ref(value);
+
+    // FIXME: This should be implemented for all CQL types
+    // Note: currently rust driver does not allow to get raw bytes of the CQL value.
+    match &value_from_raw.value {
+        Some(CqlValue::Blob(bytes)) => {
+            *output = bytes.as_ptr() as *const cass_byte_t;
+            *output_size = bytes.len() as u64;
+        }
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
     let val: &CassValue = ptr_to_ref(value);
     val.value.is_none() as cass_bool_t
@@ -434,6 +462,57 @@ pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) ->
     }
 
     std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_paging_state_token(
+    result: *const CassResult,
+    paging_state: *mut *const c_char,
+    paging_state_size: *mut size_t,
+) -> CassError {
+    if cass_result_has_more_pages(result) == cass_false {
+        return CassError::CASS_ERROR_LIB_NO_PAGING_STATE;
+    }
+
+    let result_from_raw = ptr_to_ref(result);
+
+    match &result_from_raw.metadata.paging_state {
+        Some(result_paging_state) => {
+            *paging_state_size = result_paging_state.len() as u64;
+            *paging_state = result_paging_state.as_ptr() as *const c_char;
+        }
+        None => {
+            *paging_state_size = 0;
+            *paging_state = std::ptr::null();
+        }
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_paging_state_token(
+    statement: *mut CassStatement,
+    paging_state: *const c_char,
+    paging_state_size: size_t,
+) -> CassError {
+    let statement_from_raw = ptr_to_ref_mut(statement);
+
+    if paging_state.is_null() {
+        statement_from_raw.paging_state = None;
+        return CassError::CASS_ERROR_LIB_NULL_VALUE;
+    }
+
+    let paging_state_usize: usize = paging_state_size.try_into().unwrap();
+    let mut b = BytesMut::with_capacity(paging_state_usize + 1);
+    b.put_slice(slice::from_raw_parts(
+        paging_state as *const u8,
+        paging_state_usize,
+    ));
+    b.extend_from_slice(b"\0");
+    statement_from_raw.paging_state = Some(b.freeze());
+
+    CassError::CASS_OK
 }
 
 // CassResult functions:
