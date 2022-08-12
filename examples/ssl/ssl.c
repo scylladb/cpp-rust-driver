@@ -74,6 +74,8 @@ int main(int argc, char* argv[]) {
   }
 
   cass_cluster_set_contact_points(cluster, hosts);
+  // The default port 9042 does not support TLS.
+  cass_cluster_set_port(cluster, 9142);
 
   /* Only verify the certification and not the identity */
   cass_ssl_set_verify_flags(ssl, CASS_SSL_VERIFY_PEER_CERT);

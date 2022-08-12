@@ -18,6 +18,7 @@ pub mod query_error;
 pub mod query_result;
 pub mod retry_policy;
 pub mod session;
+pub mod ssl;
 pub mod statement;
 pub mod testing;
 pub mod tuple;

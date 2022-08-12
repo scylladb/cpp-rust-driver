@@ -166,11 +166,6 @@ cass_cluster_set_retry_policy(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_retry_policy\n");
 }
 CASS_EXPORT void
-cass_cluster_set_ssl(CassCluster* cluster,
-                     CassSsl* ssl){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_ssl\n");
-}
-CASS_EXPORT void
 cass_cluster_set_timestamp_gen(CassCluster* cluster,
                                CassTimestampGen* timestamp_gen){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_timestamp_gen\n");
@@ -483,35 +478,6 @@ CASS_EXPORT void
 cass_session_get_speculative_execution_metrics(const CassSession* session,
                                                CassSpeculativeExecutionMetrics* output){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_get_speculative_execution_metrics\n");
-}
-CASS_EXPORT CassError
-cass_ssl_add_trusted_cert(CassSsl* ssl,
-                          const char* cert){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_add_trusted_cert\n");
-}
-CASS_EXPORT void
-cass_ssl_free(CassSsl* ssl){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_free\n");
-}
-CASS_EXPORT CassSsl*
-cass_ssl_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_new\n");
-}
-CASS_EXPORT CassError
-cass_ssl_set_cert(CassSsl* ssl,
-                  const char* cert){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_set_cert\n");
-}
-CASS_EXPORT CassError
-cass_ssl_set_private_key(CassSsl* ssl,
-                         const char* key,
-                         const char* password){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_set_private_key\n");
-}
-CASS_EXPORT void
-cass_ssl_set_verify_flags(CassSsl* ssl,
-                          int flags){
-	throw std::runtime_error("UNIMPLEMENTED cass_ssl_set_verify_flags\n");
 }
 CASS_EXPORT CassError
 cass_statement_add_key_index(CassStatement* statement,
