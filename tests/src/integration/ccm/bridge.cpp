@@ -501,6 +501,9 @@ bool CCM::Bridge::start_cluster(
     oss << smp_;
     jvm_arguments.push_back(oss.str());
   }
+  if (is_scylla_) {
+    jvm_arguments.push_back("--skip-wait-for-gossip-to-settle=0");
+  }
   for (std::vector<std::string>::const_iterator iterator = jvm_arguments.begin();
        iterator != jvm_arguments.end(); ++iterator) {
     std::string jvm_argument = trim(*iterator);
