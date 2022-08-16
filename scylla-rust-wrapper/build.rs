@@ -71,6 +71,11 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
+        "cppdriver_batch_types.rs",
+        &["CassBatchType_", "CassBatchType"],
+        &out_path,
+    );
+    prepare_cppdriver_data(
         "cppdriver_data_collection.rs",
         &["CassCollectionType_", "CassCollectionType"],
         &out_path,

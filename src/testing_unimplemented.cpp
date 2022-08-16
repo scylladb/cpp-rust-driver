@@ -53,19 +53,6 @@ cass_authenticator_set_error(CassAuthenticator* auth,
 	throw std::runtime_error("UNIMPLEMENTED cass_authenticator_set_error\n");
 }
 CASS_EXPORT CassError
-cass_batch_add_statement(CassBatch* batch,
-                         CassStatement* statement){
-	throw std::runtime_error("UNIMPLEMENTED cass_batch_add_statement\n");
-}
-CASS_EXPORT void
-cass_batch_free(CassBatch* batch){
-	throw std::runtime_error("UNIMPLEMENTED cass_batch_free\n");
-}
-CASS_EXPORT CassBatch*
-cass_batch_new(CassBatchType type){
-	throw std::runtime_error("UNIMPLEMENTED cass_batch_new\n");
-}
-CASS_EXPORT CassError
 cass_batch_set_execution_profile(CassBatch* batch,
                                  const char* name){
 	throw std::runtime_error("UNIMPLEMENTED cass_batch_set_execution_profile\n");
@@ -74,11 +61,6 @@ CASS_EXPORT CassError
 cass_batch_set_keyspace(CassBatch* batch,
                         const char* keyspace){
 	throw std::runtime_error("UNIMPLEMENTED cass_batch_set_keyspace\n");
-}
-CASS_EXPORT CassError
-cass_batch_set_timestamp(CassBatch* batch,
-                         cass_int64_t timestamp){
-	throw std::runtime_error("UNIMPLEMENTED cass_batch_set_timestamp\n");
 }
 CASS_EXPORT CassError
 cass_cluster_set_authenticator_callbacks(CassCluster* cluster,
@@ -495,11 +477,6 @@ cass_session_connect_keyspace(CassSession* session,
                               const CassCluster* cluster,
                               const char* keyspace){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_connect_keyspace\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_execute_batch(CassSession* session,
-                           const CassBatch* batch){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_execute_batch\n");
 }
 CASS_EXPORT void
 cass_session_get_metrics(const CassSession* session,
