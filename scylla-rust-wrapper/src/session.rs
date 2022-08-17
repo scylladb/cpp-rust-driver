@@ -31,7 +31,7 @@ pub struct CassKeyspaceMeta {
     name: String,
 
     // User defined type name to type
-    pub user_defined_type_data_type: HashMap<String, CassDataType>,
+    pub user_defined_type_data_type: HashMap<String, Arc<CassDataType>>,
 }
 
 pub struct CassSchemaMeta {
@@ -427,11 +427,11 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                CassDataType::UDT(UDTDataType::create_with_params(
+                Arc::new(CassDataType::UDT(UDTDataType::create_with_params(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,
-                )),
+                ))),
             );
         }
         keyspaces.insert(
@@ -515,7 +515,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
         .user_defined_type_data_type
         .get(user_type_name)
     {
-        Some(udt) => udt,
+        Some(udt) => Arc::into_raw(udt.clone()) as *const CassDataType,
         None => std::ptr::null(),
     }
 }

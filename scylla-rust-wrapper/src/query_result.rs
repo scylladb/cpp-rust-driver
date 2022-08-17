@@ -80,11 +80,18 @@ pub struct CassMapIterator {
     position: Option<usize>,
 }
 
+pub struct CassUdtIterator {
+    value: CassValue_,
+    count: u64,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
     CassCollectionIterator(CassCollectionIterator),
     CassMapIterator(CassMapIterator),
+    CassUdtIterator(CassUdtIterator),
 }
 
 #[no_mangle]
@@ -130,6 +137,13 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
             map_iterator.position = Some(new_pos);
 
             (new_pos < map_iterator.count.try_into().unwrap()) as cass_bool_t
+        }
+        CassIterator::CassUdtIterator(udt_iterator) => {
+            let new_pos: usize = udt_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            udt_iterator.position = Some(new_pos);
+
+            (new_pos < udt_iterator.count.try_into().unwrap()) as cass_bool_t
         }
     }
 }
@@ -272,6 +286,72 @@ pub unsafe extern "C" fn cass_iterator_get_map_value(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
+    iterator: *const CassIterator,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) -> CassError {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
+        let iter_position = match udt_iterator.position {
+            Some(pos) => pos,
+            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        };
+
+        let udt_entry_opt = match &udt_iterator.value.value {
+            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
+                fields.get(iter_position)
+            }
+            _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        };
+
+        match udt_entry_opt {
+            Some(udt_entry) => {
+                let field_name = &udt_entry.0;
+                write_str_to_c(field_name.as_str(), name, name_length);
+            }
+            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        }
+
+        return CassError::CASS_OK;
+    }
+
+    CassError::CASS_ERROR_LIB_BAD_PARAMS
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_value(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
+        let iter_position = match udt_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let udt_entry_opt = match &udt_iterator.value.value {
+            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
+                fields.get(iter_position)
+            }
+            _ => return std::ptr::null(),
+        };
+
+        return match udt_entry_opt {
+            Some(udt_entry) => match &udt_entry.1 {
+                Some(value) => value as *const CassValue,
+                None => std::ptr::null(),
+            },
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw: CassResult_ = clone_arced(result);
 
@@ -353,6 +433,26 @@ pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut
         };
 
         return Box::into_raw(Box::new(CassIterator::CassMapIterator(iterator)));
+    }
+
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
+    value: *const CassValue,
+) -> *mut CassIterator {
+    let udt = ptr_to_ref(value);
+
+    if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
+        let item_count = fields.len();
+        let iterator = CassUdtIterator {
+            value: udt,
+            count: item_count as u64,
+            position: None,
+        };
+
+        return Box::into_raw(Box::new(CassIterator::CassUdtIterator(iterator)));
     }
 
     std::ptr::null_mut()
