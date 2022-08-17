@@ -3,7 +3,7 @@ use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
-use crate::future::{cass_future_free, CassFuture, CassResultValue};
+use crate::future::{CassFuture, CassResultValue};
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::query_result::{
     CassResult, CassResultData, CassResult_, CassRow, CassValue, Collection, Value,
@@ -363,27 +363,6 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: *const CassSession,
 ) -> *const CassSchemaMeta {
     let cass_session = ptr_to_ref(session);
-
-    let refresh_future = CassFuture::make_raw(async move {
-        let session_guard = cass_session.read().await;
-
-        if session_guard.is_none() {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        }
-
-        let refresh_output = session_guard.as_ref().unwrap().refresh_metadata().await;
-
-        match refresh_output {
-            Ok(_) => Ok(CassResultValue::Empty),
-            Err(error) => Ok(CassResultValue::QueryError(Arc::new(error))),
-        }
-    });
-    ptr_to_ref(refresh_future).with_waited_result(|_| ());
-    cass_future_free(refresh_future);
-
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
     for (keyspace_name, keyspace) in cass_session
