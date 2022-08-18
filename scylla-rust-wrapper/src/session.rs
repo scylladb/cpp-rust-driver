@@ -15,6 +15,7 @@ use scylla::transport::errors::QueryError;
 use scylla::{QueryResult, Session};
 use std::os::raw::c_char;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 pub type CassSession = RwLock<Option<Session>>;
@@ -64,10 +65,11 @@ pub unsafe extern "C" fn cass_session_execute(
     let statement_opt = ptr_to_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
     let bound_values = statement_opt.bound_values.clone();
+    let request_timeout_ms = statement_opt.request_timeout_ms;
 
     let statement = statement_opt.statement.clone();
 
-    CassFuture::make_raw(async move {
+    let future = async move {
         let session_guard = session_opt.read().await;
         if session_guard.is_none() {
             return Err((
@@ -104,7 +106,19 @@ pub unsafe extern "C" fn cass_session_execute(
             }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
-    })
+    };
+
+    match request_timeout_ms {
+        Some(timeout_ms) => CassFuture::make_raw(async move {
+            match tokio::time::timeout(Duration::from_millis(timeout_ms), future).await {
+                Ok(result) => result,
+                Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
+                    QueryError::TimeoutError,
+                ))),
+            }
+        }),
+        None => CassFuture::make_raw(future),
+    }
 }
 
 fn create_cass_rows_from_rows(
@@ -132,6 +146,40 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
             value: val,
         })
         .collect()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_prepare_from_existing(
+    cass_session: *mut CassSession,
+    statement: *const CassStatement,
+) -> *const CassFuture {
+    let session = ptr_to_ref(cass_session);
+    let cass_statement = ptr_to_ref(statement);
+    let statement = cass_statement.statement.clone();
+
+    CassFuture::make_raw(async move {
+        let query = match &statement {
+            Statement::Simple(q) => q,
+            Statement::Prepared(ps) => {
+                return Ok(CassResultValue::Prepared(ps.clone()));
+            }
+        };
+
+        let session_guard = session.read().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                "Session is not connected".msg(),
+            ));
+        }
+        let session = session_guard.as_ref().unwrap();
+        let prepared = session
+            .prepare(query.clone())
+            .await
+            .map_err(|err| (CassError::from(&err), err.msg()))?;
+
+        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+    })
 }
 
 #[no_mangle]

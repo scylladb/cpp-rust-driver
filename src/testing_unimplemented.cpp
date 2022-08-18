@@ -478,10 +478,6 @@ cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared,
 	throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
 }
 CASS_EXPORT CassRetryPolicy*
-cass_retry_policy_default_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_default_new\n");
-}
-CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_downgrading_consistency_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_downgrading_consistency_new\n");
 }
@@ -489,18 +485,9 @@ CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_fallthrough_new(){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_fallthrough_new\n");
 }
-CASS_EXPORT void
-cass_retry_policy_free(CassRetryPolicy* policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_free\n");
-}
 CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_logging_new\n");
-}
-CASS_EXPORT const CassValue*
-cass_row_get_column_by_name(const CassRow* row,
-                            const char* name){
-	throw std::runtime_error("UNIMPLEMENTED cass_row_get_column_by_name\n");
 }
 CASS_EXPORT void
 cass_schema_meta_free(const CassSchemaMeta* schema_meta){
@@ -539,11 +526,6 @@ CASS_EXPORT void
 cass_session_get_speculative_execution_metrics(const CassSession* session,
                                                CassSpeculativeExecutionMetrics* output){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_get_speculative_execution_metrics\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_prepare_from_existing(CassSession* session,
-                                   CassStatement* statement){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_prepare_from_existing\n");
 }
 CASS_EXPORT CassError
 cass_ssl_add_trusted_cert(CassSsl* ssl,
@@ -658,26 +640,6 @@ CASS_EXPORT CassError
 cass_statement_set_node(CassStatement* statement,
                         const CassNode* node){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_request_timeout(CassStatement* statement,
-                                   cass_uint64_t timeout_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_request_timeout\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_retry_policy(CassStatement* statement,
-                                CassRetryPolicy* retry_policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_retry_policy\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_serial_consistency(CassStatement* statement,
-                                      CassConsistency serial_consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_serial_consistency\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_timestamp(CassStatement* statement,
-                             cass_int64_t timestamp){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_timestamp\n");
 }
 CASS_EXPORT size_t
 cass_table_meta_clustering_key_count(const CassTableMeta* table_meta){
