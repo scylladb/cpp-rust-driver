@@ -1,14 +1,17 @@
 use crate::argconv::*;
 use crate::cass_error::*;
-use crate::cass_types::get_column_type;
+use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
-use crate::query_result::{CassResult, CassResultData, CassResult_, CassRow, CassValue};
+use crate::query_result::Value::{CollectionValue, RegularValue};
+use crate::query_result::{
+    CassResult, CassResultData, CassResult_, CassRow, CassValue, Collection, Value,
+};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::size_t;
-use scylla::frame::response::result::Row;
+use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -81,7 +84,9 @@ pub unsafe extern "C" fn cass_session_execute(
 
         let query_res: Result<QueryResult, QueryError> = match statement {
             Statement::Simple(query) => {
-                session.query_paged(query, bound_values, paging_state).await
+                session
+                    .query_paged(query.query, bound_values, paging_state)
+                    .await
             }
             Statement::Prepared(prepared) => {
                 session
@@ -141,11 +146,102 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
     row.columns
         .into_iter()
         .zip(metadata.col_specs.iter())
-        .map(|(val, col)| CassValue {
-            value_type: get_column_type(&col.typ),
-            value: val,
+        .map(|(val, col)| {
+            let column_type = Arc::new(get_column_type(&col.typ));
+            CassValue {
+                value: val.map(|col_val| get_column_value(col_val, &column_type)),
+                value_type: column_type,
+            }
         })
         .collect()
+}
+
+fn get_column_value(column: CqlValue, column_type: &CassDataTypeArc) -> Value {
+    match (column, column_type.as_ref()) {
+        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
+            CollectionValue(Collection::List(
+                list.into_iter()
+                    .map(|val| CassValue {
+                        value_type: list_type.clone(),
+                        value: Some(get_column_value(val, list_type)),
+                    })
+                    .collect(),
+            ))
+        }
+        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
+            CollectionValue(Collection::Map(
+                map.into_iter()
+                    .map(|(key, val)| {
+                        (
+                            CassValue {
+                                value_type: key_type.clone(),
+                                value: Some(get_column_value(key, key_type)),
+                            },
+                            CassValue {
+                                value_type: value_type.clone(),
+                                value: Some(get_column_value(val, value_type)),
+                            },
+                        )
+                    })
+                    .collect(),
+            ))
+        }
+        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
+            CollectionValue(Collection::Set(
+                set.into_iter()
+                    .map(|val| CassValue {
+                        value_type: set_type.clone(),
+                        value: Some(get_column_value(val, set_type)),
+                    })
+                    .collect(),
+            ))
+        }
+        (
+            CqlValue::UserDefinedType {
+                keyspace,
+                type_name,
+                fields,
+            },
+            CassDataType::UDT(udt_type),
+        ) => CollectionValue(Collection::UserDefinedType {
+            keyspace,
+            type_name,
+            fields: fields
+                .into_iter()
+                .enumerate()
+                .map(|(index, (name, val_opt))| {
+                    let udt_field_type_opt = udt_type.get_field_by_index(index);
+                    if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
+                        return (
+                            name,
+                            Some(CassValue {
+                                value_type: udt_field_type.clone(),
+                                value: Some(get_column_value(val, udt_field_type)),
+                            }),
+                        );
+                    }
+                    (name, None)
+                })
+                .collect(),
+        }),
+        (CqlValue::Tuple(tuple), CassDataType::Tuple(tuple_types)) => {
+            CollectionValue(Collection::Tuple(
+                tuple
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, val_opt)| {
+                        val_opt
+                            .zip(tuple_types.get(index))
+                            .map(|(val, tuple_field_type)| CassValue {
+                                value_type: tuple_field_type.clone(),
+                                value: Some(get_column_value(val, tuple_field_type)),
+                            })
+                    })
+                    .collect(),
+            ))
+        }
+        (regular_value, _) => RegularValue(regular_value),
+    }
 }
 
 #[no_mangle]
@@ -174,7 +270,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         }
         let session = session_guard.as_ref().unwrap();
         let prepared = session
-            .prepare(query.clone())
+            .prepare(query.query.clone())
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 

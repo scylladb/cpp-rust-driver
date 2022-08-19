@@ -258,6 +258,9 @@ public:
     return T(value_);
   }
 
+  CassValue const* get_value() const {
+    return value_;
+  }
 private:
   /**
    * The value held by this column

@@ -12,6 +12,7 @@ use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::statement::SerialConsistency;
 use scylla::Bytes;
+use std::collections::HashMap;
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
@@ -19,9 +20,15 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 
 #[derive(Clone)]
 pub enum Statement {
-    Simple(Query),
+    Simple(SimpleQuery),
     // Arc is needed, because PreparedStatement is passed by reference to session.execute
     Prepared(Arc<PreparedStatement>),
+}
+
+#[derive(Clone)]
+pub struct SimpleQuery {
+    pub query: Query,
+    pub name_to_bound_index: HashMap<String, usize>,
 }
 
 pub struct CassStatement {
@@ -42,6 +49,8 @@ impl CassStatement {
     }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
+        let mut set_bound_val_index: Option<usize> = None;
+
         match &self.statement {
             Statement::Prepared(prepared) => {
                 for (i, col) in prepared
@@ -54,10 +63,32 @@ impl CassStatement {
                         return self.bind_cql_value(i, value);
                     }
                 }
-                CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
+                return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
             }
-            Statement::Simple(_) => CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST,
+            Statement::Simple(query) => {
+                let index = query.name_to_bound_index.get(name);
+
+                if let Some(idx) = index {
+                    return self.bind_cql_value(*idx, value);
+                } else {
+                    for (index, bound_val) in self.bound_values.iter().enumerate() {
+                        if let Unset = bound_val {
+                            set_bound_val_index = Some(index);
+                        }
+                    }
+                }
+            }
         }
+
+        if let Some(index) = set_bound_val_index {
+            if let Statement::Simple(query) = &mut self.statement {
+                query.name_to_bound_index.insert(name.to_string(), index);
+            }
+
+            return self.bind_cql_value(index, value);
+        }
+
+        CassError::CASS_OK
     }
 }
 
@@ -86,8 +117,13 @@ pub unsafe extern "C" fn cass_statement_new_n(
     query.disable_paging();
     query.set_consistency(Consistency::One);
 
+    let simple_query = SimpleQuery {
+        query,
+        name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
+    };
+
     Box::into_raw(Box::new(CassStatement {
-        statement: Statement::Simple(query),
+        statement: Statement::Simple(simple_query),
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: None,
         request_timeout_ms: None,
@@ -108,7 +144,7 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
 
     if let Some(Regular(regular_consistency)) = consistency_opt {
         match &mut ptr_to_ref_mut(statement).statement {
-            Statement::Simple(inner) => inner.set_consistency(regular_consistency),
+            Statement::Simple(inner) => inner.query.set_consistency(regular_consistency),
             Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(regular_consistency),
         }
     }
@@ -125,9 +161,9 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => {
             if page_size == -1 {
-                inner.disable_paging()
+                inner.query.disable_paging()
             } else {
-                inner.set_page_size(page_size)
+                inner.query.set_page_size(page_size)
             }
         }
         Statement::Prepared(inner) => {
@@ -160,7 +196,7 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
     is_idempotent: cass_bool_t,
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => inner.set_is_idempotent(is_idempotent != 0),
+        Statement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
     }
 
@@ -173,7 +209,7 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     enabled: cass_bool_t,
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => inner.set_tracing(enabled != 0),
+        Statement::Simple(inner) => inner.query.set_tracing(enabled != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
     }
 
@@ -193,7 +229,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.set_retry_policy(boxed_retry_policy),
+        Statement::Simple(inner) => inner.query.set_retry_policy(boxed_retry_policy),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_retry_policy(boxed_retry_policy),
     }
 
@@ -213,7 +249,7 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     };
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.set_serial_consistency(serial_consistency),
+        Statement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),
         Statement::Prepared(inner) => {
             Arc::make_mut(inner).set_serial_consistency(serial_consistency)
         }
@@ -249,7 +285,7 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
     timestamp: cass_int64_t,
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.set_timestamp(Some(timestamp)),
+        Statement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
         Statement::Prepared(inner) => Arc::make_mut(inner).set_timestamp(Some(timestamp)),
     }
 

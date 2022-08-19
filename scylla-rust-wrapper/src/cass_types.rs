@@ -127,6 +127,18 @@ impl CassDataType {
             _ => panic!("Can get UDT out of non-UDT data type"),
         }
     }
+
+    pub fn get_value_type(&self) -> CassValueType {
+        match &self {
+            CassDataType::Value(value_data_type) => *value_data_type,
+            CassDataType::UDT { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
+            CassDataType::List(..) => CassValueType::CASS_VALUE_TYPE_LIST,
+            CassDataType::Set(..) => CassValueType::CASS_VALUE_TYPE_SET,
+            CassDataType::Map(..) => CassValueType::CASS_VALUE_TYPE_MAP,
+            CassDataType::Tuple(..) => CassValueType::CASS_VALUE_TYPE_TUPLE,
+            CassDataType::Custom(..) => CassValueType::CASS_VALUE_TYPE_CUSTOM,
+        }
+    }
 }
 
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
@@ -232,15 +244,7 @@ pub unsafe extern "C" fn cass_data_type_free(data_type: *mut CassDataType) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_type(data_type: *const CassDataType) -> CassValueType {
     let data_type = ptr_to_ref(data_type);
-    match data_type {
-        CassDataType::Value(value_data_type) => *value_data_type,
-        CassDataType::UDT { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
-        CassDataType::List(..) => CassValueType::CASS_VALUE_TYPE_LIST,
-        CassDataType::Set(..) => CassValueType::CASS_VALUE_TYPE_SET,
-        CassDataType::Map(..) => CassValueType::CASS_VALUE_TYPE_MAP,
-        CassDataType::Tuple(..) => CassValueType::CASS_VALUE_TYPE_TUPLE,
-        CassDataType::Custom(..) => CassValueType::CASS_VALUE_TYPE_CUSTOM,
-    }
+    data_type.get_value_type()
 }
 
 // #[no_mangle]
