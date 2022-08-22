@@ -68,7 +68,7 @@ CASSANDRA_INTEGRATION_TEST_F(BasicsTests, Timestamps) {
 
   // Validate the timestamps
   ASSERT_NE(timestamp_1, timestamp_2);
-  ASSERT_LT(timestamp_2 - timestamp_1 - BigInteger(pause_duration * 1000), BigInteger(100000));
+  ASSERT_LT(timestamp_2 - timestamp_1 - BigInteger(pause_duration * 1000), BigInteger(150000));
 }
 
 /**
