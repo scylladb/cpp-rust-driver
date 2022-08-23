@@ -1,7 +1,9 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc, UDTDataType};
+use crate::cass_types::{
+    get_column_type, get_column_type_from_cql_type, CassDataType, CassDataTypeArc, UDTDataType,
+};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
@@ -16,6 +18,7 @@ use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
+use scylla::transport::topology::ColumnKind;
 use scylla::{QueryResult, Session};
 use std::collections::HashMap;
 use std::future::Future;
@@ -23,6 +26,8 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+
+include!(concat!(env!("OUT_DIR"), "/cppdriver_column_type.rs"));
 
 pub type CassSession = RwLock<Option<Session>>;
 type CassSession_ = Arc<CassSession>;
@@ -32,7 +37,23 @@ pub struct CassKeyspaceMeta {
 
     // User defined type name to type
     pub user_defined_type_data_type: HashMap<String, Arc<CassDataType>>,
+    pub tables: HashMap<String, CassTableMeta>,
 }
+
+pub struct CassTableMeta {
+    pub name: String,
+    pub columns_metadata: HashMap<String, CassColumnMeta>,
+    pub partition_keys: Vec<String>,
+    pub clustering_keys: Vec<String>,
+}
+
+pub struct CassColumnMeta {
+    pub name: String,
+    pub column_type: CassDataType,
+    pub column_kind: CassColumnType,
+}
+
+pub type CassSchemaMeta_ = &'static CassSchemaMeta;
 
 pub struct CassSchemaMeta {
     pub keyspaces: HashMap<String, CassKeyspaceMeta>,
@@ -423,6 +444,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         .get_keyspace_info()
     {
         let mut user_defined_type_data_type = HashMap::new();
+        let mut tables = HashMap::new();
 
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
@@ -434,11 +456,51 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
                 ))),
             );
         }
+
+        for (table_name, table_metadata) in &keyspace.tables {
+            let columns_metadata: HashMap<String, CassColumnMeta> = table_metadata
+                .columns
+                .iter()
+                .map(|(column_name, column_metadata)| {
+                    let cass_column_meta = CassColumnMeta {
+                        name: column_name.clone(),
+                        column_type: get_column_type_from_cql_type(
+                            &column_metadata.type_,
+                            &keyspace.user_defined_types,
+                            keyspace_name,
+                        ),
+                        column_kind: match column_metadata.kind {
+                            ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
+                            ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
+                            ColumnKind::Clustering => {
+                                CassColumnType::CASS_COLUMN_TYPE_CLUSTERING_KEY
+                            }
+                            ColumnKind::PartitionKey => {
+                                CassColumnType::CASS_COLUMN_TYPE_PARTITION_KEY
+                            }
+                        },
+                    };
+
+                    (column_name.clone(), cass_column_meta)
+                })
+                .collect();
+
+            let cass_table_meta = CassTableMeta {
+                name: table_name.clone(),
+                columns_metadata,
+                partition_keys: table_metadata.partition_key.clone(),
+                clustering_keys: table_metadata.clustering_key.clone(),
+            };
+
+            tables.insert(table_name.clone(), cass_table_meta);
+        }
+
         keyspaces.insert(
             keyspace_name.clone(),
             CassKeyspaceMeta {
                 name: keyspace_name.clone(),
                 user_defined_type_data_type,
+                tables,
             },
         );
     }
