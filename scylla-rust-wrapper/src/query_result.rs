@@ -2,6 +2,7 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
 use crate::inet::CassInet;
+use crate::session::{CassKeyspaceMeta, CassSchemaMeta, CassSchemaMeta_};
 use crate::statement::CassStatement;
 use crate::types::*;
 use crate::uuid::CassUuid;
@@ -86,12 +87,19 @@ pub struct CassUdtIterator {
     position: Option<usize>,
 }
 
+pub struct CassSchemaMetaIterator {
+    value: CassSchemaMeta_,
+    count: usize,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
     CassCollectionIterator(CassCollectionIterator),
     CassMapIterator(CassMapIterator),
     CassUdtIterator(CassUdtIterator),
+    CassSchemaMetaIterator(CassSchemaMetaIterator),
 }
 
 #[no_mangle]
@@ -144,6 +152,15 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
             udt_iterator.position = Some(new_pos);
 
             (new_pos < udt_iterator.count.try_into().unwrap()) as cass_bool_t
+        }
+        CassIterator::CassSchemaMetaIterator(schema_meta_iterator) => {
+            let new_pos: usize = schema_meta_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            schema_meta_iterator.position = Some(new_pos);
+
+            (new_pos < schema_meta_iterator.count) as cass_bool_t
         }
     }
 }
@@ -352,6 +369,33 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_value(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_keyspace_meta(
+    iterator: *const CassIterator,
+) -> *const CassKeyspaceMeta {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassSchemaMetaIterator(schema_meta_iterator) = iter {
+        let iter_position = match schema_meta_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let schema_meta_entry_opt = &schema_meta_iterator
+            .value
+            .keyspaces
+            .iter()
+            .nth(iter_position);
+
+        return match schema_meta_entry_opt {
+            Some(schema_meta_entry) => schema_meta_entry.1 as *const CassKeyspaceMeta,
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw: CassResult_ = clone_arced(result);
 
@@ -456,6 +500,21 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
     }
 
     std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
+    schema_meta: *const CassSchemaMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(schema_meta);
+
+    let iterator = CassSchemaMetaIterator {
+        value: metadata,
+        count: metadata.keyspaces.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassSchemaMetaIterator(iterator)))
 }
 
 #[no_mangle]
