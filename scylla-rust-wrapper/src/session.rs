@@ -30,6 +30,8 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_column_type.rs"));
 pub type CassSession = RwLock<Option<Session>>;
 type CassSession_ = Arc<CassSession>;
 
+pub type CassKeyspaceMeta_ = &'static CassKeyspaceMeta;
+
 pub struct CassKeyspaceMeta {
     name: String,
 
@@ -37,6 +39,8 @@ pub struct CassKeyspaceMeta {
     pub user_defined_type_data_type: HashMap<String, CassDataType>,
     pub tables: HashMap<String, CassTableMeta>,
 }
+
+pub type CassTableMeta_ = &'static CassTableMeta;
 
 pub struct CassTableMeta {
     pub name: String,
