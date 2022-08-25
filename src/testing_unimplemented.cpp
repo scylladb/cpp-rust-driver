@@ -224,10 +224,6 @@ cass_collection_append_duration(CassCollection* collection,
                                 cass_int64_t nanos){
 	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_duration\n");
 }
-CASS_EXPORT const CassDataType*
-cass_column_meta_data_type(const CassColumnMeta* column_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_column_meta_data_type\n");
-}
 CASS_EXPORT const CassValue*
 cass_column_meta_field_by_name(const CassColumnMeta* column_meta,
                                const char* name){
@@ -418,11 +414,6 @@ cass_keyspace_meta_materialized_view_by_name(const CassKeyspaceMeta* keyspace_me
                                              const char* view){
 	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_materialized_view_by_name\n");
 }
-CASS_EXPORT const CassTableMeta*
-cass_keyspace_meta_table_by_name(const CassKeyspaceMeta* keyspace_meta,
-                                 const char* table){
-	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_table_by_name\n");
-}
 CASS_EXPORT const char*
 cass_log_level_string(CassLogLevel log_level){
 	throw std::runtime_error("UNIMPLEMENTED cass_log_level_string\n");
@@ -597,23 +588,10 @@ cass_statement_set_node(CassStatement* statement,
                         const CassNode* node){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
 }
-CASS_EXPORT size_t
-cass_table_meta_clustering_key_count(const CassTableMeta* table_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_clustering_key_count\n");
-}
 CASS_EXPORT CassClusteringOrder
 cass_table_meta_clustering_key_order(const CassTableMeta* table_meta,
                                      size_t index){
 	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_clustering_key_order\n");
-}
-CASS_EXPORT const CassColumnMeta*
-cass_table_meta_column_by_name(const CassTableMeta* table_meta,
-                               const char* column){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_column_by_name\n");
-}
-CASS_EXPORT size_t
-cass_table_meta_column_count(const CassTableMeta* table_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_column_count\n");
 }
 CASS_EXPORT const CassValue*
 cass_table_meta_field_by_name(const CassTableMeta* table_meta,
@@ -641,10 +619,6 @@ cass_table_meta_materialized_view_by_name(const CassTableMeta* table_meta,
 CASS_EXPORT size_t
 cass_table_meta_materialized_view_count(const CassTableMeta* table_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_materialized_view_count\n");
-}
-CASS_EXPORT size_t
-cass_table_meta_partition_key_count(const CassTableMeta* table_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_partition_key_count\n");
 }
 CASS_EXPORT CassError
 cass_tuple_set_custom(CassTuple* tuple,
