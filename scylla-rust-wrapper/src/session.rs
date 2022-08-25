@@ -585,3 +585,149 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
         None => std::ptr::null(),
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_table_by_name(
+    keyspace_meta: *const CassKeyspaceMeta,
+    table: *const c_char,
+) -> *const CassTableMeta {
+    cass_keyspace_meta_table_by_name_n(keyspace_meta, table, strlen(table))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
+    keyspace_meta: *const CassKeyspaceMeta,
+    table: *const c_char,
+    table_length: size_t,
+) -> *const CassTableMeta {
+    if table.is_null() {
+        return std::ptr::null();
+    }
+
+    let keyspace_meta = ptr_to_ref(keyspace_meta);
+    let table_name = ptr_to_cstr_n(table, table_length).unwrap();
+
+    let table_meta = keyspace_meta.tables.get(table_name);
+
+    match table_meta {
+        Some(meta) => meta as *const CassTableMeta,
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_name(
+    table_meta: *const CassTableMeta,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) {
+    let table_meta = ptr_to_ref(table_meta);
+    write_str_to_c(table_meta.name.as_str(), name, name_length)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_column_count(table_meta: *const CassTableMeta) -> size_t {
+    let table_meta = ptr_to_ref(table_meta);
+    table_meta.columns_metadata.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_partition_key(
+    table_meta: *const CassTableMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    let table_meta = ptr_to_ref(table_meta);
+
+    match table_meta.partition_keys.get(index as usize) {
+        Some(column_name) => match table_meta.columns_metadata.get(column_name) {
+            Some(column_meta) => column_meta as *const CassColumnMeta,
+            None => std::ptr::null(),
+        },
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_partition_key_count(
+    table_meta: *const CassTableMeta,
+) -> size_t {
+    let table_meta = ptr_to_ref(table_meta);
+    table_meta.partition_keys.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_clustering_key(
+    table_meta: *const CassTableMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    let table_meta = ptr_to_ref(table_meta);
+
+    match table_meta.clustering_keys.get(index as usize) {
+        Some(column_name) => match table_meta.columns_metadata.get(column_name) {
+            Some(column_meta) => column_meta as *const CassColumnMeta,
+            None => std::ptr::null(),
+        },
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_clustering_key_count(
+    table_meta: *const CassTableMeta,
+) -> size_t {
+    let table_meta = ptr_to_ref(table_meta);
+    table_meta.clustering_keys.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_column_by_name(
+    table_meta: *const CassTableMeta,
+    column: *const c_char,
+) -> *const CassColumnMeta {
+    cass_table_meta_column_by_name_n(table_meta, column, strlen(column))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_column_by_name_n(
+    table_meta: *const CassTableMeta,
+    column: *const c_char,
+    column_length: size_t,
+) -> *const CassColumnMeta {
+    if column.is_null() {
+        return std::ptr::null();
+    }
+
+    let table_meta = ptr_to_ref(table_meta);
+    let column_name = ptr_to_cstr_n(column, column_length).unwrap();
+
+    match table_meta.columns_metadata.get(column_name) {
+        Some(column_meta) => column_meta as *const CassColumnMeta,
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_column_meta_name(
+    column_meta: *const CassColumnMeta,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) {
+    let column_meta = ptr_to_ref(column_meta);
+    write_str_to_c(column_meta.name.as_str(), name, name_length)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_column_meta_data_type(
+    column_meta: *const CassColumnMeta,
+) -> *const CassDataType {
+    let column_meta = ptr_to_ref(column_meta);
+    &column_meta.column_type as *const CassDataType
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_column_meta_type(
+    column_meta: *const CassColumnMeta,
+) -> CassColumnType {
+    let column_meta = ptr_to_ref(column_meta);
+    column_meta.column_kind
+}
