@@ -118,7 +118,7 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
     let keyspace_meta = metadata.keyspaces.get(keyspace);
 
     match keyspace_meta {
-        Some(meta) => meta,
+        Some(meta) => meta as *const CassKeyspaceMeta,
         None => std::ptr::null(),
     }
 }
@@ -307,4 +307,196 @@ pub unsafe extern "C" fn cass_column_meta_type(
 ) -> CassColumnType {
     let column_meta = ptr_to_ref(column_meta);
     column_meta.column_kind
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name(
+    keyspace_meta: *const CassKeyspaceMeta,
+    view: *const c_char,
+) -> *const CassMaterializedViewMeta {
+    cass_keyspace_meta_materialized_view_by_name_n(keyspace_meta, view, strlen(view))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name_n(
+    keyspace_meta: *const CassKeyspaceMeta,
+    view: *const c_char,
+    view_length: size_t,
+) -> *const CassMaterializedViewMeta {
+    if view.is_null() {
+        return std::ptr::null();
+    }
+
+    let keyspace_meta = ptr_to_ref(keyspace_meta);
+    let view_name = ptr_to_cstr_n(view, view_length).unwrap();
+
+    match keyspace_meta.views.get(view_name) {
+        Some(view_meta) => Arc::as_ptr(view_meta),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name(
+    table_meta: *const CassTableMeta,
+    view: *const c_char,
+) -> *const CassMaterializedViewMeta {
+    cass_table_meta_materialized_view_by_name_n(table_meta, view, strlen(view))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
+    table_meta: *const CassTableMeta,
+    view: *const c_char,
+    view_length: size_t,
+) -> *const CassMaterializedViewMeta {
+    if view.is_null() {
+        return std::ptr::null();
+    }
+
+    let table_meta = ptr_to_ref(table_meta);
+    let view_name = ptr_to_cstr_n(view, view_length).unwrap();
+
+    match table_meta.views.get(view_name) {
+        Some(view_meta) => Arc::as_ptr(view_meta),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_materialized_view_count(
+    table_meta: *const CassTableMeta,
+) -> size_t {
+    let table_meta = ptr_to_ref(table_meta);
+    table_meta.views.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_materialized_view(
+    table_meta: *const CassTableMeta,
+    index: size_t,
+) -> *const CassMaterializedViewMeta {
+    let table_meta = ptr_to_ref(table_meta);
+
+    match table_meta.views.iter().nth(index as usize) {
+        Some(view_meta) => Arc::as_ptr(view_meta.1),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name(
+    view_meta: *const CassMaterializedViewMeta,
+    column: *const c_char,
+) -> *const CassColumnMeta {
+    cass_materialized_view_meta_column_by_name_n(view_meta, column, strlen(column))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name_n(
+    view_meta: *const CassMaterializedViewMeta,
+    column: *const c_char,
+    column_length: size_t,
+) -> *const CassColumnMeta {
+    if column.is_null() {
+        return std::ptr::null();
+    }
+
+    let view_meta = ptr_to_ref(view_meta);
+    let column_name = ptr_to_cstr_n(column, column_length).unwrap();
+
+    match view_meta.view_metadata.columns_metadata.get(column_name) {
+        Some(column_meta) => column_meta as *const CassColumnMeta,
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_name(
+    view_meta: *const CassMaterializedViewMeta,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) {
+    let view_meta = ptr_to_ref(view_meta);
+    write_str_to_c(view_meta.name.as_str(), name, name_length)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
+    view_meta: *const CassMaterializedViewMeta,
+) -> *const CassTableMeta {
+    let view_meta = ptr_to_ref(view_meta);
+    view_meta.base_table.as_ptr()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_column_count(
+    view_meta: *const CassMaterializedViewMeta,
+) -> size_t {
+    let view_meta = ptr_to_ref(view_meta);
+    view_meta.view_metadata.columns_metadata.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_column(
+    view_meta: *const CassMaterializedViewMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    let view_meta = ptr_to_ref(view_meta);
+
+    match view_meta
+        .view_metadata
+        .columns_metadata
+        .iter()
+        .nth(index as usize)
+    {
+        Some(column_entry) => column_entry.1 as *const CassColumnMeta,
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_partition_key_count(
+    view_meta: *const CassMaterializedViewMeta,
+) -> size_t {
+    let view_meta = ptr_to_ref(view_meta);
+    view_meta.view_metadata.partition_keys.len() as size_t
+}
+
+pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
+    view_meta: *const CassMaterializedViewMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    let view_meta = ptr_to_ref(view_meta);
+
+    match view_meta.view_metadata.partition_keys.get(index as usize) {
+        Some(column_name) => match view_meta.view_metadata.columns_metadata.get(column_name) {
+            Some(column_meta) => column_meta as *const CassColumnMeta,
+            None => std::ptr::null(),
+        },
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key_count(
+    view_meta: *const CassMaterializedViewMeta,
+) -> size_t {
+    let view_meta = ptr_to_ref(view_meta);
+    view_meta.view_metadata.clustering_keys.len() as size_t
+}
+
+pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key(
+    view_meta: *const CassMaterializedViewMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    let view_meta = ptr_to_ref(view_meta);
+
+    match view_meta.view_metadata.clustering_keys.get(index as usize) {
+        Some(column_name) => match view_meta.view_metadata.columns_metadata.get(column_name) {
+            Some(column_meta) => column_meta as *const CassColumnMeta,
+            None => std::ptr::null(),
+        },
+        None => std::ptr::null(),
+    }
 }
