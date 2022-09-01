@@ -19,12 +19,12 @@ use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
-use scylla::transport::topology::ColumnKind;
+use scylla::transport::topology::{ColumnKind, CqlType, Table};
 use scylla::{QueryResult, Session};
 use std::collections::HashMap;
 use std::future::Future;
 use std::os::raw::c_char;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
@@ -40,7 +40,8 @@ pub struct CassKeyspaceMeta {
 
     // User defined type name to type
     pub user_defined_type_data_type: HashMap<String, Arc<CassDataType>>,
-    pub tables: HashMap<String, CassTableMeta>,
+    pub tables: HashMap<String, Arc<CassTableMeta>>,
+    pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
 
 pub type CassTableMeta_ = &'static CassTableMeta;
@@ -50,6 +51,13 @@ pub struct CassTableMeta {
     pub columns_metadata: HashMap<String, CassColumnMeta>,
     pub partition_keys: Vec<String>,
     pub clustering_keys: Vec<String>,
+    pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
+}
+
+pub struct CassMaterializedViewMeta {
+    pub name: String,
+    pub view_metadata: CassTableMeta,
+    pub base_table: Weak<CassTableMeta>,
 }
 
 pub struct CassColumnMeta {
@@ -454,6 +462,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     {
         let mut user_defined_type_data_type = HashMap::new();
         let mut tables = HashMap::new();
+        let mut views = HashMap::new();
 
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
@@ -467,41 +476,39 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         }
 
         for (table_name, table_metadata) in &keyspace.tables {
-            let columns_metadata: HashMap<String, CassColumnMeta> = table_metadata
-                .columns
-                .iter()
-                .map(|(column_name, column_metadata)| {
-                    let cass_column_meta = CassColumnMeta {
-                        name: column_name.clone(),
-                        column_type: get_column_type_from_cql_type(
-                            &column_metadata.type_,
-                            &keyspace.user_defined_types,
-                            keyspace_name,
-                        ),
-                        column_kind: match column_metadata.kind {
-                            ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
-                            ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
-                            ColumnKind::Clustering => {
-                                CassColumnType::CASS_COLUMN_TYPE_CLUSTERING_KEY
-                            }
-                            ColumnKind::PartitionKey => {
-                                CassColumnType::CASS_COLUMN_TYPE_PARTITION_KEY
-                            }
-                        },
+            let cass_table_meta_arced = Arc::new_cyclic(|weak_cass_table_meta| {
+                let mut cass_table_meta = create_table_metadata(
+                    keyspace_name,
+                    table_name,
+                    table_metadata,
+                    &keyspace.user_defined_types,
+                );
+
+                let mut table_views = HashMap::new();
+                for (view_name, view_metadata) in &keyspace.views {
+                    let cass_view_table_meta = create_table_metadata(
+                        keyspace_name,
+                        view_name,
+                        &view_metadata.view_metadata,
+                        &keyspace.user_defined_types,
+                    );
+                    let cass_view_meta = CassMaterializedViewMeta {
+                        name: view_name.clone(),
+                        view_metadata: cass_view_table_meta,
+                        base_table: weak_cass_table_meta.clone(),
                     };
+                    let cass_view_meta_arced = Arc::new(cass_view_meta);
+                    table_views.insert(view_name.clone(), cass_view_meta_arced.clone());
 
-                    (column_name.clone(), cass_column_meta)
-                })
-                .collect();
+                    views.insert(view_name.clone(), cass_view_meta_arced);
+                }
 
-            let cass_table_meta = CassTableMeta {
-                name: table_name.clone(),
-                columns_metadata,
-                partition_keys: table_metadata.partition_key.clone(),
-                clustering_keys: table_metadata.clustering_key.clone(),
-            };
+                cass_table_meta.views = table_views;
 
-            tables.insert(table_name.clone(), cass_table_meta);
+                cass_table_meta
+            });
+
+            tables.insert(table_name.clone(), cass_table_meta_arced);
         }
 
         keyspaces.insert(
@@ -510,11 +517,50 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
                 name: keyspace_name.clone(),
                 user_defined_type_data_type,
                 tables,
+                views,
             },
         );
     }
 
     Box::into_raw(Box::new(CassSchemaMeta { keyspaces }))
+}
+
+unsafe fn create_table_metadata(
+    keyspace_name: &str,
+    table_name: &str,
+    table_metadata: &Table,
+    user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+) -> CassTableMeta {
+    let mut columns_metadata = HashMap::new();
+    table_metadata
+        .columns
+        .iter()
+        .for_each(|(column_name, column_metadata)| {
+            let cass_column_meta = CassColumnMeta {
+                name: column_name.clone(),
+                column_type: get_column_type_from_cql_type(
+                    &column_metadata.type_,
+                    user_defined_types,
+                    keyspace_name,
+                ),
+                column_kind: match column_metadata.kind {
+                    ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
+                    ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
+                    ColumnKind::Clustering => CassColumnType::CASS_COLUMN_TYPE_CLUSTERING_KEY,
+                    ColumnKind::PartitionKey => CassColumnType::CASS_COLUMN_TYPE_PARTITION_KEY,
+                },
+            };
+
+            columns_metadata.insert(column_name.clone(), cass_column_meta);
+        });
+
+    CassTableMeta {
+        name: table_name.to_owned(),
+        columns_metadata,
+        partition_keys: table_metadata.partition_key.clone(),
+        clustering_keys: table_metadata.clustering_key.clone(),
+        views: HashMap::new(),
+    }
 }
 
 #[no_mangle]
@@ -615,7 +661,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     let table_meta = keyspace_meta.tables.get(table_name);
 
     match table_meta {
-        Some(meta) => meta as *const CassTableMeta,
+        Some(meta) => Arc::as_ptr(meta) as *const CassTableMeta,
         None => std::ptr::null(),
     }
 }

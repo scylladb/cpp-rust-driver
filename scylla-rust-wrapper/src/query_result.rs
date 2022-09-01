@@ -459,7 +459,7 @@ pub unsafe extern "C" fn cass_iterator_get_table_meta(
             .nth(iter_position);
 
         return match table_meta_entry_opt {
-            Some(table_meta_entry) => table_meta_entry.1 as *const CassTableMeta,
+            Some(table_meta_entry) => Arc::as_ptr(table_meta_entry.1) as *const CassTableMeta,
             None => std::ptr::null(),
         };
     }
