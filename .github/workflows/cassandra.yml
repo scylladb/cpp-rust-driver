@@ -45,7 +45,7 @@ jobs:
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ErrorTests.*\
 :SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator\
+:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\

@@ -3,8 +3,8 @@ use crate::cass_error::CassError;
 use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
-    CassColumnMeta, CassKeyspaceMeta, CassKeyspaceMeta_, CassSchemaMeta, CassSchemaMeta_,
-    CassTableMeta, CassTableMeta_,
+    CassColumnMeta, CassKeyspaceMeta, CassKeyspaceMeta_, CassMaterializedViewMeta,
+    CassMaterializedViewMeta_, CassSchemaMeta, CassSchemaMeta_, CassTableMeta, CassTableMeta_,
 };
 use crate::statement::CassStatement;
 use crate::types::*;
@@ -110,6 +110,12 @@ pub struct CassTableMetaIterator {
     position: Option<usize>,
 }
 
+pub struct CassViewMetaIterator {
+    value: CassMaterializedViewMeta_,
+    count: usize,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
@@ -119,7 +125,9 @@ pub enum CassIterator {
     CassSchemaMetaIterator(CassSchemaMetaIterator),
     CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator),
     CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator),
+    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator),
     CassTableMetaIterator(CassTableMetaIterator),
+    CassViewMetaIterator(CassViewMetaIterator),
 }
 
 #[no_mangle]
@@ -200,12 +208,28 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             (new_pos < keyspace_meta_iterator.count) as cass_bool_t
         }
+        CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
+            let new_pos: usize = keyspace_meta_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            keyspace_meta_iterator.position = Some(new_pos);
+
+            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
+        }
         CassIterator::CassTableMetaIterator(table_iterator) => {
             let new_pos: usize = table_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
             table_iterator.position = Some(new_pos);
 
             (new_pos < table_iterator.count) as cass_bool_t
+        }
+        CassIterator::CassViewMetaIterator(view_iterator) => {
+            let new_pos: usize = view_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            view_iterator.position = Some(new_pos);
+
+            (new_pos < view_iterator.count) as cass_bool_t
         }
     }
 }
@@ -500,25 +524,83 @@ pub unsafe extern "C" fn cass_iterator_get_column_meta(
 ) -> *const CassColumnMeta {
     let iter = ptr_to_ref(iterator);
 
-    if let CassIterator::CassTableMetaIterator(table_meta_iterator) = iter {
-        let iter_position = match table_meta_iterator.position {
-            Some(pos) => pos,
-            None => return std::ptr::null(),
-        };
+    match iter {
+        CassIterator::CassTableMetaIterator(table_meta_iterator) => {
+            let iter_position = match table_meta_iterator.position {
+                Some(pos) => pos,
+                None => return std::ptr::null(),
+            };
 
-        let column_meta_entry_opt = table_meta_iterator
-            .value
-            .columns_metadata
-            .iter()
-            .nth(iter_position);
+            let column_meta_entry_opt = table_meta_iterator
+                .value
+                .columns_metadata
+                .iter()
+                .nth(iter_position);
 
-        return match column_meta_entry_opt {
-            Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
-            None => std::ptr::null(),
-        };
+            match column_meta_entry_opt {
+                Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
+                None => std::ptr::null(),
+            }
+        }
+        CassIterator::CassViewMetaIterator(view_meta_iterator) => {
+            let iter_position = match view_meta_iterator.position {
+                Some(pos) => pos,
+                None => return std::ptr::null(),
+            };
+
+            let column_meta_entry_opt = view_meta_iterator
+                .value
+                .view_metadata
+                .columns_metadata
+                .iter()
+                .nth(iter_position);
+
+            match column_meta_entry_opt {
+                Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
+                None => std::ptr::null(),
+            }
+        }
+        _ => std::ptr::null(),
     }
+}
 
-    std::ptr::null()
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
+    iterator: *const CassIterator,
+) -> *const CassMaterializedViewMeta {
+    let iter = ptr_to_ref(iterator);
+
+    match iter {
+        CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
+            let iter_position = match keyspace_meta_iterator.position {
+                Some(pos) => pos,
+                None => return std::ptr::null(),
+            };
+
+            let view_meta_entry_opt = keyspace_meta_iterator.value.views.iter().nth(iter_position);
+
+            match view_meta_entry_opt {
+                Some(view_meta_entry) => {
+                    Arc::as_ptr(view_meta_entry.1) as *const CassMaterializedViewMeta
+                }
+                None => std::ptr::null(),
+            }
+        }
+        CassIterator::CassTableMetaIterator(table_meta_iterator) => {
+            let iter_position = match table_meta_iterator.position {
+                Some(pos) => pos,
+                None => return std::ptr::null(),
+            };
+
+            let view_meta_entry_opt = table_meta_iterator.value.views.iter().nth(iter_position);
+
+            match view_meta_entry_opt {
+                Some(view_meta_entry) => Arc::as_ptr(view_meta_entry.1),
+                None => std::ptr::null(),
+            }
+        }
+        _ => std::ptr::null(),
+    }
 }
 
 #[no_mangle]
@@ -661,6 +743,23 @@ pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
+    keyspace_meta: *const CassKeyspaceMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(keyspace_meta);
+
+    let iterator = CassKeyspaceMetaIterator {
+        value: metadata,
+        count: metadata.views.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassKeyspaceMetaViewIterator(
+        iterator,
+    )))
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
     keyspace_meta: *const CassKeyspaceMeta,
 ) -> *mut CassIterator {
@@ -690,6 +789,34 @@ pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
     };
 
     Box::into_raw(Box::new(CassIterator::CassTableMetaIterator(iterator)))
+}
+
+pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
+    table_meta: *const CassTableMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(table_meta);
+
+    let iterator = CassTableMetaIterator {
+        value: metadata,
+        count: metadata.views.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassTableMetaIterator(iterator)))
+}
+
+pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta(
+    view_meta: *const CassMaterializedViewMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(view_meta);
+
+    let iterator = CassViewMetaIterator {
+        value: metadata,
+        count: metadata.view_metadata.columns_metadata.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassViewMetaIterator(iterator)))
 }
 
 #[no_mangle]

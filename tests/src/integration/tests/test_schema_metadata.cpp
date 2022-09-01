@@ -337,5 +337,20 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, MetadataIterator) {
 
   cass_iterator_free(table_columns_iterator);
 
+  // Materialized View Metadata
+  CassIterator* keyspace_views_iterator = cass_iterator_materialized_views_from_keyspace_meta(keyspace_meta);
+  cass_iterator_next(keyspace_views_iterator);
+  const CassMaterializedViewMeta* view_meta = cass_iterator_get_materialized_view_meta(keyspace_views_iterator);
+  ASSERT_TRUE(view_meta);
+
+  EXPECT_EQ(cass_materialized_view_meta_column_count(view_meta), 2u);
+
+  EXPECT_EQ(cass_materialized_view_meta_partition_key_count(view_meta), 1u);
+  EXPECT_EQ(cass_materialized_view_meta_clustering_key_count(view_meta), 1u);
+
+  ASSERT_FALSE(cass_iterator_next(keyspace_views_iterator));
+
+  cass_iterator_free(keyspace_views_iterator);
+
   cass_schema_meta_free(schema_meta);
 }
