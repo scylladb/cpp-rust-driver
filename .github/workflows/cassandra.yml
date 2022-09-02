@@ -1,0 +1,52 @@
+name: Cassandra
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v2
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Setup environment
+        run: |
+          sudo sh -c "echo 'deb http://security.ubuntu.com/ubuntu xenial-security main' >> /etc/apt/sources.list"
+          sudo apt-get update
+          sudo apt-get install libssl1.0.0 libuv1-dev libkrb5-dev libc6-dbg
+          sudo snap install valgrind --classic
+          pip3 install https://github.com/scylladb/scylla-ccm/archive/master.zip
+          sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+
+      - name: Build
+        run: cmake -DCASS_BUILD_INTEGRATION_TESTS=ON . && make
+
+      - name: Run integration tests on Cassandra 3.0.8
+        env:
+          #        Ignored tests are added in the end, after the "-" sign.
+          Tests: "ClusterTests.*\
+:BasicsTests.*\
+:PreparedTests.*\
+:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
+:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
+:*5.Integration_Cassandra_*\
+:*19.Integration_Cassandra_*\
+:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_UDT"
+        run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=3.0.8 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
