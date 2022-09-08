@@ -76,10 +76,16 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     let data_type = ptr_to_ref(data_type_raw);
 
     match data_type {
-        CassDataType::UDT(udt_data_type) => {
+        CassDataType::UDT {
+            type_: udt_data_type,
+            frozen,
+        } => {
             let field_values = vec![None; udt_data_type.field_types.len()];
             Box::into_raw(Box::new(CassUserType {
-                data_type: Arc::new(CassDataType::UDT(udt_data_type.clone())),
+                data_type: Arc::new(CassDataType::UDT {
+                    type_: udt_data_type.clone(),
+                    frozen: *frozen,
+                }),
                 field_values,
             }))
         }

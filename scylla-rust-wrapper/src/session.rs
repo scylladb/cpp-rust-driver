@@ -195,51 +195,66 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
 
 fn get_column_value(column: CqlValue, column_type: &CassDataTypeArc) -> Value {
     match (column, column_type.as_ref()) {
-        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
-            CollectionValue(Collection::List(
-                list.into_iter()
-                    .map(|val| CassValue {
-                        value_type: list_type.clone(),
-                        value: Some(get_column_value(val, list_type)),
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
-            CollectionValue(Collection::Map(
-                map.into_iter()
-                    .map(|(key, val)| {
-                        (
-                            CassValue {
-                                value_type: key_type.clone(),
-                                value: Some(get_column_value(key, key_type)),
-                            },
-                            CassValue {
-                                value_type: value_type.clone(),
-                                value: Some(get_column_value(val, value_type)),
-                            },
-                        )
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
-            CollectionValue(Collection::Set(
-                set.into_iter()
-                    .map(|val| CassValue {
-                        value_type: set_type.clone(),
-                        value: Some(get_column_value(val, set_type)),
-                    })
-                    .collect(),
-            ))
-        }
+        (
+            CqlValue::List(list),
+            CassDataType::List {
+                type_: Some(list_type),
+                ..
+            },
+        ) => CollectionValue(Collection::List(
+            list.into_iter()
+                .map(|val| CassValue {
+                    value_type: list_type.clone(),
+                    value: Some(get_column_value(val, list_type)),
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Map(map),
+            CassDataType::Map {
+                key_type: Some(key_type),
+                value_type: Some(value_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Map(
+            map.into_iter()
+                .map(|(key, val)| {
+                    (
+                        CassValue {
+                            value_type: key_type.clone(),
+                            value: Some(get_column_value(key, key_type)),
+                        },
+                        CassValue {
+                            value_type: value_type.clone(),
+                            value: Some(get_column_value(val, value_type)),
+                        },
+                    )
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Set(set),
+            CassDataType::Set {
+                type_: Some(set_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Set(
+            set.into_iter()
+                .map(|val| CassValue {
+                    value_type: set_type.clone(),
+                    value: Some(get_column_value(val, set_type)),
+                })
+                .collect(),
+        )),
         (
             CqlValue::UserDefinedType {
                 keyspace,
                 type_name,
                 fields,
             },
-            CassDataType::UDT(udt_type),
+            CassDataType::UDT {
+                type_: udt_type, ..
+            },
         ) => CollectionValue(Collection::UserDefinedType {
             keyspace,
             type_name,
@@ -403,11 +418,14 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                CassDataType::UDT(UDTDataType::create_with_params(
-                    &keyspace.user_defined_types,
-                    keyspace_name,
-                    udt_name,
-                )),
+                CassDataType::UDT {
+                    type_: UDTDataType::create_with_params(
+                        &keyspace.user_defined_types,
+                        keyspace_name,
+                        udt_name,
+                    ),
+                    frozen: false,
+                },
             );
         }
 
