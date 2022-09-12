@@ -2,13 +2,15 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::frame::response::result::ColumnType;
+use scylla::transport::topology::{CollectionType, CqlType, NativeType};
+use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UDTDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, CassDataTypeArc)>,
@@ -23,6 +25,32 @@ impl UDTDataType {
             field_types: Vec::new(),
             keyspace: "".to_string(),
             name: "".to_string(),
+        }
+    }
+
+    pub fn create_with_params(
+        user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+        keyspace_name: &str,
+        name: &str,
+    ) -> UDTDataType {
+        UDTDataType {
+            field_types: user_defined_types
+                .get(name)
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|(udt_field_name, udt_field_type)| {
+                    (
+                        udt_field_name.clone(),
+                        Arc::new(get_column_type_from_cql_type(
+                            udt_field_type,
+                            user_defined_types,
+                            keyspace_name,
+                        )),
+                    )
+                })
+                .collect(),
+            keyspace: keyspace_name.to_string(),
+            name: name.to_owned(),
         }
     }
 
@@ -56,7 +84,7 @@ impl Default for UDTDataType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
@@ -68,6 +96,86 @@ pub enum CassDataType {
 }
 
 pub type CassDataTypeArc = Arc<CassDataType>;
+
+impl From<NativeType> for CassValueType {
+    fn from(native_type: NativeType) -> CassValueType {
+        match native_type {
+            NativeType::Ascii => CassValueType::CASS_VALUE_TYPE_ASCII,
+            NativeType::Boolean => CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+            NativeType::Blob => CassValueType::CASS_VALUE_TYPE_BLOB,
+            NativeType::Counter => CassValueType::CASS_VALUE_TYPE_COUNTER,
+            NativeType::Date => CassValueType::CASS_VALUE_TYPE_DATE,
+            NativeType::Decimal => CassValueType::CASS_VALUE_TYPE_DECIMAL,
+            NativeType::Double => CassValueType::CASS_VALUE_TYPE_DOUBLE,
+            NativeType::Duration => CassValueType::CASS_VALUE_TYPE_DURATION,
+            NativeType::Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
+            NativeType::Int => CassValueType::CASS_VALUE_TYPE_INT,
+            NativeType::BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
+            NativeType::Text => CassValueType::CASS_VALUE_TYPE_TEXT,
+            NativeType::Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
+            NativeType::Inet => CassValueType::CASS_VALUE_TYPE_INET,
+            NativeType::SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+            NativeType::TinyInt => CassValueType::CASS_VALUE_TYPE_TINY_INT,
+            NativeType::Time => CassValueType::CASS_VALUE_TYPE_TIME,
+            NativeType::Timeuuid => CassValueType::CASS_VALUE_TYPE_TIMEUUID,
+            NativeType::Uuid => CassValueType::CASS_VALUE_TYPE_UUID,
+            NativeType::Varint => CassValueType::CASS_VALUE_TYPE_VARINT,
+        }
+    }
+}
+
+pub fn get_column_type_from_cql_type(
+    cql_type: &CqlType,
+    user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+    keyspace_name: &str,
+) -> CassDataType {
+    match cql_type {
+        CqlType::Native(native) => CassDataType::Value(native.clone().into()),
+        CqlType::Collection {
+            frozen: _frozen,
+            type_,
+        } => match type_ {
+            CollectionType::List(list) => CassDataType::List(Some(Arc::new(
+                get_column_type_from_cql_type(list, user_defined_types, keyspace_name),
+            ))),
+            CollectionType::Map(key, value) => CassDataType::Map(
+                Some(Arc::new(get_column_type_from_cql_type(
+                    key,
+                    user_defined_types,
+                    keyspace_name,
+                ))),
+                Some(Arc::new(get_column_type_from_cql_type(
+                    value,
+                    user_defined_types,
+                    keyspace_name,
+                ))),
+            ),
+            CollectionType::Set(set) => CassDataType::Set(Some(Arc::new(
+                get_column_type_from_cql_type(set, user_defined_types, keyspace_name),
+            ))),
+        },
+        CqlType::Tuple(tuple) => CassDataType::Tuple(
+            tuple
+                .iter()
+                .map(|field_type| {
+                    Arc::new(get_column_type_from_cql_type(
+                        field_type,
+                        user_defined_types,
+                        keyspace_name,
+                    ))
+                })
+                .collect(),
+        ),
+        CqlType::UserDefinedType {
+            frozen: _frozen,
+            name,
+        } => CassDataType::UDT(UDTDataType::create_with_params(
+            user_defined_types,
+            keyspace_name,
+            name,
+        )),
+    }
+}
 
 impl CassDataType {
     fn get_sub_data_type(&self, index: usize) -> Option<&CassDataTypeArc> {

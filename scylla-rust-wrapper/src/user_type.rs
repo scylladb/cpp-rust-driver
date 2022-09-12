@@ -73,13 +73,13 @@ impl From<&CassUserType> for CqlValue {
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     data_type_raw: *const CassDataType,
 ) -> *mut CassUserType {
-    let data_type = clone_arced(data_type_raw);
+    let data_type = ptr_to_ref(data_type_raw);
 
-    match &*data_type {
+    match data_type {
         CassDataType::UDT(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
             Box::into_raw(Box::new(CassUserType {
-                data_type,
+                data_type: Arc::new(CassDataType::UDT(udt_data_type.clone())),
                 field_values,
             }))
         }
