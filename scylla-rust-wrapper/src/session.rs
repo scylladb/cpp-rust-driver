@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc};
+use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
@@ -17,6 +17,7 @@ use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::{QueryResult, Session};
+use std::collections::HashMap;
 use std::future::Future;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -25,6 +26,17 @@ use tokio::sync::RwLock;
 
 pub type CassSession = RwLock<Option<Session>>;
 type CassSession_ = Arc<CassSession>;
+
+pub struct CassKeyspaceMeta {
+    name: String,
+
+    // User defined type name to type
+    pub user_defined_type_data_type: HashMap<String, CassDataType>,
+}
+
+pub struct CassSchemaMeta {
+    pub keyspaces: HashMap<String, CassKeyspaceMeta>,
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *const CassSession {
@@ -394,4 +406,116 @@ pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const
 
         Ok(CassResultValue::Empty)
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_get_schema_meta(
+    session: *const CassSession,
+) -> *const CassSchemaMeta {
+    let cass_session = ptr_to_ref(session);
+    let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
+
+    for (keyspace_name, keyspace) in cass_session
+        .blocking_read()
+        .as_ref()
+        .unwrap()
+        .get_cluster_data()
+        .get_keyspace_info()
+    {
+        let mut user_defined_type_data_type = HashMap::new();
+
+        for udt_name in keyspace.user_defined_types.keys() {
+            user_defined_type_data_type.insert(
+                udt_name.clone(),
+                CassDataType::UDT(UDTDataType::create_with_params(
+                    &keyspace.user_defined_types,
+                    keyspace_name,
+                    udt_name,
+                )),
+            );
+        }
+        keyspaces.insert(
+            keyspace_name.clone(),
+            CassKeyspaceMeta {
+                name: keyspace_name.clone(),
+                user_defined_type_data_type,
+            },
+        );
+    }
+
+    Box::into_raw(Box::new(CassSchemaMeta { keyspaces }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_schema_meta_free(schema_meta: *mut CassSchemaMeta) {
+    free_boxed(schema_meta)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name(
+    schema_meta: *const CassSchemaMeta,
+    keyspace_name: *const c_char,
+) -> *const CassKeyspaceMeta {
+    cass_schema_meta_keyspace_by_name_n(schema_meta, keyspace_name, strlen(keyspace_name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
+    schema_meta: *const CassSchemaMeta,
+    keyspace_name: *const c_char,
+    keyspace_name_length: size_t,
+) -> *const CassKeyspaceMeta {
+    if keyspace_name.is_null() {
+        return std::ptr::null();
+    }
+
+    let metadata = ptr_to_ref(schema_meta);
+    let keyspace = ptr_to_cstr_n(keyspace_name, keyspace_name_length).unwrap();
+
+    let keyspace_meta = metadata.keyspaces.get(keyspace);
+
+    match keyspace_meta {
+        Some(meta) => meta,
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_name(
+    keyspace_meta: *const CassKeyspaceMeta,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) {
+    let keyspace_meta = ptr_to_ref(keyspace_meta);
+    write_str_to_c(keyspace_meta.name.as_str(), name, name_length)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name(
+    keyspace_meta: *const CassKeyspaceMeta,
+    type_: *const c_char,
+) -> *const CassDataType {
+    cass_keyspace_meta_user_type_by_name_n(keyspace_meta, type_, strlen(type_))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
+    keyspace_meta: *const CassKeyspaceMeta,
+    type_: *const c_char,
+    type_length: size_t,
+) -> *const CassDataType {
+    if type_.is_null() {
+        return std::ptr::null();
+    }
+
+    let keyspace_meta = ptr_to_ref(keyspace_meta);
+    let user_type_name = ptr_to_cstr_n(type_, type_length).unwrap();
+
+    match keyspace_meta
+        .user_defined_type_data_type
+        .get(user_type_name)
+    {
+        Some(udt) => udt,
+        None => std::ptr::null(),
+    }
 }

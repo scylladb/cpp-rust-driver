@@ -414,11 +414,6 @@ cass_keyspace_meta_table_by_name(const CassKeyspaceMeta* keyspace_meta,
                                  const char* table){
 	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_table_by_name\n");
 }
-CASS_EXPORT const CassDataType*
-cass_keyspace_meta_user_type_by_name(const CassKeyspaceMeta* keyspace_meta,
-                                     const char* type){
-	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_user_type_by_name\n");
-}
 CASS_EXPORT const char*
 cass_log_level_string(CassLogLevel log_level){
 	throw std::runtime_error("UNIMPLEMENTED cass_log_level_string\n");
@@ -446,15 +441,6 @@ CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_logging_new\n");
 }
-CASS_EXPORT void
-cass_schema_meta_free(const CassSchemaMeta* schema_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_free\n");
-}
-CASS_EXPORT const CassKeyspaceMeta*
-cass_schema_meta_keyspace_by_name(const CassSchemaMeta* schema_meta,
-                                  const char* keyspace){
-	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_keyspace_by_name\n");
-}
 CASS_EXPORT CassVersion
 cass_schema_meta_version(const CassSchemaMeta* schema_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
@@ -469,10 +455,6 @@ CASS_EXPORT void
 cass_session_get_metrics(const CassSession* session,
                          CassMetrics* output){
 	throw std::runtime_error("UNIMPLEMENTED cass_session_get_metrics\n");
-}
-CASS_EXPORT const CassSchemaMeta*
-cass_session_get_schema_meta(const CassSession* session){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_get_schema_meta\n");
 }
 CASS_EXPORT void
 cass_session_get_speculative_execution_metrics(const CassSession* session,
