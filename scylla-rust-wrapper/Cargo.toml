@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 
 
 [dependencies]
-scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "90044469948bc31fcc7c794d88eb245e2607a68a"}
+scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "4930a1a55a13014ec82583157c56e3fe3418f5b2"}
 tokio = { version = "1.1.0", features = ["full"] }
 lazy_static = "1.4.0"
 uuid = "1.1.2"
@@ -23,6 +23,7 @@ libc = "0.2.108"
 
 [build-dependencies]
 bindgen = "0.59.1"
+chrono = "0.4.20"
 
 [lib]
 name = "scylla_cpp_driver"

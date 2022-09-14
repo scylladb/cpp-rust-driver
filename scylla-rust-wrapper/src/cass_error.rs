@@ -14,6 +14,7 @@ impl From<&QueryError> for CassError {
             QueryError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
             QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
             QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
+            QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
         }
     }
 }
@@ -55,6 +56,7 @@ impl From<&BadQuery> for CassError {
             BadQuery::ValueLenMismatch(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -76,6 +78,7 @@ impl From<&NewSessionError> for CassError {
             NewSessionError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
+            NewSessionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
         }
     }
 }

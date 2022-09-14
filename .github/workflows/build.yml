@@ -41,6 +41,5 @@ jobs:
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
-:*19.Integration_Cassandra_*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_UDT"
+:*19.Integration_Cassandra_*"
       run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=release:5.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
