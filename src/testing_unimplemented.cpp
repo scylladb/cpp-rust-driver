@@ -386,10 +386,6 @@ cass_keyspace_meta_materialized_view_by_name(const CassKeyspaceMeta* keyspace_me
                                              const char* view){
 	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_materialized_view_by_name\n");
 }
-CASS_EXPORT const char*
-cass_log_level_string(CassLogLevel log_level){
-	throw std::runtime_error("UNIMPLEMENTED cass_log_level_string\n");
-}
 CASS_EXPORT const CassTableMeta*
 cass_materialized_view_meta_base_table(const CassMaterializedViewMeta* view_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_materialized_view_meta_base_table\n");

@@ -44,6 +44,7 @@ jobs:
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
+:LoggingTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*"

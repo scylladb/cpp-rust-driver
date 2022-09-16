@@ -18,28 +18,6 @@
 
 using namespace datastax::internal;
 
-extern "C" {
-
-void cass_log_cleanup() {
-  // Deprecated
-}
-
-void cass_log_set_level(CassLogLevel log_level) { Logger::set_log_level(log_level); }
-
-void cass_log_set_callback(CassLogCallback callback, void* data) {
-  Logger::set_callback(callback, data);
-}
-
-void cass_log_get_callback_and_data(CassLogCallback* callback_out, void** data_out) {
-  Logger::get_callback_and_data(callback_out, data_out);
-}
-
-void cass_log_set_queue_size(size_t queue_size) {
-  // Deprecated
-}
-
-} // extern "C"
-
 namespace datastax { namespace internal { namespace core {
 
 void stderr_log_callback(const CassLogMessage* message, void* data) {

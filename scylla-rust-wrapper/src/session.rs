@@ -7,6 +7,7 @@ use crate::cass_types::{
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::logging::init_logging;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::query_result::{
     CassResult, CassResultData, CassResult_, CassRow, CassValue, Collection, Value,
@@ -65,6 +66,8 @@ pub struct CassSchemaMeta {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *const CassSession {
+    init_logging();
+
     let session: CassSession_ = Arc::new(RwLock::new(None));
     Arc::into_raw(session)
 }
