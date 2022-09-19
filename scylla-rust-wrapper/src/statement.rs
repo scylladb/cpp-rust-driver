@@ -225,6 +225,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
         match ptr_to_ref(retry_policy) {
             CassRetryPolicy::DefaultRetryPolicy(default) => default,
             CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough,
+            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading,
         };
     let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
 

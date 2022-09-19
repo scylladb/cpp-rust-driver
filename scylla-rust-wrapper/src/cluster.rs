@@ -1,11 +1,14 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::future::CassFuture;
+use crate::retry_policy::CassRetryPolicy;
+use crate::retry_policy::RetryPolicy::*;
 use crate::types::*;
 use core::time::Duration;
 use scylla::load_balancing::{
     DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
 };
+use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
@@ -68,7 +71,8 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new(),
+        session_builder: SessionBuilder::new()
+            .retry_policy(Box::new(scylla::retry_policy::DefaultRetryPolicy)),
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
@@ -402,4 +406,21 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.token_aware_policy_enabled = enabled != 0;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_retry_policy(
+    cluster_raw: *mut CassCluster,
+    retry_policy: *const CassRetryPolicy,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let retry_policy: &dyn RetryPolicy = match ptr_to_ref(retry_policy) {
+        DefaultRetryPolicy(default) => default,
+        FallthroughRetryPolicy(fallthrough) => fallthrough,
+        DowngradingConsistencyRetryPolicy(downgrading) => downgrading,
+    };
+    let boxed_retry_policy = retry_policy.clone_boxed();
+
+    cluster.session_builder.config.retry_policy = boxed_retry_policy;
 }
