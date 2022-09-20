@@ -3,8 +3,11 @@ use crate::cass_error::CassError;
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
+use crate::ssl::CassSsl;
 use crate::types::*;
 use core::time::Duration;
+use openssl::ssl::SslContextBuilder;
+use openssl_sys::SSL_CTX_up_ref;
 use scylla::load_balancing::{
     DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
 };
@@ -423,4 +426,16 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     let boxed_retry_policy = retry_policy.clone_boxed();
 
     cluster.session_builder.config.retry_policy = boxed_retry_policy;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_ssl(cluster: *mut CassCluster, ssl: *mut CassSsl) {
+    let cluster_from_raw = ptr_to_ref_mut(cluster);
+    let cass_ssl = clone_arced(ssl);
+
+    let ssl_context_builder = SslContextBuilder::from_ptr(cass_ssl.ssl_context);
+    // Reference count is increased as tokio_openssl will try to free `ssl_context` when calling `SSL_free`.
+    SSL_CTX_up_ref(cass_ssl.ssl_context);
+
+    cluster_from_raw.session_builder.config.ssl_context = Some(ssl_context_builder.build());
 }

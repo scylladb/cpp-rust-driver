@@ -46,8 +46,10 @@ jobs:
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ErrorTests.*\
+:SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_UDT"
+:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_UDT\
+:SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart"
         run: valgrind --error-exitcode=123 ./cassandra-integration-tests --version=3.0.8 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
