@@ -448,14 +448,6 @@ cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared,
 	throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
 }
 CASS_EXPORT CassRetryPolicy*
-cass_retry_policy_downgrading_consistency_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_downgrading_consistency_new\n");
-}
-CASS_EXPORT CassRetryPolicy*
-cass_retry_policy_fallthrough_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_fallthrough_new\n");
-}
-CASS_EXPORT CassRetryPolicy*
 cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_logging_new\n");
 }
