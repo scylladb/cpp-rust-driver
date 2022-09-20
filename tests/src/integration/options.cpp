@@ -50,7 +50,7 @@ std::string Options::private_key_ = "private.key";
 bool Options::is_verbose_ccm_ = false;
 bool Options::is_verbose_integration_ = false;
 bool Options::is_beta_protocol_ = true;
-bool Options::is_scylla_ = true;
+bool Options::is_scylla_ = false;
 int Options::smp_ = 1;
 
 // Static initialization is not guaranteed for the following types

@@ -53,7 +53,7 @@ typedef struct _LIBSSH2_CHANNEL LIBSSH2_CHANNEL;
 #define DEFAULT_REMOTE_DEPLOYMENT_USERNAME "vagrant"
 #define DEFAULT_REMOTE_DEPLOYMENT_PASSWORD "vagrant"
 #define DEFAULT_IS_VERBOSE false
-#define DEFAULT_IS_SCYLLA true
+#define DEFAULT_IS_SCYLLA false
 #define DEFAULT_SMP 1
 #define DEFAULT_JVM_ARGUMENTS std::vector<std::string>()
 
