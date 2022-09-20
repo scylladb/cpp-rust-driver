@@ -40,6 +40,7 @@ jobs:
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
+:ErrorTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*\
