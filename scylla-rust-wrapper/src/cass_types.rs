@@ -1,12 +1,16 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
+use scylla::batch::{BatchType, Consistency, SerialConsistency};
 use scylla::frame::response::result::ColumnType;
+use std::convert::TryFrom;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
+include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
+include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
 
 #[derive(Clone)]
 pub struct UDTDataType {
@@ -530,4 +534,44 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
 ) -> CassError {
     let sub_data_type = Arc::new(CassDataType::Value(sub_value_type));
     cass_data_type_add_sub_type_by_name_n(data_type, name, name_length, Arc::as_ptr(&sub_data_type))
+}
+
+impl TryFrom<CassConsistency> for Consistency {
+    type Error = ();
+
+    fn try_from(c: CassConsistency) -> Result<Consistency, Self::Error> {
+        match c {
+            CassConsistency::CASS_CONSISTENCY_ANY => Ok(Consistency::Any),
+            CassConsistency::CASS_CONSISTENCY_ONE => Ok(Consistency::One),
+            CassConsistency::CASS_CONSISTENCY_TWO => Ok(Consistency::Two),
+            CassConsistency::CASS_CONSISTENCY_THREE => Ok(Consistency::Three),
+            CassConsistency::CASS_CONSISTENCY_QUORUM => Ok(Consistency::Quorum),
+            CassConsistency::CASS_CONSISTENCY_ALL => Ok(Consistency::All),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Ok(Consistency::LocalQuorum),
+            CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Ok(Consistency::EachQuorum),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Ok(Consistency::LocalOne),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<CassConsistency> for SerialConsistency {
+    type Error = ();
+
+    fn try_from(serial: CassConsistency) -> Result<SerialConsistency, Self::Error> {
+        match serial {
+            CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(SerialConsistency::Serial),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Ok(SerialConsistency::LocalSerial),
+            _ => Err(()),
+        }
+    }
+}
+
+pub fn make_batch_type(type_: CassBatchType) -> Option<BatchType> {
+    match type_ {
+        CassBatchType::CASS_BATCH_TYPE_LOGGED => Some(BatchType::Logged),
+        CassBatchType::CASS_BATCH_TYPE_UNLOGGED => Some(BatchType::Unlogged),
+        CassBatchType::CASS_BATCH_TYPE_COUNTER => Some(BatchType::Counter),
+        _ => None,
+    }
 }

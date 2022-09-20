@@ -1,4 +1,5 @@
 use crate::argconv::*;
+use crate::batch::CassBatch;
 use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc};
 use crate::cluster::build_session_builder;
@@ -10,12 +11,13 @@ use crate::query_result::{
 };
 use crate::statement::CassStatement;
 use crate::statement::Statement;
-use crate::types::size_t;
+use crate::types::{cass_uint64_t, size_t};
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::{QueryResult, Session};
+use std::future::Future;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,6 +59,59 @@ pub unsafe extern "C" fn cass_session_connect(
         *session_guard = Some(session);
         Ok(CassResultValue::Empty)
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_execute_batch(
+    session_raw: *mut CassSession,
+    batch_raw: *const CassBatch,
+) -> *const CassFuture {
+    let session_opt = ptr_to_ref(session_raw);
+    let batch_from_raw = ptr_to_ref(batch_raw);
+    let state = batch_from_raw.state.clone();
+    let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
+
+    let future = async move {
+        let session_guard = session_opt.read().await;
+        if session_guard.is_none() {
+            return Err((
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                "Session is not connected".msg(),
+            ));
+        }
+        let session = session_guard.as_ref().unwrap();
+
+        let query_res = session.batch(&state.batch, &state.bound_values).await;
+        match query_res {
+            Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
+                rows: None,
+                metadata: Arc::new(CassResultData {
+                    paging_state: None,
+                    col_specs: vec![],
+                }),
+            }))),
+            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
+        }
+    };
+
+    match request_timeout_ms {
+        Some(timeout_ms) => {
+            CassFuture::make_raw(async move { request_with_timeout(timeout_ms, future).await })
+        }
+        None => CassFuture::make_raw(future),
+    }
+}
+
+async fn request_with_timeout(
+    request_timeout_ms: cass_uint64_t,
+    future: impl Future<Output = Result<CassResultValue, (CassError, String)>>,
+) -> Result<CassResultValue, (CassError, String)> {
+    match tokio::time::timeout(Duration::from_millis(request_timeout_ms), future).await {
+        Ok(result) => result,
+        Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
+            QueryError::TimeoutError,
+        ))),
+    }
 }
 
 #[no_mangle]
@@ -114,14 +169,9 @@ pub unsafe extern "C" fn cass_session_execute(
     };
 
     match request_timeout_ms {
-        Some(timeout_ms) => CassFuture::make_raw(async move {
-            match tokio::time::timeout(Duration::from_millis(timeout_ms), future).await {
-                Ok(result) => result,
-                Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
-                    QueryError::TimeoutError,
-                ))),
-            }
-        }),
+        Some(timeout_ms) => {
+            CassFuture::make_raw(async move { request_with_timeout(timeout_ms, future).await })
+        }
         None => CassFuture::make_raw(future),
     }
 }
