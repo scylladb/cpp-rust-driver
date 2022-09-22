@@ -42,6 +42,7 @@ jobs:
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
 :ErrorTests.*\
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
+:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*"
