@@ -65,7 +65,8 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
             }
         };
 
-    (&cluster.session_builder)
+    cluster
+        .session_builder
         .clone()
         .known_nodes(&known_nodes)
         .load_balancing(load_balancing)

@@ -14,7 +14,7 @@ pub unsafe fn ptr_to_ref_mut<T>(ptr: *mut T) -> &'static mut T {
 pub unsafe fn free_boxed<T>(ptr: *mut T) {
     if !ptr.is_null() {
         // This takes the ownership of the boxed value and drops it
-        Box::from_raw(ptr);
+        let _ = Box::from_raw(ptr);
     }
 }
 
