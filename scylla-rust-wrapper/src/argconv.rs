@@ -39,7 +39,7 @@ pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static
 }
 
 pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
-    *c_str = s.as_ptr() as *const i8;
+    *c_str = s.as_ptr() as *const c_char;
     *c_strlen = s.len() as u64;
 }
 
