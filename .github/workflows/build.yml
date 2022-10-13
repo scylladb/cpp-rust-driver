@@ -44,6 +44,7 @@ jobs:
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
 :SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator\
 :TracingTests.*\
+:ConfigTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*"

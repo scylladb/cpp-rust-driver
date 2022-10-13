@@ -21,6 +21,11 @@
 #include "get_time.hpp"
 #include "logger.hpp"
 #include "murmur3.hpp"
+#include <iostream>
+
+extern "C" {
+  #include "testing_utils.h"
+}
 
 namespace datastax { namespace internal { namespace testing {
 
@@ -35,15 +40,26 @@ StringVec get_attempted_hosts_from_future(CassFuture* future) {
 }
 
 unsigned get_connect_timeout_from_cluster(CassCluster* cluster) {
-  throw std::runtime_error("Unimplemented 'get_connect_timeout_from_cluster'!");
+  return testing_get_connect_timeout_from_cluster(cluster);
 }
 
 int get_port_from_cluster(CassCluster* cluster) {
-  throw std::runtime_error("Unimplemented 'get_port_from_cluster'!");
+  return testing_get_port_from_cluster(cluster);
 }
 
 String get_contact_points_from_cluster(CassCluster* cluster) {
-  throw std::runtime_error("Unimplemented 'get_contact_points_from_cluster'!");
+  const char* contact_points;
+  size_t contact_points_length;
+  void *contact_points_boxed;
+  testing_get_contact_points_from_cluster(cluster, &contact_points, &contact_points_length, &contact_points_boxed);
+
+  std::string contact_points_str(contact_points, contact_points_length);
+  OStringStream ss;
+  ss << contact_points_str;
+
+  testing_free_contact_points_string(contact_points_boxed);
+
+  return ss.str();
 }
 
 int64_t create_murmur3_hash_from_string(const String& value) {

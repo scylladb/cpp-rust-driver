@@ -25,10 +25,10 @@ enum CassClusterChildLoadBalancingPolicy {
 
 #[derive(Clone)]
 pub struct CassCluster {
-    session_builder: SessionBuilder,
+    pub session_builder: SessionBuilder,
 
-    contact_points: Vec<String>,
-    port: u16,
+    pub contact_points: Vec<String>,
+    pub port: u16,
 
     child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
     token_aware_policy_enabled: bool,
@@ -123,9 +123,10 @@ unsafe fn cluster_set_contact_points(
     let mut contact_points = ptr_to_cstr_n(contact_points_raw, contact_points_length)
         .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
         .split(',')
+        .filter(|s| !s.is_empty()) // Extra commas should be ignored
         .peekable();
 
-    if contact_points.peek().is_none() {
+    if contact_points.peek().is_none() || contact_points.peek().unwrap().is_empty() {
         // If cass_cluster_set_contact_points() is called with empty
         // set of contact points, the contact points should be cleared.
         cluster.contact_points.clear();
