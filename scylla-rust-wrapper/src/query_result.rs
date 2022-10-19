@@ -739,14 +739,24 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
     name_length: size_t,
 ) -> *const CassValue {
     let row_from_raw = ptr_to_ref(row);
-    let name_str = ptr_to_cstr_n(name, name_length).unwrap().to_lowercase();
+    let mut name_str = ptr_to_cstr_n(name, name_length).unwrap();
+    let mut is_case_sensitive = false;
+
+    if name_str.starts_with('\"') && name_str.ends_with('\"') {
+        name_str = name_str.strip_prefix('\"').unwrap();
+        name_str = name_str.strip_suffix('\"').unwrap();
+        is_case_sensitive = true;
+    }
 
     return row_from_raw
         .result_metadata
         .col_specs
         .iter()
         .enumerate()
-        .find(|(_, spec)| spec.name.to_lowercase() == name_str)
+        .find(|(_, spec)| {
+            is_case_sensitive && spec.name == name_str
+                || !is_case_sensitive && spec.name.eq_ignore_ascii_case(name_str)
+        })
         .map(|(index, _)| {
             return match row_from_raw.columns.get(index) {
                 Some(value) => value as *const CassValue,

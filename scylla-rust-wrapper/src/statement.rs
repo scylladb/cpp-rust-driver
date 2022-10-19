@@ -48,22 +48,52 @@ impl CassStatement {
         }
     }
 
+    fn bind_multiple_values_by_name(
+        &mut self,
+        indices: &[usize],
+        value: Option<CqlValue>,
+    ) -> CassError {
+        for i in indices {
+            let bind_status = self.bind_cql_value(*i, value.clone());
+
+            if bind_status != CassError::CASS_OK {
+                return bind_status;
+            }
+        }
+
+        CassError::CASS_OK
+    }
+
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
         let mut set_bound_val_index: Option<usize> = None;
+        let mut name_str = name;
+        let mut is_case_sensitive = false;
+
+        if name_str.starts_with('\"') && name_str.ends_with('\"') {
+            name_str = name_str.strip_prefix('\"').unwrap();
+            name_str = name_str.strip_suffix('\"').unwrap();
+            is_case_sensitive = true;
+        }
 
         match &self.statement {
             Statement::Prepared(prepared) => {
-                for (i, col) in prepared
+                let indices: Vec<usize> = prepared
                     .get_prepared_metadata()
                     .col_specs
                     .iter()
                     .enumerate()
-                {
-                    if col.name == name {
-                        return self.bind_cql_value(i, value);
-                    }
+                    .filter(|(_, col)| {
+                        is_case_sensitive && col.name == name_str
+                            || !is_case_sensitive && col.name.eq_ignore_ascii_case(name_str)
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+
+                if indices.is_empty() {
+                    return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
                 }
-                return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
+
+                return self.bind_multiple_values_by_name(&indices, value);
             }
             Statement::Simple(query) => {
                 let index = query.name_to_bound_index.get(name);
@@ -74,6 +104,7 @@ impl CassStatement {
                     for (index, bound_val) in self.bound_values.iter().enumerate() {
                         if let Unset = bound_val {
                             set_bound_val_index = Some(index);
+                            break;
                         }
                     }
                 }
