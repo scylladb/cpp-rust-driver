@@ -2,6 +2,10 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
 use crate::inet::CassInet;
+use crate::session::{
+    CassColumnMeta, CassKeyspaceMeta, CassKeyspaceMeta_, CassSchemaMeta, CassSchemaMeta_,
+    CassTableMeta, CassTableMeta_,
+};
 use crate::statement::CassStatement;
 use crate::types::*;
 use crate::uuid::CassUuid;
@@ -80,11 +84,40 @@ pub struct CassMapIterator {
     position: Option<usize>,
 }
 
+pub struct CassUdtIterator {
+    value: CassValue_,
+    count: u64,
+    position: Option<usize>,
+}
+
+pub struct CassSchemaMetaIterator {
+    value: CassSchemaMeta_,
+    count: usize,
+    position: Option<usize>,
+}
+
+pub struct CassKeyspaceMetaIterator {
+    value: CassKeyspaceMeta_,
+    count: usize,
+    position: Option<usize>,
+}
+
+pub struct CassTableMetaIterator {
+    value: CassTableMeta_,
+    count: usize,
+    position: Option<usize>,
+}
+
 pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
     CassCollectionIterator(CassCollectionIterator),
     CassMapIterator(CassMapIterator),
+    CassUdtIterator(CassUdtIterator),
+    CassSchemaMetaIterator(CassSchemaMetaIterator),
+    CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator),
+    CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator),
+    CassTableMetaIterator(CassTableMetaIterator),
 }
 
 #[no_mangle]
@@ -130,6 +163,47 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
             map_iterator.position = Some(new_pos);
 
             (new_pos < map_iterator.count.try_into().unwrap()) as cass_bool_t
+        }
+        CassIterator::CassUdtIterator(udt_iterator) => {
+            let new_pos: usize = udt_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            udt_iterator.position = Some(new_pos);
+
+            (new_pos < udt_iterator.count.try_into().unwrap()) as cass_bool_t
+        }
+        CassIterator::CassSchemaMetaIterator(schema_meta_iterator) => {
+            let new_pos: usize = schema_meta_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            schema_meta_iterator.position = Some(new_pos);
+
+            (new_pos < schema_meta_iterator.count) as cass_bool_t
+        }
+        CassIterator::CassKeyspaceMetaTableIterator(keyspace_meta_iterator) => {
+            let new_pos: usize = keyspace_meta_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            keyspace_meta_iterator.position = Some(new_pos);
+
+            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
+        }
+        CassIterator::CassKeyspaceMetaUserTypeIterator(keyspace_meta_iterator) => {
+            let new_pos: usize = keyspace_meta_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
+
+            keyspace_meta_iterator.position = Some(new_pos);
+
+            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
+        }
+        CassIterator::CassTableMetaIterator(table_iterator) => {
+            let new_pos: usize = table_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            table_iterator.position = Some(new_pos);
+
+            (new_pos < table_iterator.count) as cass_bool_t
         }
     }
 }
@@ -272,6 +346,182 @@ pub unsafe extern "C" fn cass_iterator_get_map_value(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
+    iterator: *const CassIterator,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) -> CassError {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
+        let iter_position = match udt_iterator.position {
+            Some(pos) => pos,
+            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        };
+
+        let udt_entry_opt = match &udt_iterator.value.value {
+            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
+                fields.get(iter_position)
+            }
+            _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        };
+
+        match udt_entry_opt {
+            Some(udt_entry) => {
+                let field_name = &udt_entry.0;
+                write_str_to_c(field_name.as_str(), name, name_length);
+            }
+            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+        }
+
+        return CassError::CASS_OK;
+    }
+
+    CassError::CASS_ERROR_LIB_BAD_PARAMS
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_value(
+    iterator: *const CassIterator,
+) -> *const CassValue {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
+        let iter_position = match udt_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let udt_entry_opt = match &udt_iterator.value.value {
+            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
+                fields.get(iter_position)
+            }
+            _ => return std::ptr::null(),
+        };
+
+        return match udt_entry_opt {
+            Some(udt_entry) => match &udt_entry.1 {
+                Some(value) => value as *const CassValue,
+                None => std::ptr::null(),
+            },
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_keyspace_meta(
+    iterator: *const CassIterator,
+) -> *const CassKeyspaceMeta {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassSchemaMetaIterator(schema_meta_iterator) = iter {
+        let iter_position = match schema_meta_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let schema_meta_entry_opt = &schema_meta_iterator
+            .value
+            .keyspaces
+            .iter()
+            .nth(iter_position);
+
+        return match schema_meta_entry_opt {
+            Some(schema_meta_entry) => schema_meta_entry.1 as *const CassKeyspaceMeta,
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_table_meta(
+    iterator: *const CassIterator,
+) -> *const CassTableMeta {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassKeyspaceMetaTableIterator(keyspace_meta_iterator) = iter {
+        let iter_position = match keyspace_meta_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let table_meta_entry_opt = keyspace_meta_iterator
+            .value
+            .tables
+            .iter()
+            .nth(iter_position);
+
+        return match table_meta_entry_opt {
+            Some(table_meta_entry) => table_meta_entry.1 as *const CassTableMeta,
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_user_type(
+    iterator: *const CassIterator,
+) -> *const CassDataType {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassKeyspaceMetaUserTypeIterator(keyspace_meta_iterator) = iter {
+        let iter_position = match keyspace_meta_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let udt_to_type_entry_opt = keyspace_meta_iterator
+            .value
+            .user_defined_type_data_type
+            .iter()
+            .nth(iter_position);
+
+        return match udt_to_type_entry_opt {
+            Some(udt_to_type_entry) => {
+                Arc::into_raw(udt_to_type_entry.1.clone()) as *const CassDataType
+            }
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_get_column_meta(
+    iterator: *const CassIterator,
+) -> *const CassColumnMeta {
+    let iter = ptr_to_ref(iterator);
+
+    if let CassIterator::CassTableMetaIterator(table_meta_iterator) = iter {
+        let iter_position = match table_meta_iterator.position {
+            Some(pos) => pos,
+            None => return std::ptr::null(),
+        };
+
+        let column_meta_entry_opt = table_meta_iterator
+            .value
+            .columns_metadata
+            .iter()
+            .nth(iter_position);
+
+        return match column_meta_entry_opt {
+            Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
+            None => std::ptr::null(),
+        };
+    }
+
+    std::ptr::null()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw: CassResult_ = clone_arced(result);
 
@@ -356,6 +606,90 @@ pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut
     }
 
     std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
+    value: *const CassValue,
+) -> *mut CassIterator {
+    let udt = ptr_to_ref(value);
+
+    if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
+        let item_count = fields.len();
+        let iterator = CassUdtIterator {
+            value: udt,
+            count: item_count as u64,
+            position: None,
+        };
+
+        return Box::into_raw(Box::new(CassIterator::CassUdtIterator(iterator)));
+    }
+
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
+    schema_meta: *const CassSchemaMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(schema_meta);
+
+    let iterator = CassSchemaMetaIterator {
+        value: metadata,
+        count: metadata.keyspaces.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassSchemaMetaIterator(iterator)))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
+    keyspace_meta: *const CassKeyspaceMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(keyspace_meta);
+
+    let iterator = CassKeyspaceMetaIterator {
+        value: metadata,
+        count: metadata.tables.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassKeyspaceMetaTableIterator(
+        iterator,
+    )))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
+    keyspace_meta: *const CassKeyspaceMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(keyspace_meta);
+
+    let iterator = CassKeyspaceMetaIterator {
+        value: metadata,
+        count: metadata.user_defined_type_data_type.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassKeyspaceMetaUserTypeIterator(
+        iterator,
+    )))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
+    table_meta: *const CassTableMeta,
+) -> *mut CassIterator {
+    let metadata = ptr_to_ref(table_meta);
+
+    let iterator = CassTableMetaIterator {
+        value: metadata,
+        count: metadata.columns_metadata.len(),
+        position: None,
+    };
+
+    Box::into_raw(Box::new(CassIterator::CassTableMetaIterator(iterator)))
 }
 
 #[no_mangle]

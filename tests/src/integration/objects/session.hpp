@@ -256,6 +256,14 @@ public:
     return Schema(schema_meta);
   }
 
+  const CassSchemaMeta *schema_meta() {
+      const CassSchemaMeta* schema_meta = cass_session_get_schema_meta(get());
+      if (schema_meta == NULL) {
+          throw test::Exception("Unable to get schema metadata");
+      }
+      return schema_meta;
+  }
+
 protected:
   /**
    * Create a new session and establish a connection to the server;

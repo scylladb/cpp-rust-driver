@@ -857,8 +857,27 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, UDT) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-    UserType result_udt_values(result.first_row().next().as<UserType>());
-    ASSERT_EQ(udt_values, result_udt_values.values<TypeParam>());
+    const CassValue *result_udt = result.first_row().next().get_value();
+
+    size_t collection_size = cass_value_item_count(result_udt);
+    ASSERT_EQ(udt_values.size(), collection_size);
+
+    CassIterator* collection_iterator = cass_iterator_fields_from_user_type(result_udt);
+
+    for (size_t j = 0; j < collection_size; ++j) {
+      if (cass_iterator_next(collection_iterator)) {
+        const char* field_name;
+        size_t field_name_length;
+        cass_iterator_get_user_type_field_name(collection_iterator, &field_name, &field_name_length);
+        TypeParam field_value = TypeParam(cass_iterator_get_user_type_field_value(collection_iterator));
+        std::string key(field_name, field_name_length);
+        ASSERT_EQ(field_value, udt_values[key]);
+      } else {
+        throw Exception("No more values available");
+      }
+    }
+
+    cass_iterator_free(collection_iterator);
   }
 }
 
