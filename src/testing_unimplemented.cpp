@@ -350,11 +350,6 @@ CASS_EXPORT const CassNode*
 cass_future_coordinator(CassFuture* future){
 	throw std::runtime_error("UNIMPLEMENTED cass_future_coordinator\n");
 }
-CASS_EXPORT CassError
-cass_future_tracing_id(CassFuture* future,
-                       CassUuid* tracing_id){
-	throw std::runtime_error("UNIMPLEMENTED cass_future_tracing_id\n");
-}
 CASS_EXPORT cass_bool_t
 cass_future_wait_timed(CassFuture* future,
                        cass_duration_t timeout_us){

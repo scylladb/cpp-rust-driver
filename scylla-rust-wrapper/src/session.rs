@@ -125,6 +125,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
                 metadata: Arc::new(CassResultData {
                     paging_state: None,
                     col_specs: vec![],
+                    tracing_id: None,
                 }),
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
@@ -192,6 +193,7 @@ pub unsafe extern "C" fn cass_session_execute(
                 let metadata = Arc::new(CassResultData {
                     paging_state: result.paging_state,
                     col_specs: result.col_specs,
+                    tracing_id: result.tracing_id,
                 });
                 let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
                 let cass_result: CassResult_ = Arc::new(CassResult {

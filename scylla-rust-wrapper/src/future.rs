@@ -5,6 +5,7 @@ use crate::prepared::CassPrepared;
 use crate::query_error::{CassErrorResult, CassErrorResult_};
 use crate::query_result::{CassResult, CassResult_};
 use crate::types::*;
+use crate::uuid::CassUuid;
 use crate::RUNTIME;
 use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
@@ -229,4 +230,21 @@ pub unsafe extern "C" fn cass_future_get_prepared(
             }
         })
         .map_or(std::ptr::null(), Arc::into_raw)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_tracing_id(
+    future: *const CassFuture,
+    tracing_id: *mut CassUuid,
+) -> CassError {
+    ptr_to_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
+        Ok(CassResultValue::QueryResult(result)) => match result.metadata.tracing_id {
+            Some(id) => {
+                *tracing_id = CassUuid::from(id);
+                CassError::CASS_OK
+            }
+            None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
+        },
+        _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
+    })
 }

@@ -15,6 +15,7 @@ use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::slice;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
@@ -24,6 +25,7 @@ pub struct CassResult {
 pub struct CassResultData {
     pub paging_state: Option<Bytes>,
     pub col_specs: Vec<ColumnSpec>,
+    pub tracing_id: Option<Uuid>,
 }
 
 pub type CassResult_ = Arc<CassResult>;
