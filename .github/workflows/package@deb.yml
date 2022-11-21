@@ -1,0 +1,58 @@
+name: DEB Packaging
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup environment
+        run: |
+          sudo sh -c "echo 'deb http://security.ubuntu.com/ubuntu xenial-security main' >> /etc/apt/sources.list"
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev openssl cmake make g++ git devscripts debhelper dh-exec libssl-dev zlib1g-dev
+          git clone https://github.com/scylladb/cpp-driver.git
+          cp -r packaging cpp-driver/
+
+      - name: Build cpp-rust
+        run: |
+          cd scylla-rust-wrapper
+          cargo build --release
+
+      - name: Build deb (with debug symbols)
+        run: |
+          cp scylla-rust-wrapper/target/release/libscylla_cpp_driver.so cpp-driver/packaging/debian
+          cd cpp-driver/packaging
+          ./build_deb.sh
+
+      - name: Upload deb packages
+        uses: actions/upload-artifact@v3
+        if: success() || failure()
+        with:
+          name: deb-packages
+          path: |
+            cpp-driver/packaging/build/*.deb
+            cpp-driver/packaging/build/*.build*
+
+      - name: Build deb (without debug symbols)
+        run: |
+          strip scylla-rust-wrapper/target/release/libscylla_cpp_driver.so
+          cp scylla-rust-wrapper/target/release/libscylla_cpp_driver.so cpp-driver/packaging/debian
+          cd cpp-driver/packaging
+          ./build_deb.sh
+
+      - name: Upload deb package without debug symbols
+        uses: actions/upload-artifact@v3
+        if: success() || failure()
+        with:
+          name: deb-packages
+          path: "cpp-driver/packaging/build/scylla-cpp-driver_*.deb"

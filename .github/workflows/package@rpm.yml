@@ -1,0 +1,66 @@
+name: RPM Packaging
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fedora-job:
+    runs-on: ubuntu-latest
+    container: fedora:35
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup environment
+        run: |
+          sudo yum install -y libuv-devel openssl-devel cmake3 make g++ git curl clang rpm-build zlib-devel
+          sudo dnf install -y rust cargo
+          git clone https://github.com/scylladb/cpp-driver.git
+          cp -r packaging cpp-driver/
+
+      - name: Build cpp-rust
+        run: |
+          cd scylla-rust-wrapper
+          cargo build --release
+
+      - name: Build rpm (with debug symbols)
+        run: |
+          cp scylla-rust-wrapper/target/release/libscylla_cpp_driver.so cpp-driver/packaging
+          cd cpp-driver
+          cp licenses/apache-2.0.txt LICENSE.txt
+          cd packaging
+          ./build_rpm.sh
+          cd build/RPMS/x86_64
+          for f in scylla-cpp-driver*.rpm; do
+            if ! [[ $f == *"devel"* ]] 
+            then
+              new=`echo $f | sed -e 's/driver/driver-debuginfo/'`
+              mv $f $new
+            fi
+          done
+
+      - name: Upload rpm packages
+        uses: actions/upload-artifact@v3
+        if: success() || failure()
+        with:
+          name: rpm-packages
+          path: "cpp-driver/packaging/build/RPMS/*/*.rpm"
+
+      - name: Build rpm (without debug symbols)
+        run: |
+          strip scylla-rust-wrapper/target/release/libscylla_cpp_driver.so
+          cp scylla-rust-wrapper/target/release/libscylla_cpp_driver.so cpp-driver/packaging
+          cd cpp-driver/packaging
+          ./build_rpm.sh
+
+      - name: Upload rpm package without debug symbols
+        uses: actions/upload-artifact@v3
+        if: success() || failure()
+        with:
+          name: rpm-packages
+          path: "cpp-driver/packaging/build/RPMS/*/scylla-cpp-driver-*.rpm"
