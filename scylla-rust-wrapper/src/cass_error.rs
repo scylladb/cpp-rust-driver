@@ -6,14 +6,13 @@ impl From<&QueryError> for CassError {
     fn from(error: &QueryError) -> Self {
         match error {
             QueryError::DbError(db_error, _string) => CassError::from(db_error),
-            // FIXME: CASS_ERROR_LAST_ENTRY as placeholder for a correct error
-            QueryError::BadQuery(_bad_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::IoError(_io_error) => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::ProtocolError(_str) => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::InvalidMessage(_string) => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
-            QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
+            QueryError::BadQuery(bad_query) => CassError::from(bad_query),
+            QueryError::IoError(_io_error) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            QueryError::ProtocolError(_str) => CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR,
+            QueryError::InvalidMessage(_string) => CassError::CASS_ERROR_SERVER_INVALID_QUERY,
+            QueryError::TimeoutError => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT, // This may be either read or write timeout error
+            QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
         }
     }
@@ -43,6 +42,8 @@ impl From<&DbError> for CassError {
             DbError::Other(num) => {
                 CassError((CassErrorSource::CASS_ERROR_SOURCE_SERVER.0 << 24) | *num as u32)
             }
+            // TODO: add appropriate error if rate limit reached
+            DbError::RateLimitReached { .. } => CassError::CASS_ERROR_SERVER_UNAVAILABLE,
         }
     }
 }

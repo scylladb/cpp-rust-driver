@@ -782,8 +782,8 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "scylla"
-version = "0.5.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=4930a1a55a13014ec82583157c56e3fe3418f5b2#4930a1a55a13014ec82583157c56e3fe3418f5b2"
+version = "0.6.1"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -834,8 +834,8 @@ dependencies = [
 
 [[package]]
 name = "scylla-cql"
-version = "0.0.1"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=4930a1a55a13014ec82583157c56e3fe3418f5b2#4930a1a55a13014ec82583157c56e3fe3418f5b2"
+version = "0.0.2"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
 dependencies = [
  "bigdecimal",
  "byteorder",
@@ -854,7 +854,7 @@ dependencies = [
 [[package]]
 name = "scylla-macros"
 version = "0.1.1"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=4930a1a55a13014ec82583157c56e3fe3418f5b2#4930a1a55a13014ec82583157c56e3fe3418f5b2"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
 dependencies = [
  "quote",
  "syn",

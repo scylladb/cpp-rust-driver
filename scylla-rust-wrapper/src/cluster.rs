@@ -20,7 +20,10 @@ use std::sync::Arc;
 #[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
     RoundRobinPolicy,
-    DcAwareRoundRobinPolicy { local_dc: String },
+    DcAwareRoundRobinPolicy {
+        local_dc: String,
+        include_remote_nodes: bool,
+    },
 }
 
 #[derive(Clone)]
@@ -54,13 +57,17 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
                     Arc::new(RoundRobinPolicy::new())
                 }
             }
-            CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy { local_dc } => {
+            CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
+                local_dc,
+                include_remote_nodes,
+            } => {
+                let mut dc_aware_policy = DcAwareRoundRobinPolicy::new(local_dc);
+                dc_aware_policy.set_include_remote_nodes(include_remote_nodes);
+
                 if cluster.token_aware_policy_enabled {
-                    Arc::new(TokenAwarePolicy::new(Box::new(
-                        DcAwareRoundRobinPolicy::new(local_dc),
-                    )))
+                    Arc::new(TokenAwarePolicy::new(Box::new(dc_aware_policy)))
                 } else {
-                    Arc::new(DcAwareRoundRobinPolicy::new(local_dc))
+                    Arc::new(dc_aware_policy)
                 }
             }
         };
@@ -83,6 +90,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         // defaults to using Datacenter-aware load balancing with token-aware routing.
         child_load_balancing_policy: CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
             local_dc: "".to_string(),
+            include_remote_nodes: true,
         },
         token_aware_policy_enabled: true,
         use_beta_protocol_version: false,
@@ -154,10 +162,11 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
-    _cluster_raw: *mut CassCluster,
-    _enabled: cass_bool_t,
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
 ) {
-    // FIXME: should set `use_schema` flag in cluster config
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    cluster.session_builder.config.fetch_schema_metadata = enabled != 0;
 }
 
 #[no_mangle]
@@ -183,8 +192,12 @@ pub unsafe extern "C" fn cass_cluster_set_port(
     cluster_raw: *mut CassCluster,
     port: c_int,
 ) -> CassError {
+    if port <= 0 {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.port = port as u16; // FIXME: validate port number
+    cluster.port = port as u16;
     CassError::CASS_OK
 }
 
@@ -247,23 +260,28 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     cluster_raw: *mut CassCluster,
     local_dc_raw: *const c_char,
     local_dc_length: size_t,
-    _used_hosts_per_remote_dc: c_uint,
-    _allow_remote_dcs_for_local_cl: cass_bool_t,
+    used_hosts_per_remote_dc: c_uint,
+    allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
     if local_dc_raw.is_null() || local_dc_length == 0 {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    // FIXME: used_hosts_per_remote_dc, allow_remote_dcs_for_local_cl ignored
-    // as there is no equivalent configuration in Rust Driver.
-    // TODO: string error handling
+    if used_hosts_per_remote_dc != 0 {
+        // TODO: Add warning that the parameter is deprecated and not supported in the driver.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
     let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length)
         .unwrap()
         .to_string();
 
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.child_load_balancing_policy =
-        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy { local_dc };
+        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
+            local_dc,
+            include_remote_nodes: allow_remote_dcs_for_local_cl != 0,
+        };
 
     CassError::CASS_OK
 }
