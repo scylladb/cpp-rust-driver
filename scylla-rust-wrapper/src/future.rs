@@ -106,7 +106,7 @@ impl CassFuture {
             .wait_for_value
             .wait_while(self.state.lock().unwrap(), |s| s.value.is_none())
             .unwrap();
-        f(&mut *guard)
+        f(&mut guard)
     }
 
     pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
