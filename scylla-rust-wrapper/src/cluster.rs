@@ -8,6 +8,7 @@ use crate::types::*;
 use core::time::Duration;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
+use scylla::frame::Compression;
 use scylla::load_balancing::{
     DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
 };
@@ -16,6 +17,8 @@ use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
+
+include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 
 #[derive(Clone)]
 enum CassClusterChildLoadBalancingPolicy {
@@ -457,4 +460,19 @@ pub unsafe extern "C" fn cass_cluster_set_ssl(cluster: *mut CassCluster, ssl: *m
     SSL_CTX_up_ref(cass_ssl.ssl_context);
 
     cluster_from_raw.session_builder.config.ssl_context = Some(ssl_context_builder.build());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_compression(
+    cluster: *mut CassCluster,
+    compression_type: CassCompressionType,
+) {
+    let cluster_from_raw = ptr_to_ref_mut(cluster);
+    let compression = match compression_type {
+        CassCompressionType::CASS_COMPRESSION_LZ4 => Some(Compression::Lz4),
+        CassCompressionType::CASS_COMPRESSION_SNAPPY => Some(Compression::Snappy),
+        _ => None,
+    };
+
+    cluster_from_raw.session_builder.config.compression = compression;
 }

@@ -913,6 +913,12 @@ typedef void(*CassHostListenerCallback)(CassHostListenerEvent event,
                                         const CassInet address,
                                         void* data);
 
+typedef enum CassCompressionType_ {
+  CASS_COMPRESSION_LZ4,
+  CASS_COMPRESSION_SNAPPY,
+  CASS_COMPRESSION_NONE
+} CassCompressionType;
+
 /***********************************************************************************
  *
  * Execution Profile
@@ -2950,6 +2956,20 @@ cass_cluster_set_client_id(CassCluster* cluster, CassUuid client_id);
 CASS_EXPORT void
 cass_cluster_set_monitor_reporting_interval(CassCluster* cluster,
                                             unsigned interval_secs);
+
+/**
+ * Sets the preferred compression algorithm.
+ * <b>Default:</b> no compression.
+ * If it is not supported by database server Session will fall back to no compression.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] compression_type
+ */
+CASS_EXPORT void
+cass_cluster_set_compression(CassCluster* cluster,
+                             CassCompressionType compression_type);
 
 /***********************************************************************************
  *

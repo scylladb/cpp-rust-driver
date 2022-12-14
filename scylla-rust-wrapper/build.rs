@@ -110,4 +110,9 @@ fn main() {
         &["CassValueType_", "CassValueType"],
         &out_path,
     );
+    prepare_cppdriver_data(
+        "cppdriver_compression_types.rs",
+        &["CassCompressionType_", "CassCompressionType"],
+        &out_path,
+    );
 }
