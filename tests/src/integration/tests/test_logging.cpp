@@ -34,6 +34,8 @@ CASSANDRA_INTEGRATION_TEST_F(LoggingTests, Callback) {
 
   bool is_triggered = false;
   cass_log_set_callback(LoggingTests::log, &is_triggered);
+  // This will emit a log event in on debug level which will trigger the `log` callback.
+  cass_log_set_level(CASS_LOG_DEBUG);
   default_cluster().connect("", false);
   EXPECT_TRUE(is_triggered);
 }

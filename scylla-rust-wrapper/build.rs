@@ -91,6 +91,16 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
+        "cppdriver_log.rs",
+        &[
+            "CassLogLevel_",
+            "CassLogLevel",
+            "CassLogMessage_",
+            "CassLogMessage",
+        ],
+        &out_path,
+    );
+    prepare_cppdriver_data(
         "cppdriver_data_query_error.rs",
         &[
             "CassConsistency_",

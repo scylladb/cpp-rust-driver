@@ -1,4 +1,5 @@
 use crate::types::size_t;
+use std::cmp::min;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -36,6 +37,29 @@ pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
 
 pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     std::str::from_utf8(std::slice::from_raw_parts(ptr as *const u8, size as usize)).ok()
+}
+
+pub unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
+    let null_char = '\0' as c_char;
+    let end_index = arr[..N].iter().position(|c| c == &null_char).unwrap_or(N);
+    ptr_to_cstr_n(arr.as_ptr(), end_index as size_t)
+}
+
+pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
+    let mut result = ['\0' as c_char; N];
+
+    // Max length must be null-terminated
+    let mut max_len = min(N - 1, s.as_bytes().len());
+
+    while !s.is_char_boundary(max_len) {
+        max_len -= 1;
+    }
+
+    for (i, c) in s.as_bytes().iter().enumerate().take(max_len) {
+        result[i] = *c as c_char;
+    }
+
+    result
 }
 
 pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
