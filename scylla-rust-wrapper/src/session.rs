@@ -586,7 +586,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
         .user_defined_type_data_type
         .get(user_type_name)
     {
-        Some(udt) => Arc::into_raw(udt.clone()) as *const CassDataType,
+        Some(udt) => Arc::as_ptr(udt) as *const CassDataType,
         None => std::ptr::null(),
     }
 }
