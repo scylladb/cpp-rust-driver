@@ -2,7 +2,7 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
 use crate::inet::CassInet;
-use crate::session::{
+use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassKeyspaceMeta_, CassSchemaMeta, CassSchemaMeta_,
     CassTableMeta, CassTableMeta_,
 };

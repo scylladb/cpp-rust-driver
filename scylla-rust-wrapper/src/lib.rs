@@ -20,6 +20,7 @@ mod external;
 pub mod future;
 pub mod inet;
 mod logging;
+pub mod metadata;
 pub mod prepared;
 pub mod query_error;
 pub mod query_result;
