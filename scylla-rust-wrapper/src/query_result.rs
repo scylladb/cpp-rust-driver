@@ -486,9 +486,7 @@ pub unsafe extern "C" fn cass_iterator_get_user_type(
             .nth(iter_position);
 
         return match udt_to_type_entry_opt {
-            Some(udt_to_type_entry) => {
-                Arc::into_raw(udt_to_type_entry.1.clone()) as *const CassDataType
-            }
+            Some(udt_to_type_entry) => Arc::as_ptr(udt_to_type_entry.1),
             None => std::ptr::null(),
         };
     }
