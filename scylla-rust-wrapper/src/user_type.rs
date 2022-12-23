@@ -2,7 +2,6 @@ use crate::argconv::*;
 use crate::binding::is_compatible_type;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
-use crate::cass_types::CassDataTypeArc;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use std::os::raw::c_char;
@@ -10,7 +9,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct CassUserType {
-    pub data_type: CassDataTypeArc,
+    pub data_type: Arc<CassDataType>,
 
     // Vec to preserve the order of fields
     pub field_values: Vec<Option<CqlValue>>,

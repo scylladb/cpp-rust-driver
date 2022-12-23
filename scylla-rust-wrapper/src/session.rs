@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, CassDataTypeArc, UDTDataType};
+use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
@@ -9,9 +9,7 @@ use crate::logging::init_logging;
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
 use crate::query_result::Value::{CollectionValue, RegularValue};
-use crate::query_result::{
-    CassResult, CassResultData, CassResult_, CassRow, CassValue, Collection, Value,
-};
+use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collection, Value};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
@@ -28,13 +26,12 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 
 pub type CassSession = RwLock<Option<Session>>;
-type CassSession_ = Arc<CassSession>;
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *const CassSession {
     init_logging();
 
-    let session: CassSession_ = Arc::new(RwLock::new(None));
+    let session = Arc::new(RwLock::new(None));
     Arc::into_raw(session)
 }
 
@@ -165,7 +162,7 @@ pub unsafe extern "C" fn cass_session_execute(
                     tracing_id: result.tracing_id,
                 });
                 let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
-                let cass_result: CassResult_ = Arc::new(CassResult {
+                let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
                     metadata,
                 });
@@ -214,7 +211,7 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
         .collect()
 }
 
-fn get_column_value(column: CqlValue, column_type: &CassDataTypeArc) -> Value {
+fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
     match (column, column_type.as_ref()) {
         (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
             CollectionValue(Collection::List(

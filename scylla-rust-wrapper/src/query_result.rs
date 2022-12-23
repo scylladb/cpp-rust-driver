@@ -1,10 +1,9 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeArc, CassValueType};
+use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
-    CassColumnMeta, CassKeyspaceMeta, CassKeyspaceMeta_, CassMaterializedViewMeta,
-    CassMaterializedViewMeta_, CassSchemaMeta, CassSchemaMeta_, CassTableMeta, CassTableMeta_,
+    CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
 use crate::statement::CassStatement;
 use crate::types::*;
@@ -28,15 +27,8 @@ pub struct CassResultData {
     pub tracing_id: Option<Uuid>,
 }
 
-pub type CassResult_ = Arc<CassResult>;
-
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
-pub type CassRow_ = &'static CassRow;
-
-/// The lifetime of CassValue is bound to CassRow.
-pub type CassValue_ = &'static CassValue;
-
 pub struct CassRow {
     pub columns: Vec<CassValue>,
     pub result_metadata: Arc<CassResultData>,
@@ -61,57 +53,57 @@ pub enum Collection {
 
 pub struct CassValue {
     pub value: Option<Value>,
-    pub value_type: CassDataTypeArc,
+    pub value_type: Arc<CassDataType>,
 }
 
 pub struct CassResultIterator {
-    result: CassResult_,
+    result: Arc<CassResult>,
     position: Option<usize>,
 }
 
 pub struct CassRowIterator {
-    row: CassRow_,
+    row: &'static CassRow,
     position: Option<usize>,
 }
 
 pub struct CassCollectionIterator {
-    value: CassValue_,
+    value: &'static CassValue,
     count: u64,
     position: Option<usize>,
 }
 
 pub struct CassMapIterator {
-    value: CassValue_,
+    value: &'static CassValue,
     count: u64,
     position: Option<usize>,
 }
 
 pub struct CassUdtIterator {
-    value: CassValue_,
+    value: &'static CassValue,
     count: u64,
     position: Option<usize>,
 }
 
 pub struct CassSchemaMetaIterator {
-    value: CassSchemaMeta_,
+    value: &'static CassSchemaMeta,
     count: usize,
     position: Option<usize>,
 }
 
 pub struct CassKeyspaceMetaIterator {
-    value: CassKeyspaceMeta_,
+    value: &'static CassKeyspaceMeta,
     count: usize,
     position: Option<usize>,
 }
 
 pub struct CassTableMetaIterator {
-    value: CassTableMeta_,
+    value: &'static CassTableMeta,
     count: usize,
     position: Option<usize>,
 }
 
 pub struct CassViewMetaIterator {
-    value: CassMaterializedViewMeta_,
+    value: &'static CassMaterializedViewMeta,
     count: usize,
     position: Option<usize>,
 }
@@ -605,7 +597,7 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
-    let result_from_raw: CassResult_ = clone_arced(result);
+    let result_from_raw = clone_arced(result);
 
     let iterator = CassResultIterator {
         result: result_from_raw,
@@ -617,7 +609,7 @@ pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) ->
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut CassIterator {
-    let row_from_raw: CassRow_ = ptr_to_ref(row);
+    let row_from_raw = ptr_to_ref(row);
 
     let iterator = CassRowIterator {
         row: row_from_raw,

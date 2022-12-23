@@ -17,7 +17,7 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
 #[derive(Clone, Debug)]
 pub struct UDTDataType {
     // Vec to preserve the order of types
-    pub field_types: Vec<(String, CassDataTypeArc)>,
+    pub field_types: Vec<(String, Arc<CassDataType>)>,
 
     pub keyspace: String,
     pub name: String,
@@ -66,18 +66,18 @@ impl UDTDataType {
         }
     }
 
-    pub fn add_field(&mut self, name: String, field_type: CassDataTypeArc) {
+    pub fn add_field(&mut self, name: String, field_type: Arc<CassDataType>) {
         self.field_types.push((name, field_type));
     }
 
-    pub fn get_field_by_name(&self, name: &str) -> Option<&CassDataTypeArc> {
+    pub fn get_field_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
         self.field_types
             .iter()
             .find(|(field_name, _)| field_name == name)
             .map(|(_, t)| t)
     }
 
-    pub fn get_field_by_index(&self, index: usize) -> Option<&CassDataTypeArc> {
+    pub fn get_field_by_index(&self, index: usize) -> Option<&Arc<CassDataType>> {
         self.field_types.get(index).map(|(_, b)| b)
     }
 }
@@ -92,14 +92,12 @@ impl Default for UDTDataType {
 pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
-    List(Option<CassDataTypeArc>),
-    Set(Option<CassDataTypeArc>),
-    Map(Option<CassDataTypeArc>, Option<CassDataTypeArc>),
-    Tuple(Vec<CassDataTypeArc>),
+    List(Option<Arc<CassDataType>>),
+    Set(Option<Arc<CassDataType>>),
+    Map(Option<Arc<CassDataType>>, Option<Arc<CassDataType>>),
+    Tuple(Vec<Arc<CassDataType>>),
     Custom(String),
 }
-
-pub type CassDataTypeArc = Arc<CassDataType>;
 
 impl From<NativeType> for CassValueType {
     fn from(native_type: NativeType) -> CassValueType {
@@ -174,7 +172,7 @@ pub fn get_column_type_from_cql_type(
 }
 
 impl CassDataType {
-    fn get_sub_data_type(&self, index: usize) -> Option<&CassDataTypeArc> {
+    fn get_sub_data_type(&self, index: usize) -> Option<&Arc<CassDataType>> {
         match self {
             CassDataType::UDT(udt_data_type) => udt_data_type
                 .field_types
@@ -197,7 +195,7 @@ impl CassDataType {
         }
     }
 
-    fn add_sub_data_type(&mut self, sub_type: CassDataTypeArc) -> Result<(), CassError> {
+    fn add_sub_data_type(&mut self, sub_type: Arc<CassDataType>) -> Result<(), CassError> {
         match self {
             CassDataType::List(t) | CassDataType::Set(t) => match t {
                 Some(_) => Err(CassError::CASS_ERROR_LIB_BAD_PARAMS),
@@ -509,7 +507,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type(
     index: size_t,
 ) -> *const CassDataType {
     let data_type = ptr_to_ref(data_type);
-    let sub_type: Option<&CassDataTypeArc> = data_type.get_sub_data_type(index as usize);
+    let sub_type: Option<&Arc<CassDataType>> = data_type.get_sub_data_type(index as usize);
 
     match sub_type {
         None => std::ptr::null(),
