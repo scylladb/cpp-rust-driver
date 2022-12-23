@@ -97,3 +97,77 @@ macro_rules! make_c_str {
 
 #[cfg(test)]
 pub(crate) use make_c_str;
+
+/// Defines a pointer manipulation API for non-shared heap-allocated data.
+///
+/// Implement this trait for types that are allocated by the driver via [`Box::new`],
+/// and then returned to the user as a pointer. The user is responsible for freeing
+/// the memory associated with the pointer using corresponding driver's API function.
+pub trait BoxFFI {
+    fn into_ptr(self: Box<Self>) -> *mut Self {
+        Box::into_raw(self)
+    }
+    unsafe fn from_ptr(ptr: *mut Self) -> Box<Self> {
+        Box::from_raw(ptr)
+    }
+    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
+        ptr.as_ref()
+    }
+    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        ptr.as_ref().unwrap()
+    }
+    unsafe fn as_mut_ref<'a>(ptr: *mut Self) -> &'a mut Self {
+        ptr.as_mut().unwrap()
+    }
+    unsafe fn free(ptr: *mut Self) {
+        std::mem::drop(BoxFFI::from_ptr(ptr));
+    }
+}
+
+/// Defines a pointer manipulation API for shared heap-allocated data.
+///
+/// Implement this trait for types that require a shared ownership of data.
+/// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
+/// The user is responsible for freeing the memory associated
+/// with the pointer using corresponding driver's API function.
+pub trait ArcFFI {
+    fn as_ptr(self: &Arc<Self>) -> *const Self {
+        Arc::as_ptr(self)
+    }
+    fn into_ptr(self: Arc<Self>) -> *const Self {
+        Arc::into_raw(self)
+    }
+    unsafe fn from_ptr(ptr: *const Self) -> Arc<Self> {
+        Arc::from_raw(ptr)
+    }
+    unsafe fn cloned_from_ptr(ptr: *const Self) -> Arc<Self> {
+        Arc::increment_strong_count(ptr);
+        Arc::from_raw(ptr)
+    }
+    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
+        ptr.as_ref()
+    }
+    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        ptr.as_ref().unwrap()
+    }
+    unsafe fn free(ptr: *const Self) {
+        std::mem::drop(ArcFFI::from_ptr(ptr));
+    }
+}
+
+/// Defines a pointer manipulation API for data owned by some other object.
+///
+/// Implement this trait for the types that do not need to be freed (directly) by the user.
+/// The lifetime of the data is bound to some other object owning it.
+///
+/// For example: lifetime of CassRow is bound by the lifetime of CassResult.
+/// There is no API function that frees the CassRow. It should be automatically
+/// freed when user calls cass_result_free.
+pub trait RefFFI {
+    fn as_ptr(&self) -> *const Self {
+        self as *const Self
+    }
+    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        ptr.as_ref().unwrap()
+    }
+}
