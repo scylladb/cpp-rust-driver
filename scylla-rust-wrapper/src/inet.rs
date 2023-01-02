@@ -75,8 +75,6 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
     input_length: size_t,
     inet_raw: *mut CassInet,
 ) -> CassError {
-    let inet = ptr_to_ref_mut(inet_raw);
-
     let input = ptr_to_cstr_n(input_raw, input_length);
     if input.is_none() {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
@@ -87,7 +85,7 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
 
     match ip_addr {
         Ok(ip_addr) => {
-            *inet = ip_addr.into();
+            std::ptr::write(inet_raw, ip_addr.into());
             CassError::CASS_OK
         }
         Err(_) => CassError::CASS_ERROR_LIB_BAD_PARAMS,
