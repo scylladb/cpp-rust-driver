@@ -225,7 +225,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
         <tr>
             <td>cass_keyspace_meta_is_virtual</td>
-            <td rowspan="7">Currently, fetching metadata information is under review and is not merged yet:<br> &bull; <a href="https://github.com/scylladb/cpp-rust-driver/pull/72">Schema metadata</a> <br> &bull; <a href="https://github.com/scylladb/cpp-rust-driver/pull/76">Materialized View</a> <br> UDF, Aggregate and Index are not supported in the Rust driver, yet. </td>
+            <td rowspan="7"> UDF, Aggregate and Index are not supported in the Rust driver, yet. </td>
         </tr>
         <tr>
             <td>cass_table_meta_is_virtual</td>

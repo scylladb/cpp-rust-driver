@@ -381,20 +381,6 @@ CASS_EXPORT cass_bool_t
 cass_keyspace_meta_is_virtual(const CassKeyspaceMeta* keyspace_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_is_virtual\n");
 }
-CASS_EXPORT const CassMaterializedViewMeta*
-cass_keyspace_meta_materialized_view_by_name(const CassKeyspaceMeta* keyspace_meta,
-                                             const char* view){
-	throw std::runtime_error("UNIMPLEMENTED cass_keyspace_meta_materialized_view_by_name\n");
-}
-CASS_EXPORT const CassTableMeta*
-cass_materialized_view_meta_base_table(const CassMaterializedViewMeta* view_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_materialized_view_meta_base_table\n");
-}
-CASS_EXPORT const CassColumnMeta*
-cass_materialized_view_meta_column_by_name(const CassMaterializedViewMeta* view_meta,
-                                           const char* column){
-	throw std::runtime_error("UNIMPLEMENTED cass_materialized_view_meta_column_by_name\n");
-}
 CASS_EXPORT const CassValue*
 cass_materialized_view_meta_field_by_name(const CassMaterializedViewMeta* view_meta,
                                           const char* name){
@@ -536,15 +522,6 @@ cass_table_meta_index_count(const CassTableMeta* table_meta){
 CASS_EXPORT cass_bool_t
 cass_table_meta_is_virtual(const CassTableMeta* table_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_is_virtual\n");
-}
-CASS_EXPORT const CassMaterializedViewMeta*
-cass_table_meta_materialized_view_by_name(const CassTableMeta* table_meta,
-                                          const char* view){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_materialized_view_by_name\n");
-}
-CASS_EXPORT size_t
-cass_table_meta_materialized_view_count(const CassTableMeta* table_meta){
-	throw std::runtime_error("UNIMPLEMENTED cass_table_meta_materialized_view_count\n");
 }
 CASS_EXPORT CassError
 cass_tuple_set_custom(CassTuple* tuple,

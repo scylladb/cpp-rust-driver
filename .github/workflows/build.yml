@@ -40,7 +40,7 @@ jobs:
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
 :ErrorTests.*\
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator\
+:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
