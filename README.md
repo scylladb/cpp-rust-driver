@@ -145,9 +145,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td rowspan="3">Unimplemented</td>
         </tr>
         <tr>
-            <td>cass_future_tracing_id</td>
-        </tr>
-        <tr>
             <td>cass_future_coordinator</td>
         </tr>
         <tr>
