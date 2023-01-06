@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, CassDataType, CassDataTypeInner, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -1173,10 +1173,10 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 ) -> CassValueType {
     let val = ptr_to_ref(collection);
 
-    match val.value_type.as_ref() {
-        CassDataType::List(Some(list)) => list.get_value_type(),
-        CassDataType::Set(Some(set)) => set.get_value_type(),
-        CassDataType::Map(Some(key), _) => key.get_value_type(),
+    match val.value_type.as_ref().get_unchecked() {
+        CassDataTypeInner::List(Some(list)) => list.get_unchecked().get_value_type(),
+        CassDataTypeInner::Set(Some(set)) => set.get_unchecked().get_value_type(),
+        CassDataTypeInner::Map(Some(key), _) => key.get_unchecked().get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
@@ -1187,8 +1187,8 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 ) -> CassValueType {
     let val = ptr_to_ref(collection);
 
-    match val.value_type.as_ref() {
-        CassDataType::Map(_, Some(value)) => value.get_value_type(),
+    match val.value_type.as_ref().get_unchecked() {
+        CassDataTypeInner::Map(_, Some(value)) => value.get_unchecked().get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }

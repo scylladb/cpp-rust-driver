@@ -2,12 +2,13 @@ use crate::argconv::*;
 use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
+use crate::cass_types::CassDataTypeInner;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
+static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Tuple(Vec::new()));
 
 #[derive(Clone)]
 pub struct CassTuple {
@@ -18,8 +19,8 @@ pub struct CassTuple {
 impl CassTuple {
     fn get_types(&self) -> Option<&Vec<Arc<CassDataType>>> {
         match &self.data_type {
-            Some(t) => match &**t {
-                CassDataType::Tuple(v) => Some(v),
+            Some(t) => match unsafe { t.as_ref().get_unchecked() } {
+                CassDataTypeInner::Tuple(v) => Some(v),
                 _ => unreachable!(),
             },
             None => None,
@@ -69,8 +70,8 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: *const CassDataType,
 ) -> *mut CassTuple {
     let data_type = clone_arced(data_type);
-    let item_count = match &*data_type {
-        CassDataType::Tuple(v) => v.len(),
+    let item_count = match data_type.get_unchecked() {
+        CassDataTypeInner::Tuple(v) => v.len(),
         _ => return std::ptr::null_mut(),
     };
     Box::into_raw(Box::new(CassTuple {

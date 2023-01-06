@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{get_column_type, CassDataType, CassDataTypeInner, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
@@ -212,8 +212,9 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
 }
 
 fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
-    match (column, column_type.as_ref()) {
-        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
+    let column_type_inner = unsafe { column_type.as_ref().get_unchecked() };
+    match (column, column_type_inner) {
+        (CqlValue::List(list), CassDataTypeInner::List(Some(list_type))) => {
             CollectionValue(Collection::List(
                 list.into_iter()
                     .map(|val| CassValue {
@@ -223,7 +224,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                     .collect(),
             ))
         }
-        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
+        (CqlValue::Map(map), CassDataTypeInner::Map(Some(key_type), Some(value_type))) => {
             CollectionValue(Collection::Map(
                 map.into_iter()
                     .map(|(key, val)| {
@@ -241,7 +242,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                     .collect(),
             ))
         }
-        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
+        (CqlValue::Set(set), CassDataTypeInner::Set(Some(set_type))) => {
             CollectionValue(Collection::Set(
                 set.into_iter()
                     .map(|val| CassValue {
@@ -257,7 +258,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                 type_name,
                 fields,
             },
-            CassDataType::UDT(udt_type),
+            CassDataTypeInner::UDT(udt_type),
         ) => CollectionValue(Collection::UserDefinedType {
             keyspace,
             type_name,
@@ -279,7 +280,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                 })
                 .collect(),
         }),
-        (CqlValue::Tuple(tuple), CassDataType::Tuple(tuple_types)) => {
+        (CqlValue::Tuple(tuple), CassDataTypeInner::Tuple(tuple_types)) => {
             CollectionValue(Collection::Tuple(
                 tuple
                     .into_iter()
@@ -422,7 +423,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                Arc::new(CassDataType::UDT(UDTDataType::create_with_params(
+                CassDataType::new_alloc(CassDataTypeInner::UDT(UDTDataType::create_with_params(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,
