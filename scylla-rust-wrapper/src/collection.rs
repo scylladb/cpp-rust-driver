@@ -1,6 +1,6 @@
 use crate::cass_collection_types::CassCollectionType;
 use crate::cass_error::CassError;
-use crate::cass_types::{CassDataType, MapDataType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, MapDataType};
 use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
@@ -8,18 +8,18 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 // These constants help us to save an allocation in case user calls `cass_collection_new` (untyped collection).
-static UNTYPED_LIST_TYPE: CassDataType = CassDataType::List {
+static UNTYPED_LIST_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::List {
     typ: None,
     frozen: false,
-};
-static UNTYPED_SET_TYPE: CassDataType = CassDataType::Set {
+});
+static UNTYPED_SET_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Set {
     typ: None,
     frozen: false,
-};
-static UNTYPED_MAP_TYPE: CassDataType = CassDataType::Map {
+});
+static UNTYPED_MAP_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Map {
     typ: MapDataType::Untyped,
     frozen: false,
-};
+});
 
 #[derive(Clone)]
 pub struct CassCollection {
@@ -35,10 +35,14 @@ impl CassCollection {
         let index = self.items.len();
 
         // Do validation only if it's a typed collection.
-        if let Some(data_type) = &self.data_type {
-            match data_type.as_ref() {
-                CassDataType::List { typ: subtype, .. }
-                | CassDataType::Set { typ: subtype, .. } => {
+        if let Some(data_type) = &self
+            .data_type
+            .as_ref()
+            .map(|dt| unsafe { dt.get_unchecked() })
+        {
+            match data_type {
+                CassDataTypeInner::List { typ: subtype, .. }
+                | CassDataTypeInner::Set { typ: subtype, .. } => {
                     if let Some(subtype) = subtype {
                         if !value::is_type_compatible(value, subtype) {
                             return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
@@ -46,7 +50,7 @@ impl CassCollection {
                     }
                 }
 
-                CassDataType::Map { typ, .. } => {
+                CassDataTypeInner::Map { typ, .. } => {
                     // Cpp-driver does the typecheck only if both map types are present...
                     // However, we decided not to mimic this behaviour (which is probably a bug).
                     // We will do the typecheck if just the key type is defined as well (half-typed maps).
@@ -146,12 +150,16 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     item_count: size_t,
 ) -> *mut CassCollection {
     let data_type = clone_arced(data_type);
-    let (capacity, collection_type) = match data_type.as_ref() {
-        CassDataType::List { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST),
-        CassDataType::Set { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_SET),
+    let (capacity, collection_type) = match data_type.get_unchecked() {
+        CassDataTypeInner::List { .. } => {
+            (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
+        }
+        CassDataTypeInner::Set { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_SET),
         // Maps consist of a key and a value, so twice
         // the number of CassCqlValue will be stored.
-        CassDataType::Map { .. } => (item_count * 2, CassCollectionType::CASS_COLLECTION_TYPE_MAP),
+        CassDataTypeInner::Map { .. } => {
+            (item_count * 2, CassCollectionType::CASS_COLLECTION_TYPE_MAP)
+        }
         _ => return std::ptr::null_mut(),
     };
     let capacity = capacity as usize;
@@ -216,7 +224,7 @@ mod tests {
 
     use crate::{
         cass_error::CassError,
-        cass_types::{CassDataType, CassValueType, MapDataType},
+        cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType},
         collection::{
             cass_collection_append_double, cass_collection_append_float, cass_collection_free,
         },
@@ -256,7 +264,7 @@ mod tests {
 
             // untyped map (via cass_collection_new_from_data_type - collection's type is Some(untyped_map)).
             {
-                let dt = Arc::new(CassDataType::Map {
+                let dt = CassDataType::new_arced(CassDataTypeInner::Map {
                     typ: MapDataType::Untyped,
                     frozen: false,
                 });
@@ -285,8 +293,8 @@ mod tests {
 
             // half-typed map (key-only)
             {
-                let dt = Arc::new(CassDataType::Map {
-                    typ: MapDataType::Key(Arc::new(CassDataType::Value(
+                let dt = CassDataType::new_arced(CassDataTypeInner::Map {
+                    typ: MapDataType::Key(CassDataType::new_arced(CassDataTypeInner::Value(
                         CassValueType::CASS_VALUE_TYPE_BOOLEAN,
                     ))),
                     frozen: false,
@@ -324,10 +332,12 @@ mod tests {
 
             // typed map
             {
-                let dt = Arc::new(CassDataType::Map {
+                let dt = CassDataType::new_arced(CassDataTypeInner::Map {
                     typ: MapDataType::KeyAndValue(
-                        Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN)),
-                        Arc::new(CassDataType::Value(
+                        CassDataType::new_arced(CassDataTypeInner::Value(
+                            CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+                        )),
+                        CassDataType::new_arced(CassDataTypeInner::Value(
                             CassValueType::CASS_VALUE_TYPE_SMALL_INT,
                         )),
                     ),
@@ -383,7 +393,7 @@ mod tests {
 
             // untyped set (via cass_collection_new_from_data_type, collection's type is Some(untyped_set))
             {
-                let dt = Arc::new(CassDataType::Set {
+                let dt = CassDataType::new_arced(CassDataTypeInner::Set {
                     typ: None,
                     frozen: false,
                 });
@@ -404,8 +414,8 @@ mod tests {
 
             // typed set
             {
-                let dt = Arc::new(CassDataType::Set {
-                    typ: Some(Arc::new(CassDataType::Value(
+                let dt = CassDataType::new_arced(CassDataTypeInner::Set {
+                    typ: Some(CassDataType::new_arced(CassDataTypeInner::Value(
                         CassValueType::CASS_VALUE_TYPE_BOOLEAN,
                     ))),
                     frozen: false,
@@ -443,7 +453,7 @@ mod tests {
 
             // untyped list (via cass_collection_new_from_data_type, collection's type is Some(untyped_list))
             {
-                let dt = Arc::new(CassDataType::Set {
+                let dt = CassDataType::new_arced(CassDataTypeInner::Set {
                     typ: None,
                     frozen: false,
                 });
@@ -464,8 +474,8 @@ mod tests {
 
             // typed list
             {
-                let dt = Arc::new(CassDataType::Set {
-                    typ: Some(Arc::new(CassDataType::Value(
+                let dt = CassDataType::new_arced(CassDataTypeInner::Set {
+                    typ: Some(CassDataType::new_arced(CassDataTypeInner::Value(
                         CassValueType::CASS_VALUE_TYPE_BOOLEAN,
                     ))),
                     frozen: false,

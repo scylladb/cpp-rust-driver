@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -509,7 +509,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                Arc::new(CassDataType::UDT(UDTDataType::create_with_params(
+                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType::create_with_params(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,

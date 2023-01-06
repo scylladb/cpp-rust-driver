@@ -1,7 +1,8 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{
-    cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassValueType, MapDataType,
+    cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
+    CassValueType, MapDataType,
 };
 use crate::inet::CassInet;
 use crate::metadata::{
@@ -195,10 +196,10 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<
 }
 
 fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
-    match (column, column_type.as_ref()) {
+    match (column, unsafe { column_type.get_unchecked() }) {
         (
             CqlValue::List(list),
-            CassDataType::List {
+            CassDataTypeInner::List {
                 typ: Some(list_type),
                 ..
             },
@@ -212,7 +213,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
         )),
         (
             CqlValue::Map(map),
-            CassDataType::Map {
+            CassDataTypeInner::Map {
                 typ: MapDataType::KeyAndValue(key_type, value_type),
                 ..
             },
@@ -234,7 +235,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
         )),
         (
             CqlValue::Set(set),
-            CassDataType::Set {
+            CassDataTypeInner::Set {
                 typ: Some(set_type),
                 ..
             },
@@ -252,7 +253,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                 type_name,
                 fields,
             },
-            CassDataType::UDT(udt_type),
+            CassDataTypeInner::UDT(udt_type),
         ) => CollectionValue(Collection::UserDefinedType {
             keyspace,
             type_name,
@@ -274,7 +275,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                 })
                 .collect(),
         }),
-        (CqlValue::Tuple(tuple), CassDataType::Tuple(tuple_types)) => {
+        (CqlValue::Tuple(tuple), CassDataTypeInner::Tuple(tuple_types)) => {
             CollectionValue(Collection::Tuple(
                 tuple
                     .into_iter()
@@ -1472,7 +1473,7 @@ pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> ca
     let val = ptr_to_ref(value);
 
     matches!(
-        val.value_type.get_value_type(),
+        val.value_type.get_unchecked().get_value_type(),
         CassValueType::CASS_VALUE_TYPE_LIST
             | CassValueType::CASS_VALUE_TYPE_SET
             | CassValueType::CASS_VALUE_TYPE_MAP
@@ -1483,7 +1484,8 @@ pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> ca
 pub unsafe extern "C" fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t {
     let val = ptr_to_ref(value);
 
-    (val.value_type.get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
+    (val.value_type.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION)
+        as cass_bool_t
 }
 
 #[no_mangle]
@@ -1508,15 +1510,15 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 ) -> CassValueType {
     let val = ptr_to_ref(collection);
 
-    match val.value_type.as_ref() {
-        CassDataType::List {
+    match val.value_type.get_unchecked() {
+        CassDataTypeInner::List {
             typ: Some(list), ..
-        } => list.get_value_type(),
-        CassDataType::Set { typ: Some(set), .. } => set.get_value_type(),
-        CassDataType::Map {
+        } => list.get_unchecked().get_value_type(),
+        CassDataTypeInner::Set { typ: Some(set), .. } => set.get_unchecked().get_value_type(),
+        CassDataTypeInner::Map {
             typ: MapDataType::Key(key) | MapDataType::KeyAndValue(key, _),
             ..
-        } => key.get_value_type(),
+        } => key.get_unchecked().get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
@@ -1527,11 +1529,11 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 ) -> CassValueType {
     let val = ptr_to_ref(collection);
 
-    match val.value_type.as_ref() {
-        CassDataType::Map {
+    match val.value_type.get_unchecked() {
+        CassDataTypeInner::Map {
             typ: MapDataType::KeyAndValue(_, value),
             ..
-        } => value.get_value_type(),
+        } => value.get_unchecked().get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
@@ -1614,7 +1616,7 @@ mod tests {
 
     use crate::{
         cass_error::CassError,
-        cass_types::{CassDataType, CassValueType},
+        cass_types::{CassDataType, CassDataTypeInner, CassValueType},
         query_result::{
             cass_result_column_data_type, cass_result_column_name, cass_result_first_row,
             ptr_to_cstr_n, ptr_to_ref, size_t,
@@ -1723,22 +1725,26 @@ mod tests {
             {
                 let first_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 0));
                 assert_eq!(
-                    &CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BIGINT),
+                    &CassDataType::new(CassDataTypeInner::Value(
+                        CassValueType::CASS_VALUE_TYPE_BIGINT
+                    )),
                     first_col_data_type
                 );
                 let second_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 1));
                 assert_eq!(
-                    &CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
+                    &CassDataType::new(CassDataTypeInner::Value(
+                        CassValueType::CASS_VALUE_TYPE_VARINT
+                    )),
                     second_col_data_type
                 );
                 let third_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 2));
                 assert_eq!(
-                    &CassDataType::List {
-                        typ: Some(Arc::new(CassDataType::Value(
+                    &CassDataType::new(CassDataTypeInner::List {
+                        typ: Some(CassDataType::new_arced(CassDataTypeInner::Value(
                             CassValueType::CASS_VALUE_TYPE_DOUBLE
                         ))),
                         frozen: false
-                    },
+                    }),
                     third_col_data_type
                 );
                 let out_of_bound_col_data_type = cass_result_column_data_type(result_ptr, 555);

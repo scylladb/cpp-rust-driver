@@ -1,5 +1,5 @@
 use crate::cass_error::CassError;
-use crate::cass_types::CassDataType;
+use crate::cass_types::{CassDataType, CassDataTypeInner};
 use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
@@ -19,7 +19,9 @@ impl CassUserType {
         if index >= self.field_values.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
-        if !value::is_type_compatible(&value, &self.data_type.get_udt_type().field_types[index].1) {
+        if !value::is_type_compatible(&value, unsafe {
+            &self.data_type.get_unchecked().get_udt_type().field_types[index].1
+        }) {
             return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
         }
         self.field_values[index] = value;
@@ -28,9 +30,14 @@ impl CassUserType {
 
     fn set_field_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut found_field: bool = false;
-        for (index, (field_name, field_type)) in
-            self.data_type.get_udt_type().field_types.iter().enumerate()
-        {
+        for (index, (field_name, field_type)) in unsafe {
+            self.data_type
+                .get_unchecked()
+                .get_udt_type()
+                .field_types
+                .iter()
+                .enumerate()
+        } {
             if *field_name == name {
                 found_field = true;
                 if index >= self.field_values.len() {
@@ -58,7 +65,14 @@ impl From<&CassUserType> for CassCqlValue {
             fields: user_type
                 .field_values
                 .iter()
-                .zip(user_type.data_type.get_udt_type().field_types.iter())
+                .zip(unsafe {
+                    user_type
+                        .data_type
+                        .get_unchecked()
+                        .get_udt_type()
+                        .field_types
+                        .iter()
+                })
                 .map(|(v, (name, _))| (name.clone(), v.clone()))
                 .collect(),
         }
@@ -71,8 +85,8 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
 ) -> *mut CassUserType {
     let data_type = clone_arced(data_type_raw);
 
-    match &*data_type {
-        CassDataType::UDT(udt_data_type) => {
+    match data_type.get_unchecked() {
+        CassDataTypeInner::UDT(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
             Box::into_raw(Box::new(CassUserType {
                 data_type,
