@@ -78,18 +78,23 @@ pub(crate) use make_c_str;
 /// the memory associated with the pointer using corresponding driver's API function.
 pub trait BoxFFI {
     fn into_ptr(self: Box<Self>) -> *mut Self {
+        #[allow(clippy::disallowed_methods)]
         Box::into_raw(self)
     }
     unsafe fn from_ptr(ptr: *mut Self) -> Box<Self> {
+        #[allow(clippy::disallowed_methods)]
         Box::from_raw(ptr)
     }
     unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_ref()
     }
     unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_ref().unwrap()
     }
     unsafe fn as_mut_ref<'a>(ptr: *mut Self) -> &'a mut Self {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_mut().unwrap()
     }
     unsafe fn free(ptr: *mut Self) {
@@ -105,22 +110,29 @@ pub trait BoxFFI {
 /// with the pointer using corresponding driver's API function.
 pub trait ArcFFI {
     fn as_ptr(self: &Arc<Self>) -> *const Self {
+        #[allow(clippy::disallowed_methods)]
         Arc::as_ptr(self)
     }
     fn into_ptr(self: Arc<Self>) -> *const Self {
+        #[allow(clippy::disallowed_methods)]
         Arc::into_raw(self)
     }
     unsafe fn from_ptr(ptr: *const Self) -> Arc<Self> {
+        #[allow(clippy::disallowed_methods)]
         Arc::from_raw(ptr)
     }
     unsafe fn cloned_from_ptr(ptr: *const Self) -> Arc<Self> {
+        #[allow(clippy::disallowed_methods)]
         Arc::increment_strong_count(ptr);
+        #[allow(clippy::disallowed_methods)]
         Arc::from_raw(ptr)
     }
     unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_ref()
     }
     unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_ref().unwrap()
     }
     unsafe fn free(ptr: *const Self) {
@@ -141,6 +153,7 @@ pub trait RefFFI {
         self as *const Self
     }
     unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
+        #[allow(clippy::disallowed_methods)]
         ptr.as_ref().unwrap()
     }
 }

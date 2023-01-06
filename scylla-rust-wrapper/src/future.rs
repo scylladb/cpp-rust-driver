@@ -489,6 +489,7 @@ mod tests {
     //   the future, and execute its callback
     #[test]
     #[ntest::timeout(600)]
+    #[allow(clippy::disallowed_methods)]
     fn test_cass_future_callback() {
         unsafe {
             const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
