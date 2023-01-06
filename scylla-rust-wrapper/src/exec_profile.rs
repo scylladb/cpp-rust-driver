@@ -13,7 +13,7 @@ use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 
-use crate::argconv::{free_boxed, ptr_to_cstr_n, ptr_to_ref, ptr_to_ref_mut, strlen};
+use crate::argconv::{ptr_to_cstr_n, strlen, ArcFFI, BoxFFI};
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
@@ -36,6 +36,8 @@ pub struct CassExecProfile {
     inner: ExecutionProfileBuilder,
     load_balancing_config: LoadBalancingConfig,
 }
+
+impl BoxFFI for CassExecProfile {}
 
 impl CassExecProfile {
     fn new() -> Self {
@@ -170,12 +172,12 @@ pub(crate) enum PerStatementExecProfileInner {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_new() -> *mut CassExecProfile {
-    Box::into_raw(Box::new(CassExecProfile::new()))
+    BoxFFI::into_ptr(Box::new(CassExecProfile::new()))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_free(profile: *mut CassExecProfile) {
-    free_boxed(profile);
+    BoxFFI::free(profile);
 }
 
 /* Exec profiles scope setters */
@@ -194,7 +196,7 @@ pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
     name: *const c_char,
     name_length: size_t,
 ) -> CassError {
-    let statement = ptr_to_ref_mut(statement);
+    let statement = BoxFFI::as_mut_ref(statement);
     let name: Option<ExecProfileName> =
         ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
     statement.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
@@ -216,7 +218,7 @@ pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
     name: *const c_char,
     name_length: size_t,
 ) -> CassError {
-    let batch = ptr_to_ref_mut(batch);
+    let batch = BoxFFI::as_mut_ref(batch);
     let name: Option<ExecProfileName> =
         ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
     batch.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
@@ -249,7 +251,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
     profile: *mut CassExecProfile,
     consistency: CassConsistency,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     let consistency: Consistency = match consistency.try_into() {
         Ok(c) => c,
         Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -264,7 +266,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
 pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_policy(
     profile: *mut CassExecProfile,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
 
     profile_builder.modify_in_place(|builder| builder.speculative_execution_policy(None));
 
@@ -277,7 +279,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_executi
     constant_delay_ms: cass_int64_t,
     max_speculative_executions: cass_int32_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     if constant_delay_ms < 0 || max_speculative_executions < 0 {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
@@ -298,7 +300,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing(
     profile: *mut CassExecProfile,
     enabled: cass_bool_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder
         .load_balancing_config
         .latency_awareness_enabled = enabled != 0;
@@ -315,7 +317,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing_settin
     update_rate_ms: cass_uint64_t,
     min_measured: cass_uint64_t,
 ) {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder
         .load_balancing_config
         .latency_awareness_builder = LatencyAwarenessBuilder::new()
@@ -349,7 +351,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
     used_hosts_per_remote_dc: cass_uint32_t,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
 
     set_load_balance_dc_aware_n(
         &mut profile_builder.load_balancing_config,
@@ -383,7 +385,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
     local_rack_raw: *const c_char,
     local_rack_length: size_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
 
     set_load_balance_rack_aware_n(
         &mut profile_builder.load_balancing_config,
@@ -398,7 +400,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile: *mut CassExecProfile,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 
     CassError::CASS_OK
@@ -409,7 +411,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
     profile: *mut CassExecProfile,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder.modify_in_place(|builder| {
         builder.request_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
     });
@@ -422,12 +424,12 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: *mut CassExecProfile,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
+    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
         DefaultRetryPolicy(default) => Arc::clone(default) as _,
         FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
         DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
     };
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
 
     CassError::CASS_OK
@@ -438,7 +440,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
     profile: *mut CassExecProfile,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
 
     let maybe_serial_consistency =
         if serial_consistency == CassConsistency::CASS_CONSISTENCY_UNKNOWN {
@@ -459,7 +461,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     profile: *mut CassExecProfile,
     enabled: cass_bool_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder
         .load_balancing_config
         .token_awareness_enabled = enabled != 0;
@@ -472,7 +474,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_
     profile: *mut CassExecProfile,
     enabled: cass_bool_t,
 ) -> CassError {
-    let profile_builder = ptr_to_ref_mut(profile);
+    let profile_builder = BoxFFI::as_mut_ref(profile);
     profile_builder
         .load_balancing_config
         .token_aware_shuffling_replicas_enabled = enabled != 0;
@@ -517,7 +519,7 @@ mod tests {
             let profile_raw = cass_execution_profile_new();
             {
                 /* Test valid configurations */
-                let profile = ptr_to_ref(profile_raw);
+                let profile = BoxFFI::as_ref(profile_raw);
                 {
                     assert_matches!(profile.load_balancing_config.load_balancing_kind, None);
                     assert!(profile.load_balancing_config.token_awareness_enabled);
@@ -622,8 +624,8 @@ mod tests {
 
             {
                 /* Test valid configurations */
-                let statement = ptr_to_ref(statement_raw);
-                let batch = ptr_to_ref(batch_raw);
+                let statement = BoxFFI::as_ref(statement_raw);
+                let batch = BoxFFI::as_ref(batch_raw);
                 {
                     assert!(statement.exec_profile.is_none());
                     assert!(batch.exec_profile.is_none());

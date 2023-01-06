@@ -14,6 +14,8 @@ pub struct CassUserType {
     pub field_values: Vec<Option<CassCqlValue>>,
 }
 
+impl BoxFFI for CassUserType {}
+
 impl CassUserType {
     fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.field_values.len() {
@@ -83,12 +85,12 @@ impl From<&CassUserType> for CassCqlValue {
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     data_type_raw: *const CassDataType,
 ) -> *mut CassUserType {
-    let data_type = clone_arced(data_type_raw);
+    let data_type = ArcFFI::cloned_from_ptr(data_type_raw);
 
     match data_type.get_unchecked() {
         CassDataTypeInner::UDT(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
-            Box::into_raw(Box::new(CassUserType {
+            BoxFFI::into_ptr(Box::new(CassUserType {
                 data_type,
                 field_values,
             }))
@@ -99,13 +101,13 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_free(user_type: *mut CassUserType) {
-    free_boxed(user_type);
+    BoxFFI::free(user_type);
 }
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_data_type(
     user_type: *const CassUserType,
 ) -> *const CassDataType {
-    Arc::as_ptr(&ptr_to_ref(user_type).data_type)
+    ArcFFI::as_ptr(&BoxFFI::as_ref(user_type).data_type)
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,

@@ -29,6 +29,8 @@ pub struct CassCollection {
     pub items: Vec<CassCqlValue>,
 }
 
+impl BoxFFI for CassCollection {}
+
 impl CassCollection {
     fn typecheck_on_append(&self, value: &Option<CassCqlValue>) -> CassError {
         // See https://github.com/scylladb/cpp-driver/blob/master/src/collection.hpp#L100.
@@ -136,7 +138,7 @@ pub unsafe extern "C" fn cass_collection_new(
         _ => item_count,
     } as usize;
 
-    Box::into_raw(Box::new(CassCollection {
+    BoxFFI::into_ptr(Box::new(CassCollection {
         collection_type,
         data_type: None,
         capacity,
@@ -149,7 +151,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     data_type: *const CassDataType,
     item_count: size_t,
 ) -> *mut CassCollection {
-    let data_type = clone_arced(data_type);
+    let data_type = ArcFFI::cloned_from_ptr(data_type);
     let (capacity, collection_type) = match data_type.get_unchecked() {
         CassDataTypeInner::List { .. } => {
             (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
@@ -164,7 +166,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     };
     let capacity = capacity as usize;
 
-    Box::into_raw(Box::new(CassCollection {
+    BoxFFI::into_ptr(Box::new(CassCollection {
         collection_type,
         data_type: Some(data_type),
         capacity,
@@ -176,10 +178,10 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
 unsafe extern "C" fn cass_collection_data_type(
     collection: *const CassCollection,
 ) -> *const CassDataType {
-    let collection_ref = ptr_to_ref(collection);
+    let collection_ref = BoxFFI::as_ref(collection);
 
     match &collection_ref.data_type {
-        Some(dt) => Arc::as_ptr(dt),
+        Some(dt) => ArcFFI::as_ptr(dt),
         None => match collection_ref.collection_type {
             CassCollectionType::CASS_COLLECTION_TYPE_LIST => &UNTYPED_LIST_TYPE,
             CassCollectionType::CASS_COLLECTION_TYPE_SET => &UNTYPED_SET_TYPE,
@@ -195,7 +197,7 @@ unsafe extern "C" fn cass_collection_data_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_collection_free(collection: *mut CassCollection) {
-    free_boxed(collection);
+    BoxFFI::free(collection);
 }
 
 prepare_binders_macro!(@append CassCollection, |collection: &mut CassCollection, v| collection.append_cql_value(v));
@@ -220,9 +222,8 @@ make_binders!(user_type, cass_collection_append_user_type);
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use crate::{
+        argconv::ArcFFI,
         cass_error::CassError,
         cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType},
         collection::{
@@ -269,7 +270,7 @@ mod tests {
                     frozen: false,
                 });
 
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let untyped_map = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -300,7 +301,7 @@ mod tests {
                     frozen: false,
                 });
 
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let half_typed_map = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -343,7 +344,7 @@ mod tests {
                     ),
                     frozen: false,
                 });
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let bool_to_i16_map = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 // First entry -> typecheck successful.
@@ -372,7 +373,7 @@ mod tests {
                     CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
                 );
 
-                Arc::from_raw(dt_ptr);
+                ArcFFI::free(dt_ptr);
                 cass_collection_free(bool_to_i16_map);
             }
 
@@ -398,7 +399,7 @@ mod tests {
                     frozen: false,
                 });
 
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let untyped_set = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -420,7 +421,7 @@ mod tests {
                     ))),
                     frozen: false,
                 });
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let bool_set = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -432,7 +433,7 @@ mod tests {
                     CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
                 );
 
-                Arc::from_raw(dt_ptr);
+                ArcFFI::free(dt_ptr);
                 cass_collection_free(bool_set);
             }
 
@@ -458,7 +459,7 @@ mod tests {
                     frozen: false,
                 });
 
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let untyped_list = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -480,7 +481,7 @@ mod tests {
                     ))),
                     frozen: false,
                 });
-                let dt_ptr = Arc::into_raw(dt);
+                let dt_ptr = ArcFFI::into_ptr(dt);
                 let bool_list = cass_collection_new_from_data_type(dt_ptr, 2);
 
                 assert_cass_error_eq!(
@@ -492,7 +493,7 @@ mod tests {
                     CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
                 );
 
-                Arc::from_raw(dt_ptr);
+                ArcFFI::free(dt_ptr);
                 cass_collection_free(bool_list);
             }
         }

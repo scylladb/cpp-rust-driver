@@ -1,4 +1,4 @@
-use crate::argconv::{arr_to_cstr, ptr_to_cstr, ptr_to_ref, str_to_arr};
+use crate::argconv::{arr_to_cstr, ptr_to_cstr, str_to_arr, RefFFI};
 use crate::cass_log_types::{CassLogLevel, CassLogMessage};
 use crate::types::size_t;
 use crate::LOGGER;
@@ -13,6 +13,8 @@ use tracing::Level;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
+
+impl RefFFI for CassLogMessage {}
 
 pub type CassLogCallback =
     Option<unsafe extern "C" fn(message: *const CassLogMessage, data: *mut c_void)>;
@@ -63,7 +65,7 @@ impl TryFrom<CassLogLevel> for Level {
 pub const CASS_LOG_MAX_MESSAGE_SIZE: usize = 1024;
 
 pub unsafe extern "C" fn stderr_log_callback(message: *const CassLogMessage, _data: *mut c_void) {
-    let message = ptr_to_ref(message);
+    let message = RefFFI::as_ref(message);
 
     eprintln!(
         "{} [{}] ({}:{}) {}",
