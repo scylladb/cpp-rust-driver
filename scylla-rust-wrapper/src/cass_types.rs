@@ -174,10 +174,9 @@ pub fn get_column_type_from_cql_type(
 impl CassDataType {
     fn get_sub_data_type(&self, index: usize) -> Option<&Arc<CassDataType>> {
         match self {
-            CassDataType::UDT(udt_data_type) => udt_data_type
-                .field_types
-                .get(index as usize)
-                .map(|(_, b)| b),
+            CassDataType::UDT(udt_data_type) => {
+                udt_data_type.field_types.get(index).map(|(_, b)| b)
+            }
             CassDataType::List(t) | CassDataType::Set(t) => {
                 if index > 0 {
                     None
@@ -190,7 +189,7 @@ impl CassDataType {
                 1 => t2.as_ref(),
                 _ => None,
             },
-            CassDataType::Tuple(v) => v.get(index as usize),
+            CassDataType::Tuple(v) => v.get(index),
             _ => None,
         }
     }

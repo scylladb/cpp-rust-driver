@@ -40,7 +40,7 @@ pub struct CassStatement {
 
 impl CassStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CqlValue>) -> CassError {
-        if index as usize >= self.bound_values.len() {
+        if index >= self.bound_values.len() {
             CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
         } else {
             self.bound_values[index] = Set(value);
@@ -332,7 +332,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     // The maximum duration for a sleep is 68719476734 milliseconds (approximately 2.2 years).
     // Note: this is limited by tokio::time:timout
     // https://github.com/tokio-rs/tokio/blob/4b1c4801b1383800932141d0f6508d5b3003323e/tokio/src/time/driver/wheel/mod.rs#L44-L50
-    let request_timeout_limit = (2_u64.pow(36) - 1) as u64;
+    let request_timeout_limit = 2_u64.pow(36) - 1;
     if timeout_ms >= request_timeout_limit {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }

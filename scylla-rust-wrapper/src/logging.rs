@@ -73,7 +73,7 @@ pub unsafe extern "C" fn stderr_log_callback(message: *const CassLogMessage, _da
 
     eprintln!(
         "{} [{}] ({}:{}) {}",
-        message.time_ms as u64,
+        message.time_ms,
         ptr_to_cstr(cass_log_level_string(message.severity)).unwrap(),
         ptr_to_cstr(message.file).unwrap(),
         message.line,
