@@ -170,8 +170,6 @@ pub unsafe extern "C" fn cass_future_error_message(
     message: *mut *const ::std::os::raw::c_char,
     message_length: *mut size_t,
 ) {
-    let message = ptr_to_ref_mut(message);
-    let message_length = ptr_to_ref_mut(message_length);
     ptr_to_ref(future).with_waited_state(|state: &mut CassFutureState| {
         let value = &state.value;
         let msg = state

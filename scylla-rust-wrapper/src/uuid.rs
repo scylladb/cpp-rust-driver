@@ -77,25 +77,23 @@ pub extern "C" fn cass_uuid_timestamp(uuid: CassUuid) -> cass_uint64_t {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_min_from_time(
-    timestamp: cass_uint64_t,
-    output_raw: *mut CassUuid,
-) {
-    let output = ptr_to_ref_mut(output_raw);
+pub unsafe extern "C" fn cass_uuid_min_from_time(timestamp: cass_uint64_t, output: *mut CassUuid) {
+    let uuid = CassUuid {
+        time_and_version: set_version(from_unix_timestamp(timestamp), 1),
+        clock_seq_and_node: MIN_CLOCK_SEQ_AND_NODE,
+    };
 
-    output.time_and_version = set_version(from_unix_timestamp(timestamp), 1);
-    output.clock_seq_and_node = MIN_CLOCK_SEQ_AND_NODE;
+    std::ptr::write(output, uuid);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_max_from_time(
-    timestamp: cass_uint64_t,
-    output_raw: *mut CassUuid,
-) {
-    let output = ptr_to_ref_mut(output_raw);
+pub unsafe extern "C" fn cass_uuid_max_from_time(timestamp: cass_uint64_t, output: *mut CassUuid) {
+    let uuid = CassUuid {
+        time_and_version: set_version(from_unix_timestamp(timestamp), 1),
+        clock_seq_and_node: MAX_CLOCK_SEQ_AND_NODE,
+    };
 
-    output.time_and_version = set_version(from_unix_timestamp(timestamp), 1);
-    output.clock_seq_and_node = MAX_CLOCK_SEQ_AND_NODE;
+    std::ptr::write(output, uuid);
 }
 
 #[no_mangle]
@@ -133,22 +131,27 @@ pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mu
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_time(uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
     let uuid_gen = ptr_to_ref_mut(uuid_gen);
-    let output = ptr_to_ref_mut(output);
 
-    output.time_and_version = set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1);
-    output.clock_seq_and_node = uuid_gen.clock_seq_and_node;
+    let uuid = CassUuid {
+        time_and_version: set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1),
+        clock_seq_and_node: uuid_gen.clock_seq_and_node,
+    };
+
+    std::ptr::write(output, uuid);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
-    let output = ptr_to_ref_mut(output);
-
     let time_and_version: u64 = rand::random();
     let clock_seq_and_node: u64 = rand::random();
 
-    output.time_and_version = set_version(time_and_version, 4);
-    output.clock_seq_and_node = (clock_seq_and_node & 0x3FFFFFFFFFFFFFFF) | 0x8000000000000000;
     // RFC4122 variant
+    let uuid = CassUuid {
+        time_and_version: set_version(time_and_version, 4),
+        clock_seq_and_node: (clock_seq_and_node & 0x3FFFFFFFFFFFFFFF) | 0x8000000000000000,
+    };
+
+    std::ptr::write(output, uuid);
 }
 
 #[no_mangle]
@@ -158,10 +161,13 @@ pub unsafe extern "C" fn cass_uuid_gen_from_time(
     output: *mut CassUuid,
 ) {
     let uuid_gen = ptr_to_ref_mut(uuid_gen);
-    let output = ptr_to_ref_mut(output);
 
-    output.time_and_version = set_version(from_unix_timestamp(timestamp), 1);
-    output.clock_seq_and_node = uuid_gen.clock_seq_and_node;
+    let uuid = CassUuid {
+        time_and_version: set_version(from_unix_timestamp(timestamp), 1),
+        clock_seq_and_node: uuid_gen.clock_seq_and_node,
+    };
+
+    std::ptr::write(output, uuid);
 }
 
 // Implemented ourselves:
@@ -227,15 +233,14 @@ pub unsafe extern "C" fn cass_uuid_from_string(
 pub unsafe extern "C" fn cass_uuid_from_string_n(
     value: *const c_char,
     value_length: size_t,
-    output_raw: *mut CassUuid,
+    output: *mut CassUuid,
 ) -> CassError {
-    let output = ptr_to_ref_mut(output_raw);
     let value_str = ptr_to_cstr_n(value, value_length);
 
     match value_str {
         Some(value_str) => {
             Uuid::parse_str(value_str).map_or(CassError::CASS_ERROR_LIB_BAD_PARAMS, |parsed_uuid| {
-                *output = parsed_uuid.into();
+                std::ptr::write(output, parsed_uuid.into());
                 CassError::CASS_OK
             })
         }

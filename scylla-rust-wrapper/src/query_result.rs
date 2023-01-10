@@ -933,9 +933,8 @@ pub unsafe extern "C" fn cass_value_get_float(
     output: *mut cass_float_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_float_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Float(f))) => *out = f,
+        Some(Value::RegularValue(CqlValue::Float(f))) => std::ptr::write(output, f),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -949,9 +948,8 @@ pub unsafe extern "C" fn cass_value_get_double(
     output: *mut cass_double_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_double_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Double(d))) => *out = d,
+        Some(Value::RegularValue(CqlValue::Double(d))) => std::ptr::write(output, d),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -965,9 +963,10 @@ pub unsafe extern "C" fn cass_value_get_bool(
     output: *mut cass_bool_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_bool_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Boolean(b))) => *out = b as cass_bool_t,
+        Some(Value::RegularValue(CqlValue::Boolean(b))) => {
+            std::ptr::write(output, b as cass_bool_t)
+        }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -981,9 +980,8 @@ pub unsafe extern "C" fn cass_value_get_int8(
     output: *mut cass_int8_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_int8_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::TinyInt(i))) => *out = i,
+        Some(Value::RegularValue(CqlValue::TinyInt(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -997,9 +995,8 @@ pub unsafe extern "C" fn cass_value_get_int16(
     output: *mut cass_int16_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_int16_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::SmallInt(i))) => *out = i,
+        Some(Value::RegularValue(CqlValue::SmallInt(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -1013,9 +1010,8 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     output: *mut cass_uint32_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_uint32_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Date(u))) => *out = u, // FIXME: hack
+        Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u), // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -1029,9 +1025,8 @@ pub unsafe extern "C" fn cass_value_get_int32(
     output: *mut cass_int32_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_int32_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Int(i))) => *out = i,
+        Some(Value::RegularValue(CqlValue::Int(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -1045,16 +1040,17 @@ pub unsafe extern "C" fn cass_value_get_int64(
     output: *mut cass_int64_t,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut cass_int64_t = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::BigInt(i))) => *out = i,
-        Some(Value::RegularValue(CqlValue::Counter(i))) => *out = i.0 as cass_int64_t,
+        Some(Value::RegularValue(CqlValue::BigInt(i))) => std::ptr::write(output, i),
+        Some(Value::RegularValue(CqlValue::Counter(i))) => {
+            std::ptr::write(output, i.0 as cass_int64_t)
+        }
         Some(Value::RegularValue(CqlValue::Time(d))) => match d.num_nanoseconds() {
-            Some(nanos) => *out = nanos as cass_int64_t,
+            Some(nanos) => std::ptr::write(output, nanos as cass_int64_t),
             None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
         },
         Some(Value::RegularValue(CqlValue::Timestamp(d))) => {
-            *out = d.num_milliseconds() as cass_int64_t
+            std::ptr::write(output, d.num_milliseconds() as cass_int64_t)
         }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
@@ -1069,10 +1065,9 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     output: *mut CassUuid,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut CassUuid = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => *out = uuid.into(),
-        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => *out = uuid.into(),
+        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => std::ptr::write(output, uuid.into()),
+        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => std::ptr::write(output, uuid.into()),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -1086,9 +1081,8 @@ pub unsafe extern "C" fn cass_value_get_inet(
     output: *mut CassInet,
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
-    let out: &mut CassInet = ptr_to_ref_mut(output);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Inet(inet))) => *out = inet.into(),
+        Some(Value::RegularValue(CqlValue::Inet(inet))) => std::ptr::write(output, inet.into()),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
