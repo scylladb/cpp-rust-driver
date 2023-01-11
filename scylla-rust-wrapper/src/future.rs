@@ -2,8 +2,8 @@ use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_error::CassErrorMessage;
 use crate::prepared::CassPrepared;
-use crate::query_error::{CassErrorResult, CassErrorResult_};
-use crate::query_result::{CassResult, CassResult_};
+use crate::query_error::CassErrorResult;
+use crate::query_result::CassResult;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use crate::RUNTIME;
@@ -14,8 +14,8 @@ use std::sync::{Arc, Condvar, Mutex};
 
 pub enum CassResultValue {
     Empty,
-    QueryResult(CassResult_),
-    QueryError(CassErrorResult_),
+    QueryResult(Arc<CassResult>),
+    QueryError(Arc<CassErrorResult>),
     Prepared(Arc<PreparedStatement>),
 }
 
@@ -193,7 +193,7 @@ pub unsafe extern "C" fn cass_future_get_result(
     future_raw: *const CassFuture,
 ) -> *const CassResult {
     ptr_to_ref(future_raw)
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassResult_> {
+        .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(qr.clone()),
                 _ => None,
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn cass_future_get_error_result(
     future_raw: *const CassFuture,
 ) -> *const CassErrorResult {
     ptr_to_ref(future_raw)
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<CassErrorResult_> {
+        .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryError(qr) => Some(qr.clone()),
                 _ => None,

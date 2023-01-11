@@ -5,12 +5,10 @@ use scylla::batch::SerialConsistency;
 use scylla::frame::types::LegacyConsistency;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
-use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 
 pub type CassErrorResult = QueryError;
-pub type CassErrorResult_ = Arc<CassErrorResult>;
 
 impl From<Consistency> for CassConsistency {
     fn from(c: Consistency) -> CassConsistency {

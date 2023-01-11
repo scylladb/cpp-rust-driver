@@ -1,12 +1,7 @@
-mod cass_log {
-    #![allow(non_camel_case_types)]
-    include!(concat!(env!("OUT_DIR"), "/cppdriver_log.rs"));
-}
 use crate::argconv::{arr_to_cstr, ptr_to_cstr, ptr_to_ref, str_to_arr};
 use crate::types::size_t;
 use crate::LOG;
 use crate::LOGGER;
-use cass_log::*;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::Write;
@@ -19,6 +14,12 @@ use tracing::Level;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
+
+mod cass_log {
+    #![allow(non_camel_case_types)]
+    include!(concat!(env!("OUT_DIR"), "/cppdriver_log.rs"));
+}
+use cass_log::*;
 
 pub type CassLogCallback =
     Option<unsafe extern "C" fn(message: *const CassLogMessage, data: *mut c_void)>;
@@ -73,7 +74,7 @@ pub unsafe extern "C" fn stderr_log_callback(message: *const CassLogMessage, _da
 
     eprintln!(
         "{} [{}] ({}:{}) {}",
-        message.time_ms as u64,
+        message.time_ms,
         ptr_to_cstr(cass_log_level_string(message.severity)).unwrap(),
         ptr_to_cstr(message.file).unwrap(),
         message.line,

@@ -10,13 +10,9 @@ use std::sync::Weak;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_column_type.rs"));
 
-pub type CassSchemaMeta_ = &'static CassSchemaMeta;
-
 pub struct CassSchemaMeta {
     pub keyspaces: HashMap<String, CassKeyspaceMeta>,
 }
-
-pub type CassKeyspaceMeta_ = &'static CassKeyspaceMeta;
 
 pub struct CassKeyspaceMeta {
     pub name: String,
@@ -27,8 +23,6 @@ pub struct CassKeyspaceMeta {
     pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
 
-pub type CassTableMeta_ = &'static CassTableMeta;
-
 pub struct CassTableMeta {
     pub name: String,
     pub columns_metadata: HashMap<String, CassColumnMeta>,
@@ -36,8 +30,6 @@ pub struct CassTableMeta {
     pub clustering_keys: Vec<String>,
     pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
-
-pub type CassMaterializedViewMeta_ = &'static CassMaterializedViewMeta;
 
 pub struct CassMaterializedViewMeta {
     pub name: String,

@@ -2,7 +2,6 @@ use crate::argconv::*;
 use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
-use crate::cass_types::CassDataTypeArc;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
 use std::convert::TryFrom;
@@ -12,12 +11,12 @@ static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
 
 #[derive(Clone)]
 pub struct CassTuple {
-    pub data_type: Option<CassDataTypeArc>,
+    pub data_type: Option<Arc<CassDataType>>,
     pub items: Vec<Option<CqlValue>>,
 }
 
 impl CassTuple {
-    fn get_types(&self) -> Option<&Vec<CassDataTypeArc>> {
+    fn get_types(&self) -> Option<&Vec<Arc<CassDataType>>> {
         match &self.data_type {
             Some(t) => match &**t {
                 CassDataType::Tuple(v) => Some(v),
