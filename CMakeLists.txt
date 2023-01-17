@@ -272,3 +272,28 @@ endif()
 if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
+
+#-------------------------------------
+# Installation
+#-------------------------------------
+
+# Determine if the library directory needs to be determined
+if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
+  if ("${CMAKE_SYSTEM_NAME}" MATCHES "Linux" AND ("${CMAKE_INSTALL_PREFIX}" STREQUAL "/usr" OR
+    "${CMAKE_INSTALL_PREFIX}" STREQUAL "/usr/local"))
+    if(EXISTS "/etc/debian_version")
+      set (CMAKE_INSTALL_LIBDIR "lib/${CMAKE_LIBRARY_ARCHITECTURE}")
+    elseif(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release" OR
+        EXISTS "/etc/slackware-version" OR EXISTS "/etc/gentoo-release")
+      if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set (CMAKE_INSTALL_LIBDIR "lib64")
+      else()
+        set (CMAKE_INSTALL_LIBDIR "lib")
+      endif()
+    else()
+      set (CMAKE_INSTALL_LIBDIR "lib")
+    endif()
+  else()
+    set (CMAKE_INSTALL_LIBDIR "lib")
+  endif()
+endif()
