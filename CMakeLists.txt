@@ -240,7 +240,7 @@ ExternalProject_Add(
     scylla-rust-cpp-driver
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND ./build-cmake-compat.sh $<IF:$<CONFIG:Debug>,DEBUG,RELEASE>
+    BUILD_COMMAND ./build-cmake-compat.sh $<IF:$<CONFIG:Debug>,DEBUG,RELEASE> $<IF:$<BOOL:${CASS_BUILD_STATIC}>,STATIC,NO_STATIC>
     BINARY_DIR "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper"
     INSTALL_COMMAND ""
     LOG_BUILD ON
