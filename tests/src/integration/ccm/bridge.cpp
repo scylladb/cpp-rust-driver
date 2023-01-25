@@ -1469,6 +1469,7 @@ CCM::Bridge::generate_create_updateconf_command(CassVersion cassandra_version) {
     updateconf_command.push_back("request_timeout_in_ms:10000");
     updateconf_command.push_back("phi_convict_threshold:16");
     updateconf_command.push_back("hinted_handoff_enabled:false");
+    updateconf_command.push_back("enable_materialized_views:true");
     updateconf_command.push_back("dynamic_snitch_update_interval_in_ms:1000");
     updateconf_command.push_back("native_transport_max_threads:1");
     updateconf_command.push_back("concurrent_reads:2");
