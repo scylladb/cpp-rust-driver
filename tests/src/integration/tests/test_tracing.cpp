@@ -35,6 +35,12 @@ CASSANDRA_INTEGRATION_TEST_F(TracingTests, Simple) {
     Statement statement("SELECT * FROM system_traces.sessions WHERE session_id = ?", 1);
     statement.bind(0, tracing_id);
     Result result = session_.execute(statement);
+    int retries = 0;
+    while (result.row_count() == 0u && retries < 10) {
+      msleep(1000);
+      retries++;
+      result = session_.execute(statement);
+    }
     ASSERT_GT(result.row_count(), 0u);
     Uuid session_id = result.first_row().column_by_name<Uuid>("session_id");
     ASSERT_FALSE(session_id.is_null());
