@@ -12,9 +12,11 @@ use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::statement::SerialConsistency;
-use scylla::Bytes;
+use scylla::{BufMut, Bytes, BytesMut};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
+use std::slice;
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
@@ -221,6 +223,30 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let result = ptr_to_ref(result);
 
     statement.paging_state = result.metadata.paging_state.clone();
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_paging_state_token(
+    statement: *mut CassStatement,
+    paging_state: *const c_char,
+    paging_state_size: size_t,
+) -> CassError {
+    let statement_from_raw = ptr_to_ref_mut(statement);
+
+    if paging_state.is_null() {
+        statement_from_raw.paging_state = None;
+        return CassError::CASS_ERROR_LIB_NULL_VALUE;
+    }
+
+    let paging_state_usize: usize = paging_state_size.try_into().unwrap();
+    let mut b = BytesMut::with_capacity(paging_state_usize);
+    let paging_state_bytes = slice::from_raw_parts(paging_state, paging_state_usize);
+    for byte in paging_state_bytes {
+        b.put_i8(*byte);
+    }
+    statement_from_raw.paging_state = Some(b.freeze());
+
     CassError::CASS_OK
 }
 
