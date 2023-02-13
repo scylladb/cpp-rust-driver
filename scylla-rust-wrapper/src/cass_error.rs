@@ -54,7 +54,6 @@ impl From<&BadQuery> for CassError {
             BadQuery::SerializeValuesError(_serialize_values_error) => {
                 CassError::CASS_ERROR_LAST_ENTRY
             }
-            BadQuery::ValueLenMismatch(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,

@@ -800,8 +800,8 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "scylla"
-version = "0.6.1"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
+version = "0.7.0"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -854,9 +854,10 @@ dependencies = [
 
 [[package]]
 name = "scylla-cql"
-version = "0.0.2"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
+version = "0.0.3"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
 dependencies = [
+ "async-trait",
  "bigdecimal",
  "byteorder",
  "bytes",
@@ -873,9 +874,10 @@ dependencies = [
 
 [[package]]
 name = "scylla-macros"
-version = "0.1.1"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=358eabbbb71c112bf1b19b0e8b4eafd169146cdc#358eabbbb71c112bf1b19b0e8b4eafd169146cdc"
+version = "0.1.2"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
@@ -1189,6 +1191,9 @@ name = "uuid"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "valuable"

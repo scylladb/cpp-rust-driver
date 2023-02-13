@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 
 
 [dependencies]
-scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "358eabbbb71c112bf1b19b0e8b4eafd169146cdc", features = ["ssl"]}
+scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db", features = ["ssl"]}
 tokio = { version = "1.1.0", features = ["full"] }
 lazy_static = "1.4.0"
 uuid = "1.1.2"
