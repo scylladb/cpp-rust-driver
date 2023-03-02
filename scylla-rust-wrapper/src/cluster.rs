@@ -39,6 +39,8 @@ pub struct CassCluster {
     child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
     token_aware_policy_enabled: bool,
     use_beta_protocol_version: bool,
+    auth_username: Option<String>,
+    auth_password: Option<String>,
 }
 
 pub struct CassCustomPayload;
@@ -75,11 +77,17 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
             }
         };
 
-    cluster
+    let builder = cluster
         .session_builder
         .clone()
         .known_nodes(&known_nodes)
-        .load_balancing(load_balancing)
+        .load_balancing(load_balancing);
+
+    if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
+        builder.user(username, password)
+    } else {
+        builder
+    }
 }
 
 #[no_mangle]
@@ -97,6 +105,8 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         },
         token_aware_policy_enabled: true,
         use_beta_protocol_version: false,
+        auth_username: None,
+        auth_password: None,
     }))
 }
 
@@ -232,8 +242,8 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     let password = ptr_to_cstr_n(password_raw, password_length).unwrap();
 
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.session_builder.config.auth_username = Some(username.to_string());
-    cluster.session_builder.config.auth_password = Some(password.to_string());
+    cluster.auth_username = Some(username.to_string());
+    cluster.auth_password = Some(password.to_string());
 }
 
 #[no_mangle]
