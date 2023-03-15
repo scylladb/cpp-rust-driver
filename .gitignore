@@ -3,4 +3,5 @@ build/
 scylla-rust-wrapper/target/
 .idea/
 cmake-build-debug/
+.cache/
 
