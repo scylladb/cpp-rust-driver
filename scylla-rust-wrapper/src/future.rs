@@ -9,8 +9,10 @@ use crate::uuid::CassUuid;
 use crate::RUNTIME;
 use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
+use std::mem;
 use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
+use tokio::task::JoinHandle;
 
 pub enum CassResultValue {
     Empty,
@@ -48,6 +50,7 @@ struct CassFutureState {
     value: Option<CassFutureResult>,
     err_string: Option<String>,
     callback: Option<BoundCallback>,
+    join_handle: Option<JoinHandle<()>>,
 }
 
 pub struct CassFuture {
@@ -70,20 +73,24 @@ impl CassFuture {
             wait_for_value: Condvar::new(),
         });
         let cass_fut_clone = cass_fut.clone();
-        RUNTIME.spawn(async move {
+        let join_handle = RUNTIME.spawn(async move {
             let r = fut.await;
             let mut lock = cass_fut_clone.state.lock().unwrap();
             lock.value = Some(r);
 
             // Take the callback and call it after realeasing the lock
             let maybe_cb = lock.callback.take();
-            std::mem::drop(lock);
+            mem::drop(lock);
             if let Some(bound_cb) = maybe_cb {
                 bound_cb.invoke(cass_fut_clone.as_ref());
             }
 
             cass_fut_clone.wait_for_value.notify_all();
         });
+        {
+            let mut lock = cass_fut.state.lock().unwrap();
+            lock.join_handle = Some(join_handle);
+        }
         cass_fut
     }
 
@@ -102,10 +109,18 @@ impl CassFuture {
     }
 
     pub(self) fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
-        let mut guard = self
-            .wait_for_value
-            .wait_while(self.state.lock().unwrap(), |s| s.value.is_none())
-            .unwrap();
+        let mut guard = self.state.lock().unwrap();
+        let handle = guard.join_handle.take();
+        if let Some(handle) = handle {
+            mem::drop(guard);
+            RUNTIME.block_on(handle).unwrap();
+            guard = self.state.lock().unwrap();
+        } else {
+            guard = self
+                .wait_for_value
+                .wait_while(guard, |state| state.value.is_none())
+                .unwrap();
+        }
         f(&mut guard)
     }
 
@@ -118,7 +133,7 @@ impl CassFuture {
         let bound_cb = BoundCallback { cb, data };
         if lock.value.is_some() {
             // The value is already available, we need to call the callback ourselves
-            std::mem::drop(lock);
+            mem::drop(lock);
             bound_cb.invoke(self);
             return CassError::CASS_OK;
         }
