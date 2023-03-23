@@ -75,12 +75,12 @@ impl CassFuture {
         let cass_fut_clone = cass_fut.clone();
         let join_handle = RUNTIME.spawn(async move {
             let r = fut.await;
-            let mut lock = cass_fut_clone.state.lock().unwrap();
-            lock.value = Some(r);
-
-            // Take the callback and call it after realeasing the lock
-            let maybe_cb = lock.callback.take();
-            mem::drop(lock);
+            let maybe_cb = {
+                let mut guard = cass_fut_clone.state.lock().unwrap();
+                guard.value = Some(r);
+                // Take the callback and call it after releasing the lock
+                guard.callback.take()
+            };
             if let Some(bound_cb) = maybe_cb {
                 bound_cb.invoke(cass_fut_clone.as_ref());
             }
