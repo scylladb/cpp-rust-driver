@@ -93,8 +93,7 @@ pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new()
-            .retry_policy(Box::new(scylla::retry_policy::DefaultRetryPolicy)),
+        session_builder: SessionBuilder::new(),
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
