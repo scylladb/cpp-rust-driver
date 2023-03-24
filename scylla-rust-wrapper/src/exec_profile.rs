@@ -1,4 +1,9 @@
+use std::convert::TryFrom;
 use std::ffi::c_char;
+use std::ops::Deref;
+
+use scylla::execution_profile::ExecutionProfileBuilder;
+use scylla::ExecutionProfile;
 
 use crate::argconv::free_boxed;
 use crate::batch::CassBatch;
@@ -9,11 +14,53 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::statement::CassStatement;
 use crate::types::{cass_bool_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t};
 
-pub struct CassExecProfile;
+#[derive(Clone, Debug)]
+pub struct CassExecProfile {
+    inner: ExecutionProfileBuilder,
+}
+
+impl CassExecProfile {
+    fn new() -> Self {
+        Self {
+            inner: ExecutionProfile::builder(),
+        }
+    }
+
+    pub(crate) fn build(self) -> ExecutionProfile {
+        self.inner.build()
+    }
+}
+
+/// Represents a non-empty execution profile name.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExecProfileName(String);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EmptyProfileName;
+
+impl TryFrom<String> for ExecProfileName {
+    type Error = EmptyProfileName;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        if name.is_empty() {
+            Err(EmptyProfileName)
+        } else {
+            Ok(ExecProfileName(name))
+        }
+    }
+}
+
+impl Deref for ExecProfileName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_new() -> *mut CassExecProfile {
-    Box::into_raw(Box::new(CassExecProfile))
+    Box::into_raw(Box::new(CassExecProfile::new()))
 }
 
 #[no_mangle]
@@ -157,4 +204,24 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
     profile: *const CassExecProfile,
 ) -> CassError {
     unimplemented!()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_exec_profile_name() {
+        use std::convert::TryInto;
+        let empty = "".to_owned();
+        let nonempty = "a".to_owned();
+        assert_eq!(
+            empty.try_into() as Result<ExecProfileName, _>,
+            Err(EmptyProfileName)
+        );
+        assert_eq!(
+            nonempty.clone().try_into() as Result<ExecProfileName, _>,
+            Ok(ExecProfileName(nonempty))
+        );
+    }
 }
