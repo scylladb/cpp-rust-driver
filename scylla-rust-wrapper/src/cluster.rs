@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::exec_profile::exec_profile_builder_modify;
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
@@ -444,9 +445,9 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
         retry_interval: Duration::from_millis(constant_delay_ms as u64),
     };
 
-    cluster.default_execution_profile_builder =
-        std::mem::take(&mut cluster.default_execution_profile_builder)
-            .speculative_execution_policy(Some(Arc::new(policy)));
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        builder.speculative_execution_policy(Some(Arc::new(policy)))
+    });
 
     CassError::CASS_OK
 }
@@ -456,9 +457,11 @@ pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     cluster_raw: *mut CassCluster,
 ) -> CassError {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.default_execution_profile_builder =
-        std::mem::take(&mut cluster.default_execution_profile_builder)
-            .speculative_execution_policy(None);
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        builder.speculative_execution_policy(None)
+    });
+
     CassError::CASS_OK
 }
 
@@ -483,11 +486,10 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
         FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
         DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
     };
-    let boxed_retry_policy = retry_policy.clone_boxed();
 
-    cluster.default_execution_profile_builder =
-        std::mem::take(&mut cluster.default_execution_profile_builder)
-            .retry_policy(boxed_retry_policy);
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        builder.retry_policy(retry_policy.clone_boxed())
+    });
 }
 
 #[no_mangle]
