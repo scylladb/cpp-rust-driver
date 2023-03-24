@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::cass_types::CassConsistency;
 use crate::exec_profile::exec_profile_builder_modify;
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
@@ -15,8 +16,9 @@ use scylla::load_balancing::LatencyAwarenessBuilder;
 use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
-use scylla::statement::Consistency;
+use scylla::statement::{Consistency, SerialConsistency};
 use scylla::SessionBuilder;
+use std::convert::TryInto;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
@@ -543,6 +545,42 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
         .retry_period(Duration::from_millis(retry_period_ms))
         .update_rate(Duration::from_millis(update_rate_ms))
         .minimum_measurements(min_measured as usize);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_consistency(
+    cluster: *mut CassCluster,
+    consistency: CassConsistency,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster);
+    let consistency: Consistency = match consistency.try_into() {
+        Ok(c) => c,
+        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    };
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        builder.consistency(consistency)
+    });
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
+    cluster: *mut CassCluster,
+    serial_consistency: CassConsistency,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster);
+    let serial_consistency: SerialConsistency = match serial_consistency.try_into() {
+        Ok(c) => c,
+        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    };
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        builder.serial_consistency(Some(serial_consistency))
+    });
+
+    CassError::CASS_OK
 }
 
 #[cfg(test)]
