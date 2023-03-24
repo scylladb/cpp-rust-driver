@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::exec_profile::exec_profile_builder_modify;
+use crate::exec_profile::{exec_profile_builder_modify, CassExecProfile, ExecProfileName};
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
@@ -18,6 +18,7 @@ use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
 use scylla::SessionBuilder;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
@@ -68,6 +69,7 @@ pub(crate) struct DcAwareness {
 pub struct CassCluster {
     session_builder: SessionBuilder,
     default_execution_profile_builder: ExecutionProfileBuilder,
+    execution_profile_map: HashMap<ExecProfileName, CassExecProfile>,
 
     contact_points: Vec<String>,
     port: u16,
@@ -77,6 +79,12 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+}
+
+impl CassCluster {
+    pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
+        &self.execution_profile_map
+    }
 }
 
 pub struct CassCustomPayload;
@@ -121,6 +129,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         auth_username: None,
         auth_password: None,
         default_execution_profile_builder,
+        execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
     }))
 }
