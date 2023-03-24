@@ -25,13 +25,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-pub type CassSession = RwLock<Option<Session>>;
+pub struct CassSessionInner {
+    session: Session,
+}
+
+pub type CassSession = RwLock<Option<CassSessionInner>>;
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
     init_logging();
 
-    let session = Arc::new(RwLock::new(None::<Session>));
+    let session = Arc::new(RwLock::new(None::<CassSessionInner>));
     Arc::into_raw(session) as *mut CassSession
 }
 
@@ -60,7 +64,7 @@ pub unsafe extern "C" fn cass_session_connect(
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
-        *session_guard = Some(session);
+        *session_guard = Some(CassSessionInner { session });
         Ok(CassResultValue::Empty)
     })
 }
@@ -83,7 +87,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
                 "Session is not connected".msg(),
             ));
         }
-        let session = session_guard.as_ref().unwrap();
+        let session = &session_guard.as_ref().unwrap().session;
 
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
@@ -140,7 +144,8 @@ pub unsafe extern "C" fn cass_session_execute(
                 "Session is not connected".msg(),
             ));
         }
-        let session = session_guard.as_ref().unwrap();
+        let cass_session_inner = session_guard.as_ref().unwrap();
+        let session = &cass_session_inner.session;
 
         let query_res: Result<QueryResult, QueryError> = match statement {
             Statement::Simple(query) => {
@@ -324,7 +329,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 "Session is not connected".msg(),
             ));
         }
-        let session = session_guard.as_ref().unwrap();
+        let session = &session_guard.as_ref().unwrap().session;
         let prepared = session
             .prepare(query.query.clone())
             .await
@@ -363,7 +368,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
                 "Session is not connected".msg(),
             ));
         }
-        let session = session_guard.as_ref().unwrap();
+        let session = &session_guard.as_ref().unwrap().session;
 
         let mut prepared = session
             .prepare(query)
@@ -413,6 +418,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         .blocking_read()
         .as_ref()
         .unwrap()
+        .session
         .get_cluster_data()
         .get_keyspace_info()
     {
