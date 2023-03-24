@@ -4,6 +4,7 @@ use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
+use crate::exec_profile::ExecProfileName;
 use crate::future::{CassFuture, CassResultValue};
 use crate::logging::init_logging;
 use crate::metadata::create_table_metadata;
@@ -17,6 +18,7 @@ use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
+use scylla::transport::execution_profile::ExecutionProfileHandle;
 use scylla::{QueryResult, Session};
 use std::collections::HashMap;
 use std::future::Future;
@@ -27,6 +29,7 @@ use tokio::sync::RwLock;
 
 pub struct CassSessionInner {
     session: Session,
+    exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
 }
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
@@ -45,7 +48,7 @@ pub unsafe extern "C" fn cass_session_connect(
     cluster_raw: *const CassCluster,
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
-    let cluster: CassCluster = (*ptr_to_ref(cluster_raw)).clone();
+    let cluster: CassCluster = ptr_to_ref(cluster_raw).clone();
 
     CassFuture::make_raw(async move {
         // This can sleep for a long time, but only if someone connects/closes session
@@ -57,6 +60,10 @@ pub unsafe extern "C" fn cass_session_connect(
                 "Already connecting, closing, or connected".msg(),
             ));
         }
+        let mut exec_profile_map = HashMap::with_capacity(cluster.execution_profile_map().len());
+        for (name, builder) in cluster.execution_profile_map() {
+            exec_profile_map.insert(name.clone(), builder.clone().build().await.into_handle());
+        }
 
         let session = build_session_builder(&cluster)
             .await
@@ -64,7 +71,10 @@ pub unsafe extern "C" fn cass_session_connect(
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
-        *session_guard = Some(CassSessionInner { session });
+        *session_guard = Some(CassSessionInner {
+            session,
+            exec_profile_map,
+        });
         Ok(CassResultValue::Empty)
     })
 }
@@ -87,7 +97,9 @@ pub unsafe extern "C" fn cass_session_execute_batch(
                 "Session is not connected".msg(),
             ));
         }
-        let session = &session_guard.as_ref().unwrap().session;
+
+        let cass_session_inner = &session_guard.as_ref().unwrap();
+        let session = &cass_session_inner.session;
 
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
@@ -485,4 +497,179 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     }
 
     Box::into_raw(Box::new(CassSchemaMeta { keyspaces }))
+}
+
+#[cfg(test)]
+mod tests {
+    use scylla_proxy::{
+        Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
+        RequestRule, ResponseFrame, RunningProxy,
+    };
+    use tracing::instrument::WithSubscriber;
+
+    use super::*;
+    use crate::{
+        argconv::{make_c_str, ptr_to_ref},
+        cluster::{
+            cass_cluster_free, cass_cluster_new, cass_cluster_set_contact_points_n,
+            cass_cluster_set_execution_profile,
+        },
+        exec_profile::{cass_execution_profile_free, cass_execution_profile_new, ExecProfileName},
+        future::{
+            cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
+        },
+        testing::assert_cass_error_eq,
+    };
+    use std::{collections::HashSet, convert::TryFrom, net::SocketAddr};
+
+    // This is for convenient logs from failing tests. Just call it at the beginning of a test.
+    #[allow(unused)]
+    fn init_logger() {
+        let _ = tracing_subscriber::fmt::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .without_time()
+            .try_init();
+    }
+
+    unsafe fn cass_future_wait_check_and_free(fut: *const CassFuture) {
+        cass_future_wait(fut);
+        if cass_future_error_code(fut) != CassError::CASS_OK {
+            let mut message: *const c_char = std::ptr::null();
+            let mut message_len: size_t = 0;
+            cass_future_error_message(fut as *mut CassFuture, &mut message, &mut message_len);
+            eprintln!("{:?}", ptr_to_cstr_n(message, message_len));
+        }
+        assert_cass_error_eq!(cass_future_error_code(fut), CassError::CASS_OK);
+        cass_future_free(fut);
+    }
+
+    fn handshake_rules() -> impl IntoIterator<Item = RequestRule> {
+        [
+            RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Options),
+                RequestReaction::forge_response(Arc::new(move |frame: RequestFrame| {
+                    ResponseFrame::forged_supported(frame.params, &HashMap::new()).unwrap()
+                })),
+            ),
+            RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Startup)
+                    .or(Condition::RequestOpcode(RequestOpcode::Register)),
+                RequestReaction::forge_response(Arc::new(move |frame: RequestFrame| {
+                    ResponseFrame::forged_ready(frame.params)
+                })),
+            ),
+        ]
+    }
+
+    // As these are very generic, they should be put last in the rules Vec.
+    fn generic_drop_queries_rules() -> impl IntoIterator<Item = RequestRule> {
+        [RequestRule(
+            Condition::RequestOpcode(RequestOpcode::Query),
+            // We won't respond to any queries (including metadata fetch),
+            // but the driver will manage to continue with dummy metadata.
+            RequestReaction::drop_connection(),
+        )]
+    }
+
+    pub(crate) async fn test_with_one_proxy_one(
+        test: impl FnOnce(SocketAddr, RunningProxy) -> RunningProxy + Send + 'static,
+        rules: impl IntoIterator<Item = RequestRule>,
+    ) {
+        let proxy_addr = SocketAddr::new(scylla_proxy::get_exclusive_local_address(), 9042);
+
+        let proxy = Proxy::builder()
+            .with_node(
+                Node::builder()
+                    .proxy_address(proxy_addr)
+                    .request_rules(rules.into_iter().collect())
+                    .build_dry_mode(),
+            )
+            .build()
+            .run()
+            .await
+            .unwrap();
+
+        // This is required to avoid the clash of a runtime built inside another runtime
+        // (the test runs one runtime to drive the proxy, and CassFuture implementation uses another)
+        let proxy = tokio::task::spawn_blocking(move || test(proxy_addr, proxy))
+            .await
+            .expect("Test thread panicked");
+
+        let _ = proxy.finish().await;
+    }
+
+    #[tokio::test]
+    #[ntest::timeout(5000)]
+    async fn session_clones_and_freezes_exec_profiles_mapping() {
+        init_logger();
+        test_with_one_proxy_one(
+            session_clones_and_freezes_exec_profiles_mapping_do,
+            handshake_rules()
+                .into_iter()
+                .chain(generic_drop_queries_rules()),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn session_clones_and_freezes_exec_profiles_mapping_do(
+        node_addr: SocketAddr,
+        proxy: RunningProxy,
+    ) -> RunningProxy {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw, c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+            let session_raw = cass_session_new();
+            let profile_raw = cass_execution_profile_new();
+            {
+                cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
+                // Initially, the profile map is empty.
+
+                assert!(ptr_to_ref(session_raw)
+                    .blocking_read()
+                    .as_ref()
+                    .unwrap()
+                    .exec_profile_map
+                    .is_empty());
+
+                cass_cluster_set_execution_profile(cluster_raw, make_c_str!("prof"), profile_raw);
+                // Mutations in cluster do not affect the session that was connected before.
+                assert!(ptr_to_ref(session_raw)
+                    .blocking_read()
+                    .as_ref()
+                    .unwrap()
+                    .exec_profile_map
+                    .is_empty());
+
+                cass_future_wait_check_and_free(cass_session_close(session_raw));
+
+                // Mutations in cluster are now propagated to the session.
+                cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
+                let profile_map_keys = ptr_to_ref(session_raw)
+                    .blocking_read()
+                    .as_ref()
+                    .unwrap()
+                    .exec_profile_map
+                    .keys()
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                assert_eq!(
+                    profile_map_keys,
+                    std::iter::once(ExecProfileName::try_from("prof".to_owned()).unwrap())
+                        .collect::<HashSet<_>>()
+                );
+                cass_future_wait_check_and_free(cass_session_close(session_raw));
+            }
+            cass_execution_profile_free(profile_raw);
+            cass_session_free(session_raw);
+            cass_cluster_free(cluster_raw);
+        }
+        proxy
+    }
 }
