@@ -146,7 +146,10 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     // Set Cpp Driver default configuration for queries:
     query.disable_paging();
-    query.set_consistency(Consistency::One);
+    // TODO: Consider moving this configuration to the default execution profile.
+    // With the current way, any changes to consistency on exec profile level will be
+    // anyway overriden with this setting.
+    query.set_consistency(Consistency::LocalOne);
 
     let simple_query = SimpleQuery {
         query,
