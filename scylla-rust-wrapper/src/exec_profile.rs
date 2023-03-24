@@ -5,37 +5,45 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use scylla::execution_profile::ExecutionProfileBuilder;
+use scylla::load_balancing::LatencyAwarenessBuilder;
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 use scylla::ExecutionProfile;
 
-use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut};
+use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut, strlen};
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cluster::CassCluster;
+use crate::cluster::{set_load_balance_dc_aware_n, LoadBalancingConfig};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
 };
 use crate::statement::CassStatement;
-use crate::types::{cass_bool_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t};
+use crate::types::{
+    cass_bool_t, cass_double_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t,
+};
 
 #[derive(Clone, Debug)]
 pub struct CassExecProfile {
     inner: ExecutionProfileBuilder,
+    load_balancing_config: LoadBalancingConfig,
 }
 
 impl CassExecProfile {
     fn new() -> Self {
         Self {
             inner: ExecutionProfile::builder(),
+            load_balancing_config: Default::default(),
         }
     }
 
-    pub(crate) fn build(self) -> ExecutionProfile {
-        self.inner.build()
+    pub(crate) async fn build(self) -> ExecutionProfile {
+        self.inner
+            .load_balancing_policy(self.load_balancing_config.build().await)
+            .build()
     }
 }
 
@@ -139,7 +147,31 @@ pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing(
     profile: *mut CassExecProfile,
     enabled: cass_bool_t,
 ) -> CassError {
-    unimplemented!()
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder
+        .load_balancing_config
+        .latency_awareness_enabled = enabled != 0;
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing_settings(
+    profile: *mut CassExecProfile,
+    exclusion_threshold: cass_double_t,
+    _scale_ms: cass_uint64_t, // Currently ignored, TODO: add this parameter to Rust driver
+    retry_period_ms: cass_uint64_t,
+    update_rate_ms: cass_uint64_t,
+    min_measured: cass_uint64_t,
+) {
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder
+        .load_balancing_config
+        .latency_awareness_builder = LatencyAwarenessBuilder::new()
+        .exclusion_threshold(exclusion_threshold)
+        .retry_period(Duration::from_millis(retry_period_ms))
+        .update_rate(Duration::from_millis(update_rate_ms))
+        .minimum_measurements(min_measured as usize);
 }
 
 #[no_mangle]
@@ -149,7 +181,13 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware(
     used_hosts_per_remote_dc: cass_uint32_t,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    unimplemented!()
+    cass_execution_profile_set_load_balance_dc_aware_n(
+        profile,
+        local_dc,
+        strlen(local_dc),
+        used_hosts_per_remote_dc,
+        allow_remote_dcs_for_local_cl,
+    )
 }
 
 #[no_mangle]
@@ -160,14 +198,25 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
     used_hosts_per_remote_dc: cass_uint32_t,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    unimplemented!()
+    let profile_builder = ptr_to_ref_mut(profile);
+
+    set_load_balance_dc_aware_n(
+        &mut profile_builder.load_balancing_config,
+        local_dc,
+        local_dc_length,
+        used_hosts_per_remote_dc,
+        allow_remote_dcs_for_local_cl,
+    )
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile: *mut CassExecProfile,
 ) -> CassError {
-    unimplemented!()
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder.load_balancing_config.dc_awareness = None;
+
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -225,7 +274,12 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     profile: *mut CassExecProfile,
     enabled: cass_bool_t,
 ) -> CassError {
-    unimplemented!()
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder
+        .load_balancing_config
+        .token_awareness_enabled = enabled != 0;
+
+    CassError::CASS_OK
 }
 
 #[no_mangle]
@@ -285,6 +339,10 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
 mod tests {
     use super::*;
 
+    use crate::testing::assert_cass_error_eq;
+
+    use assert_matches::assert_matches;
+
     #[test]
     fn test_exec_profile_name() {
         use std::convert::TryInto;
@@ -298,5 +356,73 @@ mod tests {
             nonempty.clone().try_into() as Result<ExecProfileName, _>,
             Ok(ExecProfileName(nonempty))
         );
+    }
+
+    #[test]
+    fn test_load_balancing_config() {
+        unsafe {
+            let profile_raw = cass_execution_profile_new();
+            {
+                /* Test valid configurations */
+                let profile = ptr_to_ref(profile_raw);
+                {
+                    assert_matches!(profile.load_balancing_config.dc_awareness, None);
+                    assert!(profile.load_balancing_config.token_awareness_enabled);
+                    assert!(!profile.load_balancing_config.latency_awareness_enabled);
+                }
+                {
+                    cass_execution_profile_set_token_aware_routing(profile_raw, 0);
+                    assert_cass_error_eq!(
+                        cass_execution_profile_set_load_balance_dc_aware(
+                            profile_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            0,
+                            0
+                        ),
+                        CassError::CASS_OK
+                    );
+                    cass_execution_profile_set_latency_aware_routing(profile_raw, 1);
+                    // These values cannot currently be tested to be set properly in the latency awareness builder,
+                    // but at least we test that the function completed successfully.
+                    cass_execution_profile_set_latency_aware_routing_settings(
+                        profile_raw,
+                        2.,
+                        1,
+                        2000,
+                        100,
+                        40,
+                    );
+
+                    let dc_awareness = profile.load_balancing_config.dc_awareness.as_ref().unwrap();
+                    assert_eq!(dc_awareness.local_dc, "eu");
+                    assert!(!profile.load_balancing_config.token_awareness_enabled);
+                    assert!(profile.load_balancing_config.latency_awareness_enabled);
+                }
+                /* Test invalid configurations */
+                {
+                    // Nonzero deprecated parameters
+                    assert_cass_error_eq!(
+                        cass_execution_profile_set_load_balance_dc_aware(
+                            profile_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            1,
+                            0
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_execution_profile_set_load_balance_dc_aware(
+                            profile_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            0,
+                            1
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                }
+            }
+
+            cass_execution_profile_free(profile_raw);
+        }
     }
 }
