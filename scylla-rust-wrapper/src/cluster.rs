@@ -592,12 +592,58 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     CassError::CASS_OK
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_execution_profile(
+    cluster: *mut CassCluster,
+    name: *const c_char,
+    profile: *const CassExecProfile,
+) -> CassError {
+    cass_cluster_set_execution_profile_n(cluster, name, strlen(name), profile)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
+    cluster: *mut CassCluster,
+    name: *const c_char,
+    name_length: size_t,
+    profile: *const CassExecProfile,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster);
+    let name = if let Some(name) =
+        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok())
+    {
+        name
+    } else {
+        // Got NULL or empty string, which is invalid name for a profile.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let profile = if let Some(profile) = profile.as_ref() {
+        profile.clone()
+    } else {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    cluster.execution_profile_map.insert(name, profile);
+
+    CassError::CASS_OK
+}
+
 #[cfg(test)]
 mod tests {
     use crate::testing::assert_cass_error_eq;
 
     use super::*;
+    use crate::{
+        argconv::make_c_str,
+        cass_error::CassError,
+        exec_profile::{cass_execution_profile_free, cass_execution_profile_new},
+    };
     use assert_matches::assert_matches;
+    use std::{
+        collections::HashSet,
+        convert::{TryFrom, TryInto},
+        os::raw::c_char,
+    };
 
     #[test]
     fn test_load_balancing_config() {
@@ -663,6 +709,118 @@ mod tests {
                 }
             }
 
+            cass_cluster_free(cluster_raw);
+        }
+    }
+
+    #[test]
+    fn test_register_exec_profile() {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+            let exec_profile_raw = cass_execution_profile_new();
+            {
+                /* Test valid configurations */
+                let cluster = ptr_to_ref(cluster_raw);
+                {
+                    assert!(cluster.execution_profile_map.is_empty());
+                }
+                {
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile(
+                            cluster_raw,
+                            make_c_str!("profile1"),
+                            exec_profile_raw
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert!(cluster.execution_profile_map.len() == 1);
+                    let _profile = cluster
+                        .execution_profile_map
+                        .get(&"profile1".to_owned().try_into().unwrap())
+                        .unwrap();
+
+                    let (c_str, c_strlen) = str_to_c_str_n("profile1");
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile_n(
+                            cluster_raw,
+                            c_str,
+                            c_strlen,
+                            exec_profile_raw
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert!(cluster.execution_profile_map.len() == 1);
+                    let _profile = cluster
+                        .execution_profile_map
+                        .get(&"profile1".to_owned().try_into().unwrap())
+                        .unwrap();
+
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile(
+                            cluster_raw,
+                            make_c_str!("profile2"),
+                            exec_profile_raw
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert!(cluster.execution_profile_map.len() == 2);
+                    let _profile = cluster
+                        .execution_profile_map
+                        .get(&"profile2".to_owned().try_into().unwrap())
+                        .unwrap();
+                }
+
+                /* Test invalid configurations */
+                {
+                    // NULL name
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile(
+                            cluster_raw,
+                            std::ptr::null(),
+                            exec_profile_raw
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                }
+                {
+                    // empty name
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile(
+                            cluster_raw,
+                            make_c_str!(""),
+                            exec_profile_raw
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                }
+                {
+                    // NULL profile
+                    assert_cass_error_eq!(
+                        cass_cluster_set_execution_profile(
+                            cluster_raw,
+                            make_c_str!("profile1"),
+                            std::ptr::null()
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                }
+                // Make sure that invalid configuration did not influence the profile map
+                assert_eq!(
+                    cluster
+                        .execution_profile_map
+                        .keys()
+                        .cloned()
+                        .collect::<HashSet<_>>(),
+                    vec![
+                        ExecProfileName::try_from("profile1".to_owned()).unwrap(),
+                        "profile2".to_owned().try_into().unwrap()
+                    ]
+                    .into_iter()
+                    .collect::<HashSet<ExecProfileName>>()
+                );
+            }
+
+            cass_execution_profile_free(exec_profile_raw);
             cass_cluster_free(cluster_raw);
         }
     }

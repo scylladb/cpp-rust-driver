@@ -15,7 +15,6 @@ use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut, strlen};
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cluster::CassCluster;
 use crate::cluster::{set_load_balance_dc_aware_n, LoadBalancingConfig};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
@@ -312,25 +311,6 @@ pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
     batch: *mut CassBatch,
     name: *const c_char,
     name_length: size_t,
-) -> CassError {
-    unimplemented!()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_cluster_set_execution_profile(
-    cluster: *mut CassCluster,
-    name: *const c_char,
-    profile: *const CassExecProfile,
-) -> CassError {
-    unimplemented!()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
-    cluster: *mut CassCluster,
-    name: *const c_char,
-    name_length: size_t,
-    profile: *const CassExecProfile,
 ) -> CassError {
     unimplemented!()
 }
