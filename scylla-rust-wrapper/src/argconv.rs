@@ -73,3 +73,24 @@ pub unsafe fn strlen(ptr: *const c_char) -> size_t {
     }
     libc::strlen(ptr) as size_t
 }
+
+#[cfg(test)]
+pub fn str_to_c_str_n(s: &str) -> (*const c_char, size_t) {
+    let mut c_str = std::ptr::null();
+    let mut c_strlen = size_t::default();
+
+    // SAFETY: The pointers that are passed to `write_str_to_c` are compile-checked references.
+    unsafe { write_str_to_c(s, &mut c_str, &mut c_strlen) };
+
+    (c_str, c_strlen)
+}
+
+#[cfg(test)]
+macro_rules! make_c_str {
+    ($str:literal) => {
+        concat!($str, "\0").as_ptr() as *const c_char
+    };
+}
+
+#[cfg(test)]
+pub(crate) use make_c_str;
