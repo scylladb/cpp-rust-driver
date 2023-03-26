@@ -28,11 +28,11 @@ use tokio::sync::RwLock;
 pub type CassSession = RwLock<Option<Session>>;
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_session_new() -> *const CassSession {
+pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
     init_logging();
 
-    let session = Arc::new(RwLock::new(None));
-    Arc::into_raw(session)
+    let session = Arc::new(RwLock::new(None::<Session>));
+    Arc::into_raw(session) as *mut CassSession
 }
 
 #[no_mangle]
