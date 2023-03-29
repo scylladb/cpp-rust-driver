@@ -132,6 +132,9 @@ impl CassFuture {
     }
 }
 
+trait CheckSendSync: Send + Sync {}
+impl CheckSendSync for CassFuture {}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_set_callback(
     future_raw: *const CassFuture,
