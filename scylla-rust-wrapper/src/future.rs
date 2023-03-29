@@ -9,8 +9,10 @@ use crate::uuid::CassUuid;
 use crate::RUNTIME;
 use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
+use std::mem;
 use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
+use tokio::task::JoinHandle;
 
 pub enum CassResultValue {
     Empty,
@@ -48,6 +50,7 @@ struct CassFutureState {
     value: Option<CassFutureResult>,
     err_string: Option<String>,
     callback: Option<BoundCallback>,
+    join_handle: Option<JoinHandle<()>>,
 }
 
 pub struct CassFuture {
@@ -58,8 +61,8 @@ pub struct CassFuture {
 impl CassFuture {
     pub fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
-    ) -> *const CassFuture {
-        Self::new_from_future(fut).into_raw()
+    ) -> *mut CassFuture {
+        Self::new_from_future(fut).into_raw() as *mut _
     }
 
     pub fn new_from_future(
@@ -70,20 +73,24 @@ impl CassFuture {
             wait_for_value: Condvar::new(),
         });
         let cass_fut_clone = cass_fut.clone();
-        RUNTIME.spawn(async move {
+        let join_handle = RUNTIME.spawn(async move {
             let r = fut.await;
-            let mut lock = cass_fut_clone.state.lock().unwrap();
-            lock.value = Some(r);
-
-            // Take the callback and call it after realeasing the lock
-            let maybe_cb = lock.callback.take();
-            std::mem::drop(lock);
+            let maybe_cb = {
+                let mut guard = cass_fut_clone.state.lock().unwrap();
+                guard.value = Some(r);
+                // Take the callback and call it after releasing the lock
+                guard.callback.take()
+            };
             if let Some(bound_cb) = maybe_cb {
                 bound_cb.invoke(cass_fut_clone.as_ref());
             }
 
             cass_fut_clone.wait_for_value.notify_all();
         });
+        {
+            let mut lock = cass_fut.state.lock().unwrap();
+            lock.join_handle = Some(join_handle);
+        }
         cass_fut
     }
 
@@ -102,10 +109,18 @@ impl CassFuture {
     }
 
     pub(self) fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
-        let mut guard = self
-            .wait_for_value
-            .wait_while(self.state.lock().unwrap(), |s| s.value.is_none())
-            .unwrap();
+        let mut guard = self.state.lock().unwrap();
+        let handle = guard.join_handle.take();
+        if let Some(handle) = handle {
+            mem::drop(guard);
+            RUNTIME.block_on(handle).unwrap();
+            guard = self.state.lock().unwrap();
+        } else {
+            guard = self
+                .wait_for_value
+                .wait_while(guard, |state| state.value.is_none())
+                .unwrap();
+        }
         f(&mut guard)
     }
 
@@ -118,7 +133,7 @@ impl CassFuture {
         let bound_cb = BoundCallback { cb, data };
         if lock.value.is_some() {
             // The value is already available, we need to call the callback ourselves
-            std::mem::drop(lock);
+            mem::drop(lock);
             bound_cb.invoke(self);
             return CassError::CASS_OK;
         }
@@ -131,6 +146,9 @@ impl CassFuture {
         Arc::into_raw(self)
     }
 }
+
+trait CheckSendSync: Send + Sync {}
+impl CheckSendSync for CassFuture {}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_set_callback(
@@ -245,4 +263,45 @@ pub unsafe extern "C" fn cass_future_tracing_id(
         },
         _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{os::raw::c_char, thread, time::Duration};
+
+    // This is not a particularly smart test, but if some thread is granted access the value
+    // before it is truly computed, then weird things should happen, even a segfault.
+    // In the incorrect implementation that inspired this test to be written, this test
+    // results with unwrap on a PoisonError on the CassFuture's mutex.
+    #[test]
+    fn cass_future_thread_safety() {
+        const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        let fut = async {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            Err((CassError::CASS_OK, ERROR_MSG.into()))
+        };
+        let cass_fut = CassFuture::make_raw(fut);
+
+        struct PtrWrapper(*mut CassFuture);
+        unsafe impl Send for PtrWrapper {}
+        let wrapped_cass_fut = PtrWrapper(cass_fut);
+        unsafe {
+            let handle = thread::spawn(move || {
+                let PtrWrapper(cass_fut) = wrapped_cass_fut;
+                let mut message: *const c_char = std::ptr::null();
+                let mut msg_len: size_t = 0;
+                cass_future_error_message(cass_fut, &mut message, &mut msg_len);
+                assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+            });
+
+            let mut message: *const c_char = std::ptr::null();
+            let mut msg_len: size_t = 0;
+            cass_future_error_message(cass_fut, &mut message, &mut msg_len);
+            assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+
+            handle.join().unwrap();
+            cass_future_free(cass_fut);
+        }
+    }
 }
