@@ -58,8 +58,8 @@ pub struct CassFuture {
 impl CassFuture {
     pub fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
-    ) -> *const CassFuture {
-        Self::new_from_future(fut).into_raw()
+    ) -> *mut CassFuture {
+        Self::new_from_future(fut).into_raw() as *mut _
     }
 
     pub fn new_from_future(
