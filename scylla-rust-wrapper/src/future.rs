@@ -249,3 +249,44 @@ pub unsafe extern "C" fn cass_future_tracing_id(
         _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{os::raw::c_char, thread, time::Duration};
+
+    // This is not a particularly smart test, but if some thread is granted access the value
+    // before it is truly computed, then weird things should happen, even a segfault.
+    // In the incorrect implementation that inspired this test to be written, this test
+    // results with unwrap on a PoisonError on the CassFuture's mutex.
+    #[test]
+    fn cass_future_thread_safety() {
+        const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        let fut = async {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            Err((CassError::CASS_OK, ERROR_MSG.into()))
+        };
+        let cass_fut = CassFuture::make_raw(fut);
+
+        struct PtrWrapper(*mut CassFuture);
+        unsafe impl Send for PtrWrapper {}
+        let wrapped_cass_fut = PtrWrapper(cass_fut);
+        unsafe {
+            let handle = thread::spawn(move || {
+                let PtrWrapper(cass_fut) = wrapped_cass_fut;
+                let mut message: *const c_char = std::ptr::null();
+                let mut msg_len: size_t = 0;
+                cass_future_error_message(cass_fut, &mut message, &mut msg_len);
+                assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+            });
+
+            let mut message: *const c_char = std::ptr::null();
+            let mut msg_len: size_t = 0;
+            cass_future_error_message(cass_fut, &mut message, &mut msg_len);
+            assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+
+            handle.join().unwrap();
+            cass_future_free(cass_fut);
+        }
+    }
+}
