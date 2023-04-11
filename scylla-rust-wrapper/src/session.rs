@@ -565,6 +565,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 
 #[cfg(test)]
 mod tests {
+    use scylla::{frame::types::LegacyConsistency, transport::errors::DbError};
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,
@@ -574,22 +575,25 @@ mod tests {
     use super::*;
     use crate::{
         argconv::{make_c_str, ptr_to_ref},
-        batch::{cass_batch_add_statement, cass_batch_free, cass_batch_new},
+        batch::{
+            cass_batch_add_statement, cass_batch_free, cass_batch_new, cass_batch_set_retry_policy,
+        },
         cass_types::CassBatchType,
         cluster::{
             cass_cluster_free, cass_cluster_new, cass_cluster_set_contact_points_n,
-            cass_cluster_set_execution_profile,
+            cass_cluster_set_execution_profile, cass_cluster_set_retry_policy,
         },
         exec_profile::{
             cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
             cass_execution_profile_free, cass_execution_profile_new,
-            cass_statement_set_execution_profile, cass_statement_set_execution_profile_n,
-            ExecProfileName,
+            cass_execution_profile_set_retry_policy, cass_statement_set_execution_profile,
+            cass_statement_set_execution_profile_n, ExecProfileName,
         },
         future::{
             cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
         },
-        statement::{cass_statement_free, cass_statement_new},
+        retry_policy::{cass_retry_policy_default_new, cass_retry_policy_fallthrough_new},
+        statement::{cass_statement_free, cass_statement_new, cass_statement_set_retry_policy},
         testing::assert_cass_error_eq,
     };
     use std::{
@@ -970,6 +974,244 @@ mod tests {
                         &nonexisting_name.to_owned().try_into().unwrap()
                     );
                 }
+            }
+
+            cass_future_wait_check_and_free(cass_session_close(session_raw));
+            cass_execution_profile_free(profile_raw);
+            cass_statement_free(statement_raw);
+            cass_batch_free(batch_raw);
+            cass_session_free(session_raw);
+            cass_cluster_free(cluster_raw);
+        }
+        proxy
+    }
+
+    #[tokio::test]
+    async fn retry_policy_on_statement_and_batch_is_handled_properly() {
+        init_logger();
+        test_with_one_proxy_one(
+            retry_policy_on_statement_and_batch_is_handled_properly_do,
+            retry_policy_on_statement_and_batch_is_handled_properly_rules(),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn retry_policy_on_statement_and_batch_is_handled_properly_rules(
+    ) -> impl IntoIterator<Item = RequestRule> {
+        handshake_rules()
+            .into_iter()
+            .chain(iter::once(RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Query)
+                    .or(Condition::RequestOpcode(RequestOpcode::Batch))
+                    .and(Condition::BodyContainsCaseInsensitive(Box::new(
+                        *b"SELECT host_id FROM system.",
+                    )))
+                    // this 1 differentiates Fallthrough and Default retry policies.
+                    .and(Condition::TrueForLimitedTimes(1)),
+                // We simulate the read timeout error in order to trigger DefaultRetryPolicy's
+                // retry on the same node.
+                // We don't use the example ReadTimeout error that is included in proxy,
+                // because in order to trigger a retry we need data_present=false.
+                RequestReaction::forge_with_error(DbError::ReadTimeout {
+                    consistency: LegacyConsistency::Regular(Consistency::All),
+                    received: 1,
+                    required: 1,
+                    data_present: false,
+                }),
+            )))
+            .chain(iter::once(RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Query)
+                    .or(Condition::RequestOpcode(RequestOpcode::Batch))
+                    .and(Condition::BodyContainsCaseInsensitive(Box::new(
+                        *b"SELECT host_id FROM system.",
+                    ))),
+                // We make the second attempt return a hard, nonrecoverable error.
+                RequestReaction::forge().read_failure(),
+            )))
+            .chain(generic_drop_queries_rules())
+    }
+
+    // This test aims to verify that the retry policy emulation works properly,
+    // in any sequence of actions mutating the retry policy for a query.
+    //
+    // Below, the consecutive states of the test case are illustrated:
+    //     Retry policy set on: ('F' - Fallthrough, 'D' - Default, '-' - no policy set)
+    //     session default exec profile:   F F F F F F F F F F F F F F
+    //     per stmt/batch exec profile:    - D - - D D D D D - - - D D
+    //     stmt/batch (emulated):          - - - F F - F D F F - D D -
+    fn retry_policy_on_statement_and_batch_is_handled_properly_do(
+        node_addr: SocketAddr,
+        mut proxy: RunningProxy,
+    ) -> RunningProxy {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw, c_ip, c_ip_len,),
+                CassError::CASS_OK
+            );
+
+            let fallthrough_policy = cass_retry_policy_fallthrough_new();
+            let default_policy = cass_retry_policy_default_new();
+            cass_cluster_set_retry_policy(cluster_raw, fallthrough_policy);
+
+            let session_raw = cass_session_new();
+
+            let profile_raw = cass_execution_profile_new();
+            // A name of a profile that will have been registered in the Cluster.
+            let profile_name_c_str = make_c_str!("profile");
+
+            assert_cass_error_eq!(
+                cass_execution_profile_set_retry_policy(profile_raw, default_policy),
+                CassError::CASS_OK
+            );
+
+            let query = make_c_str!("SELECT host_id FROM system.local");
+            let statement_raw = cass_statement_new(query, 0);
+            let batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            assert_cass_error_eq!(
+                cass_batch_add_statement(batch_raw, statement_raw),
+                CassError::CASS_OK
+            );
+
+            assert_cass_error_eq!(
+                cass_cluster_set_execution_profile(cluster_raw, profile_name_c_str, profile_raw,),
+                CassError::CASS_OK
+            );
+
+            cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
+            {
+                let execute_query =
+                    || cass_future_error_code(cass_session_execute(session_raw, statement_raw));
+                let execute_batch =
+                    || cass_future_error_code(cass_session_execute_batch(session_raw, batch_raw));
+
+                fn reset_proxy_rules(proxy: &mut RunningProxy) {
+                    proxy.running_nodes[0].change_request_rules(Some(
+                        retry_policy_on_statement_and_batch_is_handled_properly_rules()
+                            .into_iter()
+                            .collect(),
+                    ))
+                }
+
+                let assert_query_with_fallthrough_policy = |proxy: &mut RunningProxy| {
+                    reset_proxy_rules(&mut *proxy);
+                    assert_cass_error_eq!(
+                        execute_query(),
+                        CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
+                    );
+                    reset_proxy_rules(&mut *proxy);
+                    assert_cass_error_eq!(
+                        execute_batch(),
+                        CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
+                    );
+                };
+
+                let assert_query_with_default_policy = |proxy: &mut RunningProxy| {
+                    reset_proxy_rules(&mut *proxy);
+                    assert_cass_error_eq!(
+                        execute_query(),
+                        CassError::CASS_ERROR_SERVER_READ_FAILURE
+                    );
+                    reset_proxy_rules(&mut *proxy);
+                    assert_cass_error_eq!(
+                        execute_batch(),
+                        CassError::CASS_ERROR_SERVER_READ_FAILURE
+                    );
+                };
+
+                let set_provided_exec_profile = |name| {
+                    // Set statement/batch exec profile.
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, name,),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, name,),
+                        CassError::CASS_OK
+                    );
+                };
+                let set_exec_profile = || {
+                    set_provided_exec_profile(profile_name_c_str);
+                };
+                let unset_exec_profile = || {
+                    set_provided_exec_profile(std::ptr::null::<i8>());
+                };
+                let set_retry_policy_on_stmt = |policy| {
+                    assert_cass_error_eq!(
+                        cass_statement_set_retry_policy(statement_raw, policy,),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_retry_policy(batch_raw, policy,),
+                        CassError::CASS_OK
+                    );
+                };
+                let unset_retry_policy_on_stmt = || {
+                    set_retry_policy_on_stmt(std::ptr::null());
+                };
+
+                // ### START TESTING
+
+                // With no exec profile nor retry policy set on statement/batch,
+                // the default cluster-wide retry policy should be used: in this case, fallthrough.
+                // F - -
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F D -
+                set_exec_profile();
+                assert_query_with_default_policy(&mut proxy);
+
+                // F - -
+                unset_exec_profile();
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F - F
+                set_retry_policy_on_stmt(fallthrough_policy);
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F D F
+                set_exec_profile();
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F D -
+                unset_retry_policy_on_stmt();
+                assert_query_with_default_policy(&mut proxy);
+
+                // F D F
+                set_retry_policy_on_stmt(fallthrough_policy);
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F D D
+                set_retry_policy_on_stmt(default_policy);
+                assert_query_with_default_policy(&mut proxy);
+
+                // F D F
+                set_retry_policy_on_stmt(fallthrough_policy);
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F - F
+                unset_exec_profile();
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F - -
+                unset_retry_policy_on_stmt();
+                assert_query_with_fallthrough_policy(&mut proxy);
+
+                // F - D
+                set_retry_policy_on_stmt(default_policy);
+                assert_query_with_default_policy(&mut proxy);
+
+                // F D D
+                set_exec_profile();
+                assert_query_with_default_policy(&mut proxy);
+
+                // F D -
+                unset_retry_policy_on_stmt();
+                assert_query_with_default_policy(&mut proxy);
             }
 
             cass_future_wait_check_and_free(cass_session_close(session_raw));
