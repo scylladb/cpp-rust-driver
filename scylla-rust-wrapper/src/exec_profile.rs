@@ -425,6 +425,7 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
+    #[ntest::timeout(100)]
     fn test_exec_profile_name() {
         use std::convert::TryInto;
         let empty = "".to_owned();
@@ -440,6 +441,7 @@ mod tests {
     }
 
     #[test]
+    #[ntest::timeout(100)]
     fn test_load_balancing_config() {
         unsafe {
             let profile_raw = cass_execution_profile_new();
@@ -532,6 +534,7 @@ mod tests {
     }
 
     #[test]
+    #[ntest::timeout(100)]
     fn test_statement_and_batch_set_exec_profile() {
         unsafe {
             let empty_query = make_c_str!("");

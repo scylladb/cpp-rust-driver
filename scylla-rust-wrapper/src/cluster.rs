@@ -646,6 +646,7 @@ mod tests {
     };
 
     #[test]
+    #[ntest::timeout(100)]
     fn test_load_balancing_config() {
         unsafe {
             let cluster_raw = cass_cluster_new();
@@ -714,6 +715,7 @@ mod tests {
     }
 
     #[test]
+    #[ntest::timeout(100)]
     fn test_register_exec_profile() {
         unsafe {
             let cluster_raw = cass_cluster_new();

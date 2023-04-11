@@ -987,6 +987,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ntest::timeout(30000)]
     async fn retry_policy_on_statement_and_batch_is_handled_properly() {
         init_logger();
         test_with_one_proxy_one(
@@ -1158,6 +1159,7 @@ mod tests {
 
                 // With no exec profile nor retry policy set on statement/batch,
                 // the default cluster-wide retry policy should be used: in this case, fallthrough.
+
                 // F - -
                 assert_query_with_fallthrough_policy(&mut proxy);
 
