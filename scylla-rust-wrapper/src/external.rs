@@ -70,6 +70,14 @@ pub unsafe extern "C" fn cass_error_desc(error: CassError) -> *const c_char {
         }
         CassError::CASS_ERROR_SSL_PROTOCOL_ERROR => "Protocol error\0",
         CassError::CASS_ERROR_SSL_CLOSED => "Connection closed\0",
+        CassError::CASS_ERROR_CLOUD_CONFIG_OPEN_ERROR => "Unable to open cloud config file\0",
+        CassError::CASS_ERROR_CLOUD_CONFIG_PARSE_ERROR => "Unable to parse cloud config file\0",
+        CassError::CASS_ERROR_CLOUD_CONFIG_DECODE_ERROR => {
+            "Unable to decode cloud base64 key/cert\0"
+        }
+        CassError::CASS_ERROR_CLOUD_CONFIG_VALIDATION_ERROR => "Invalid cloud config\0",
+        CassError::CASS_ERROR_CLOUD_CONFIG_BAD_SSL_PARAMS => "Unable to parse cloud SSL key/cert\0",
+        CassError::CASS_ERROR_CLOUD_CONFIG_UNKNOWN_ERROR => "Unknown cloud error\0",
         _ => "\0",
     };
 

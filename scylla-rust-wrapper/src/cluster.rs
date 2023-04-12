@@ -10,6 +10,7 @@ use crate::types::*;
 use core::time::Duration;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
+use scylla::cloud::CloudConfigError;
 use scylla::execution_profile::ExecutionProfileBuilder;
 use scylla::frame::Compression;
 use scylla::load_balancing::LatencyAwarenessBuilder;
@@ -63,6 +64,10 @@ impl Default for LoadBalancingConfig {
 #[derive(Clone, Debug)]
 pub(crate) struct DcAwareness {
     pub(crate) local_dc: String,
+}
+
+pub enum SessionConfigError {
+    Cloud(CloudConfigError),
 }
 
 #[derive(Clone)]
