@@ -79,6 +79,8 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+
+    pub(crate) connection_bundle_path: Option<String>,
 }
 
 impl CassCluster {
@@ -131,6 +133,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         default_execution_profile_builder,
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
+        connection_bundle_path: None,
     }))
 }
 
@@ -334,22 +337,6 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         used_hosts_per_remote_dc,
         allow_remote_dcs_for_local_cl,
     )
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
-    _cluster_raw: *mut CassCluster,
-    path: *const c_char,
-    path_length: size_t,
-) -> CassError {
-    // FIXME: Should unzip file associated with the path
-    let zip_file = ptr_to_cstr_n(path, path_length).unwrap();
-
-    if zip_file == "invalid_filename" {
-        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
-
-    CassError::CASS_OK
 }
 
 #[no_mangle]

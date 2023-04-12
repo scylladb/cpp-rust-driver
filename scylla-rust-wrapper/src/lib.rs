@@ -12,6 +12,7 @@ mod argconv;
 pub mod batch;
 pub mod cass_error;
 pub mod cass_types;
+pub mod cloud;
 pub mod cluster;
 pub mod collection;
 pub mod exec_profile;
