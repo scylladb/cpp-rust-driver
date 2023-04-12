@@ -18,11 +18,13 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::SessionBuilder;
+use scylla::transport::errors::NewSessionError;
+use scylla::{CloudSessionBuilder, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
+use std::path::Path;
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
@@ -71,6 +73,65 @@ pub enum SessionConfigError {
 }
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
+pub enum CassSessionBuilder {
+    DefaultSessionBuilder(SessionBuilder),
+    CloudSessionBuilder(CloudSessionBuilder),
+}
+
+impl CassSessionBuilder {
+    async fn execution_profile_handle(
+        self,
+        mut execution_profile_builder: ExecutionProfileBuilder,
+        load_balancing_config: LoadBalancingConfig,
+    ) -> Result<Self, SessionConfigError> {
+        let load_balancing = load_balancing_config.build().await;
+        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
+        let handle = execution_profile_builder.build().into_handle();
+        let session_builder = match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                CassSessionBuilder::DefaultSessionBuilder(
+                    session_builder.default_execution_profile_handle(handle),
+                )
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                CassSessionBuilder::CloudSessionBuilder(
+                    cloud_session_builder.default_execution_profile_handle(handle),
+                )
+            }
+        };
+
+        Ok(session_builder)
+    }
+
+    pub fn use_keyspace(self, keyspace_name: impl Into<String>, case_sensitive: bool) -> Self {
+        match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                CassSessionBuilder::DefaultSessionBuilder(
+                    session_builder.use_keyspace(keyspace_name, case_sensitive),
+                )
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                CassSessionBuilder::CloudSessionBuilder(
+                    cloud_session_builder.use_keyspace(keyspace_name, case_sensitive),
+                )
+            }
+        }
+    }
+
+    pub async fn build(self) -> Result<Session, NewSessionError> {
+        match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                session_builder.build().await
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                cloud_session_builder.build().await
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct CassCluster {
     session_builder: SessionBuilder,
     default_execution_profile_builder: ExecutionProfileBuilder,
@@ -100,23 +161,35 @@ pub struct CassCustomPayload;
 // on the provided &CassCluster, hence the `static here.
 pub fn build_session_builder(
     cluster: &CassCluster,
-) -> impl Future<Output = SessionBuilder> + 'static {
-    let known_nodes = cluster
-        .contact_points
-        .iter()
-        .map(|cp| format!("{}:{}", cp, cluster.port));
-    let mut execution_profile_builder = cluster.default_execution_profile_builder.clone();
+) -> impl Future<Output = Result<CassSessionBuilder, SessionConfigError>> + 'static {
+    let session_builder: Result<CassSessionBuilder, SessionConfigError> =
+        if let Some(ref cloud_config_path) = cluster.connection_bundle_path {
+            let cloud_session_builder = CloudSessionBuilder::new(Path::new(cloud_config_path));
+            match cloud_session_builder {
+                Ok(builder) => Ok(CassSessionBuilder::CloudSessionBuilder(builder)),
+                Err(err) => Err(SessionConfigError::Cloud(err)),
+            }
+        } else {
+            let known_nodes = cluster
+                .contact_points
+                .iter()
+                .map(|cp| format!("{}:{}", cp, cluster.port));
+            let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
+            if let (Some(username), Some(password)) =
+                (&cluster.auth_username, &cluster.auth_password)
+            {
+                session_builder = session_builder.user(username, password)
+            }
+
+            Ok(CassSessionBuilder::DefaultSessionBuilder(session_builder))
+        };
+    let execution_profile_builder = cluster.default_execution_profile_builder.clone();
     let load_balancing_config = cluster.load_balancing_config.clone();
-    let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
-    if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
-        session_builder = session_builder.user(username, password)
-    }
 
     async move {
-        let load_balancing = load_balancing_config.clone().build().await;
-        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
-        session_builder
-            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        session_builder?
+            .execution_profile_handle(execution_profile_builder, load_balancing_config)
+            .await
     }
 }
 
