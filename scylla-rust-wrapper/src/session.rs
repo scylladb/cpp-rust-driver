@@ -581,11 +581,13 @@ mod tests {
         cass_types::CassBatchType,
         cluster::{
             cass_cluster_free, cass_cluster_new, cass_cluster_set_contact_points_n,
-            cass_cluster_set_execution_profile, cass_cluster_set_retry_policy,
+            cass_cluster_set_execution_profile, cass_cluster_set_latency_aware_routing,
+            cass_cluster_set_retry_policy,
         },
         exec_profile::{
             cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
             cass_execution_profile_free, cass_execution_profile_new,
+            cass_execution_profile_set_latency_aware_routing,
             cass_execution_profile_set_retry_policy, cass_statement_set_execution_profile,
             cass_statement_set_execution_profile_n, ExecProfileName,
         },
@@ -595,6 +597,7 @@ mod tests {
         retry_policy::{cass_retry_policy_default_new, cass_retry_policy_fallthrough_new},
         statement::{cass_statement_free, cass_statement_new, cass_statement_set_retry_policy},
         testing::assert_cass_error_eq,
+        types::cass_bool_t,
     };
     use std::{
         collections::HashSet,
@@ -1224,5 +1227,39 @@ mod tests {
             cass_cluster_free(cluster_raw);
         }
         proxy
+    }
+
+    #[test]
+    #[ntest::timeout(5000)]
+    fn session_with_latency_aware_load_balancing_does_not_panic() {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+
+            // An IP with very little chance of having a Scylla node listening
+            let ip = "127.0.1.231";
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip);
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw, c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+            cass_cluster_set_latency_aware_routing(cluster_raw, true as cass_bool_t);
+            let session_raw = cass_session_new();
+            let profile_raw = cass_execution_profile_new();
+            assert_cass_error_eq!(
+                cass_execution_profile_set_latency_aware_routing(profile_raw, true as cass_bool_t),
+                CassError::CASS_OK
+            );
+            let profile_name = make_c_str!("latency_aware");
+            cass_cluster_set_execution_profile(cluster_raw, profile_name, profile_raw);
+            {
+                let cass_future = cass_session_connect(session_raw, cluster_raw);
+                cass_future_wait(cass_future);
+                // The exact outcome is not important, we only test that we don't panic.
+            }
+            cass_execution_profile_free(profile_raw);
+            cass_session_free(session_raw);
+            cass_cluster_free(cluster_raw);
+        }
     }
 }
