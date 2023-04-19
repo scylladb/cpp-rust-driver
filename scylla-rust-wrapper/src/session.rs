@@ -146,6 +146,29 @@ pub unsafe extern "C" fn cass_session_connect(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_session_connect_keyspace(
+    session_raw: *mut CassSession,
+    cluster_raw: *const CassCluster,
+    keyspace: *const c_char,
+) -> *const CassFuture {
+    cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_connect_keyspace_n(
+    session_raw: *mut CassSession,
+    cluster_raw: *const CassCluster,
+    keyspace: *const c_char,
+    keyspace_length: size_t,
+) -> *const CassFuture {
+    let session_opt = ptr_to_ref(session_raw);
+    let cluster: &CassCluster = ptr_to_ref(cluster_raw);
+    let keyspace = ptr_to_cstr_n(keyspace, keyspace_length).map(ToOwned::to_owned);
+
+    CassSessionInner::connect(session_opt, cluster, keyspace)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: *mut CassSession,
     batch_raw: *const CassBatch,
