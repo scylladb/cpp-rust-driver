@@ -4,8 +4,8 @@ use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
-use crate::exec_profile::{ExecProfileName, PerStatementExecProfile};
-use crate::future::{CassFuture, CassResultValue};
+use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
+use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::logging::init_logging;
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
@@ -19,7 +19,7 @@ use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
-use scylla::{QueryResult, Session};
+use scylla::{QueryResult, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
@@ -65,6 +65,63 @@ impl CassSessionInner {
             }
         }
     }
+
+    fn connect(
+        // This reference is 'static because this is the only was of assuring the borrow checker
+        // that holding it in our returned future is sound. Ideally, we would prefer to have
+        // the returned future's lifetime constrained by real lifetime of the session's RwLock,
+        // but this is impossible to be guaranteed due to C/Rust cross-language barrier.
+        session_opt: &'static RwLock<Option<CassSessionInner>>,
+        cluster: &CassCluster,
+        keyspace: Option<String>,
+    ) -> *const CassFuture {
+        let session_builder = build_session_builder(cluster);
+        let exec_profile_map = cluster.execution_profile_map().clone();
+
+        CassFuture::make_raw(Self::connect_fut(
+            session_opt,
+            session_builder,
+            exec_profile_map,
+            keyspace,
+        ))
+    }
+
+    async fn connect_fut(
+        session_opt: &RwLock<Option<CassSessionInner>>,
+        session_builder_fut: impl Future<Output = SessionBuilder>,
+        exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
+        keyspace: Option<String>,
+    ) -> CassFutureResult {
+        // This can sleep for a long time, but only if someone connects/closes session
+        // from more than 1 thread concurrently, which is inherently stupid thing to do.
+        let mut session_guard = session_opt.write().await;
+        if session_guard.is_some() {
+            return Err((
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+                "Already connecting, closing, or connected".msg(),
+            ));
+        }
+        let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
+        for (name, builder) in exec_profile_builder_map {
+            exec_profile_map.insert(name, builder.build().await.into_handle());
+        }
+
+        let mut session_builder = session_builder_fut.await;
+        if let Some(keyspace) = keyspace {
+            session_builder = session_builder.use_keyspace(keyspace, false);
+        }
+
+        let session = session_builder
+            .build()
+            .await
+            .map_err(|err| (CassError::from(&err), err.msg()))?;
+
+        *session_guard = Some(CassSessionInner {
+            session,
+            exec_profile_map,
+        });
+        Ok(CassResultValue::Empty)
+    }
 }
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
@@ -85,39 +142,7 @@ pub unsafe extern "C" fn cass_session_connect(
     let session_opt = ptr_to_ref(session_raw);
     let cluster: &CassCluster = ptr_to_ref(cluster_raw);
 
-    let session_builder_fut = build_session_builder(cluster);
-    let exec_profile_builder_map = cluster.execution_profile_map().clone();
-
-    #[allow(clippy::let_unit_value, unused)]
-    let cluster = ();
-
-    CassFuture::make_raw(async move {
-        // This can sleep for a long time, but only if someone connects/closes session
-        // from more than 1 thread concurrently, which is inherently stupid thing to do.
-        let mut session_guard = session_opt.write().await;
-        if session_guard.is_some() {
-            return Err((
-                CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
-                "Already connecting, closing, or connected".msg(),
-            ));
-        }
-        let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
-        for (name, builder) in exec_profile_builder_map {
-            exec_profile_map.insert(name, builder.build().await.into_handle());
-        }
-
-        let session = session_builder_fut
-            .await
-            .build()
-            .await
-            .map_err(|err| (CassError::from(&err), err.msg()))?;
-
-        *session_guard = Some(CassSessionInner {
-            session,
-            exec_profile_map,
-        });
-        Ok(CassResultValue::Empty)
-    })
+    CassSessionInner::connect(session_opt, cluster, None)
 }
 
 #[no_mangle]
