@@ -83,7 +83,13 @@ pub unsafe extern "C" fn cass_session_connect(
     cluster_raw: *const CassCluster,
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
-    let cluster: CassCluster = ptr_to_ref(cluster_raw).clone();
+    let cluster: &CassCluster = ptr_to_ref(cluster_raw);
+
+    let session_builder_fut = build_session_builder(cluster);
+    let exec_profile_builder_map = cluster.execution_profile_map().clone();
+
+    #[allow(clippy::let_unit_value, unused)]
+    let cluster = ();
 
     CassFuture::make_raw(async move {
         // This can sleep for a long time, but only if someone connects/closes session
@@ -95,12 +101,12 @@ pub unsafe extern "C" fn cass_session_connect(
                 "Already connecting, closing, or connected".msg(),
             ));
         }
-        let mut exec_profile_map = HashMap::with_capacity(cluster.execution_profile_map().len());
-        for (name, builder) in cluster.execution_profile_map() {
-            exec_profile_map.insert(name.clone(), builder.clone().build().await.into_handle());
+        let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
+        for (name, builder) in exec_profile_builder_map {
+            exec_profile_map.insert(name, builder.build().await.into_handle());
         }
 
-        let session = build_session_builder(&cluster)
+        let session = session_builder_fut
             .await
             .build()
             .await
