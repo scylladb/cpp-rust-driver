@@ -30,6 +30,10 @@ jobs:
     - name: Build
       run: cmake -DCASS_BUILD_INTEGRATION_TESTS=ON . && make
 
+    - name: Run unit and proxy tests
+      working-directory: ./scylla-rust-wrapper
+      run: cargo test
+
     - name: Run integration tests on Scylla 5.0.0
       env:
 #        Ignored tests are added in the end, after the "-" sign.
