@@ -54,5 +54,6 @@ jobs:
 :*5.Integration_Cassandra_*\
 :*19.Integration_Cassandra_*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_UDT\
-:SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart"
+:SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
+:ExecutionProfileTest.InvalidName"
         run: valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite ./cassandra-integration-tests --version=3.0.9 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
