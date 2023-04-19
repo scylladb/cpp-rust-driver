@@ -28,6 +28,7 @@ pub mod retry_policy;
 pub mod session;
 pub mod ssl;
 pub mod statement;
+#[cfg(test)]
 pub mod testing;
 pub mod tuple;
 pub mod types;
