@@ -16,4 +16,4 @@ jobs:
     - uses: actions/checkout@v2
     - name: Clippy check
       working-directory: ./scylla-rust-wrapper
-      run: cargo clippy --verbose -- -D warnings -Aclippy::uninlined_format_args
+      run: cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args
