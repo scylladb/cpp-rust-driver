@@ -1,4 +1,4 @@
-#![allow(non_camel_case_types)]
+#![allow(non_camel_case_types, non_snake_case)]
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
