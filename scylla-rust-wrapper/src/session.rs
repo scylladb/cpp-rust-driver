@@ -289,12 +289,18 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match query_res {
             Ok(result) => {
+                let legacy_result = match result.into_legacy_result() {
+                    Ok(res) => res,
+                    Err(err) => {
+                        return Err((err.into(), "encountered error while parsing".to_owned()))
+                    }
+                };
                 let metadata = Arc::new(CassResultData {
-                    paging_state: result.paging_state,
-                    col_specs: result.col_specs,
-                    tracing_id: result.tracing_id,
+                    paging_state: legacy_result.paging_state,
+                    col_specs: legacy_result.col_specs,
+                    tracing_id: legacy_result.tracing_id,
                 });
-                let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
+                let cass_rows = create_cass_rows_from_rows(legacy_result.rows, &metadata);
                 let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
                     metadata,

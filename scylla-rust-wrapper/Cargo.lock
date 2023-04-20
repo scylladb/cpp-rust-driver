@@ -161,6 +161,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
+name = "darling"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "109c1ca6e6b7f82cc233a97004ea8ed7ca123a9af07a8230878fcfda9b158bf0"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 1.0.98",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn 1.0.98",
+]
+
+[[package]]
 name = "dashmap"
 version = "5.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -384,6 +419,12 @@ dependencies = [
  "wasm-bindgen",
  "winapi",
 ]
+
+[[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "instant"
@@ -912,7 +953,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 [[package]]
 name = "scylla"
 version = "0.8.1"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
+source = "git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06#6585f06556fdf12139b864cf86cf280bfb0b8063"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -971,7 +1012,7 @@ dependencies = [
 [[package]]
 name = "scylla-cql"
 version = "0.0.6"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
+source = "git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06#6585f06556fdf12139b864cf86cf280bfb0b8063"
 dependencies = [
  "async-trait",
  "bigdecimal",
@@ -991,8 +1032,9 @@ dependencies = [
 [[package]]
 name = "scylla-macros"
 version = "0.2.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
+source = "git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06#6585f06556fdf12139b864cf86cf280bfb0b8063"
 dependencies = [
+ "darling",
  "proc-macro2",
  "quote",
  "syn 1.0.98",
@@ -1001,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "scylla-proxy"
 version = "0.0.2"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
+source = "git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06#6585f06556fdf12139b864cf86cf280bfb0b8063"
 dependencies = [
  "bigdecimal",
  "byteorder",
@@ -1084,6 +1126,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"

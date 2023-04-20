@@ -1,3 +1,4 @@
+use scylla::frame::frame_errors::ParseError;
 use scylla::transport::errors::*;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_errors.rs"));
@@ -95,6 +96,19 @@ impl From<&BadKeyspaceName> for CassError {
     }
 }
 
+impl From<ParseError> for CassError {
+    fn from(error: ParseError) -> Self {
+        match error {
+            ParseError::BadDataToSerialize(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            ParseError::BadIncomingData(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            ParseError::IoError(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            ParseError::TypeNotImplemented(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            ParseError::SerializeValuesError(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            ParseError::CqlTypeError(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+        }
+    }
+}
+
 pub trait CassErrorMessage {
     fn msg(&self) -> String;
 }
@@ -124,6 +138,12 @@ impl CassErrorMessage for NewSessionError {
 }
 
 impl CassErrorMessage for BadKeyspaceName {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl CassErrorMessage for ParseError {
     fn msg(&self) -> String {
         self.to_string()
     }
