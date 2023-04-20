@@ -565,6 +565,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 
 #[cfg(test)]
 mod tests {
+    use rusty_fork::rusty_fork_test;
     use scylla::{frame::types::LegacyConsistency, transport::errors::DbError};
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
@@ -1260,6 +1261,45 @@ mod tests {
             cass_execution_profile_free(profile_raw);
             cass_session_free(session_raw);
             cass_cluster_free(cluster_raw);
+        }
+    }
+
+    rusty_fork_test! {
+        #![rusty_fork(timeout_ms = 1000)]
+        #[test]
+        fn cluster_is_not_referenced_by_session_connect_future() {
+            // An IP with very little chance of having a Scylla node listening
+            let ip = "127.0.1.231";
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip);
+            let profile_name = make_c_str!("latency_aware");
+
+            unsafe {
+                let cluster_raw = cass_cluster_new();
+
+                assert_cass_error_eq!(
+                    cass_cluster_set_contact_points_n(cluster_raw, c_ip, c_ip_len),
+                    CassError::CASS_OK
+                );
+                cass_cluster_set_latency_aware_routing(cluster_raw, true as cass_bool_t);
+                let session_raw = cass_session_new();
+                let profile_raw = cass_execution_profile_new();
+                assert_cass_error_eq!(
+                    cass_execution_profile_set_latency_aware_routing(profile_raw, true as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                cass_cluster_set_execution_profile(cluster_raw, profile_name, profile_raw);
+                {
+                    let cass_future = cass_session_connect(session_raw, cluster_raw);
+
+                    // This checks that we don't use-after-free the cluster inside the future.
+                    cass_cluster_free(cluster_raw);
+
+                    cass_future_wait(cass_future);
+                    // The exact outcome is not important, we only test that we don't segfault.
+                }
+                cass_execution_profile_free(profile_raw);
+                cass_session_free(session_raw);
+            }
         }
     }
 }
