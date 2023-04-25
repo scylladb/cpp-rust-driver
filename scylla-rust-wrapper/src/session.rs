@@ -6,7 +6,6 @@ use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
-use crate::logging::init_logging;
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
 use crate::query_result::Value::{CollectionValue, RegularValue};
@@ -128,8 +127,6 @@ pub type CassSession = RwLock<Option<CassSessionInner>>;
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
-    init_logging();
-
     let session = Arc::new(RwLock::new(None::<CassSessionInner>));
     Arc::into_raw(session) as *mut CassSession
 }
