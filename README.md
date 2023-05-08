@@ -8,6 +8,12 @@ Wrapper around ScyllaDB's rust-driver compatible with Datastax cpp-driver.
 ___
 
 There are some examples in the [examples](https://github.com/scylladb/cpp-rust-driver/tree/master/examples) directory.
+To run a single example:
+```shell
+cd examples/cloud
+gcc cloud.c PATH_TO_CPP_RUST/scylla-rust-wrapper/target/debug/libscylla_cpp_driver.so -Wl,-rpath,PATH_TO_CPP_RUST/build  -I PATH_TO_CPP_RUST/include -o cloud
+./cloud path_to_connection_bundle username password
+```
 
 ```c++
 #include <cassandra.h>
