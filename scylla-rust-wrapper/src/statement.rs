@@ -222,7 +222,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement.paging_state = result.metadata.paging_state.clone();
+    statement.paging_state = result.result.paging_state();
     CassError::CASS_OK
 }
 

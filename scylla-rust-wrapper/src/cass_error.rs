@@ -1,5 +1,6 @@
 use scylla::frame::frame_errors::ParseError;
 use scylla::transport::errors::*;
+use scylla::transport::query_result::{FirstRowError, RowsError};
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_errors.rs"));
 
@@ -96,8 +97,8 @@ impl From<&BadKeyspaceName> for CassError {
     }
 }
 
-impl From<ParseError> for CassError {
-    fn from(error: ParseError) -> Self {
+impl From<&ParseError> for CassError {
+    fn from(error: &ParseError) -> Self {
         match error {
             ParseError::BadDataToSerialize(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
             ParseError::BadIncomingData(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
@@ -105,6 +106,25 @@ impl From<ParseError> for CassError {
             ParseError::TypeNotImplemented(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
             ParseError::SerializeValuesError(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
             ParseError::CqlTypeError(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+        }
+    }
+}
+
+impl From<&RowsError> for CassError {
+    fn from(error: &RowsError) -> Self {
+        match error {
+            RowsError::NotRowsResponse => CassError::CASS_ERROR_LIB_BAD_PARAMS, // same error code returned in C++ driver
+            RowsError::TypeCheckFailed(err) => err.into(),
+        }
+    }
+}
+
+impl From<&FirstRowError> for CassError {
+    fn from(error: &FirstRowError) -> Self {
+        match error {
+            FirstRowError::NotRowsResponse => CassError::CASS_ERROR_LIB_BAD_PARAMS, // same error code returned in C++ driver
+            FirstRowError::RowsEmpty => CassError::CASS_ERROR_LIB_INVALID_ITEM_COUNT,
+            FirstRowError::TypeCheckFailed(err) => err.into(),
         }
     }
 }
@@ -144,6 +164,18 @@ impl CassErrorMessage for BadKeyspaceName {
 }
 
 impl CassErrorMessage for ParseError {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl CassErrorMessage for RowsError {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl CassErrorMessage for FirstRowError {
     fn msg(&self) -> String {
         self.to_string()
     }

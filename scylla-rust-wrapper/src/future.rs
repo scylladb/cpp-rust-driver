@@ -254,7 +254,7 @@ pub unsafe extern "C" fn cass_future_tracing_id(
     tracing_id: *mut CassUuid,
 ) -> CassError {
     ptr_to_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(CassResultValue::QueryResult(result)) => match result.metadata.tracing_id {
+        Ok(CassResultValue::QueryResult(cass_result)) => match cass_result.result.tracing_id() {
             Some(id) => {
                 *tracing_id = CassUuid::from(id);
                 CassError::CASS_OK

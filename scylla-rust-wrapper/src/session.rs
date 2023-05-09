@@ -1,19 +1,17 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
-use crate::query_result::Value::{CollectionValue, RegularValue};
-use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collection, Value};
+use crate::query_result::{CassResult, CassRow};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
-use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -202,14 +200,10 @@ pub unsafe extern "C" fn cass_session_execute_batch(
 
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
-            Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
-                rows: None,
-                metadata: Arc::new(CassResultData {
-                    paging_state: None,
-                    col_specs: vec![],
-                    tracing_id: None,
-                }),
-            }))),
+            Ok(result) => {
+                let cass_result: Arc<CassResult> = create_cass_result(result);
+                Ok(CassResultValue::QueryResult(cass_result))
+            }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
     };
@@ -289,23 +283,7 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match query_res {
             Ok(result) => {
-                let legacy_result = match result.into_legacy_result() {
-                    Ok(res) => res,
-                    Err(err) => {
-                        return Err((err.into(), "encountered error while parsing".to_owned()))
-                    }
-                };
-                let metadata = Arc::new(CassResultData {
-                    paging_state: legacy_result.paging_state,
-                    col_specs: legacy_result.col_specs,
-                    tracing_id: legacy_result.tracing_id,
-                });
-                let cass_rows = create_cass_rows_from_rows(legacy_result.rows, &metadata);
-                let cass_result = Arc::new(CassResult {
-                    rows: cass_rows,
-                    metadata,
-                });
-
+                let cass_result: Arc<CassResult> = create_cass_result(result);
                 Ok(CassResultValue::QueryResult(cass_result))
             }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
@@ -320,122 +298,21 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-fn create_cass_rows_from_rows(
-    rows: Option<Vec<Row>>,
-    metadata: &Arc<CassResultData>,
-) -> Option<Vec<CassRow>> {
-    let rows = rows?;
-    let cass_rows = rows
-        .into_iter()
-        .map(|r| CassRow {
-            columns: create_cass_row_columns(r, metadata),
-            result_metadata: metadata.clone(),
-        })
-        .collect();
+fn create_cass_result(result: QueryResult) -> Arc<CassResult> {
+    Arc::new_cyclic(|weak_res| {
+        let mut cass_result = CassResult {
+            result: Arc::new(result),
+            first_row: None, // TODO: add first row decoding
+        };
 
-    Some(cass_rows)
-}
+        let first_row = CassRow {
+            result: weak_res.clone(),
+            columns: Vec::new(),
+        };
+        cass_result.first_row = Some(first_row);
 
-fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {
-    row.columns
-        .into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(val, col)| {
-            let column_type = Arc::new(get_column_type(&col.typ));
-            CassValue {
-                value: val.map(|col_val| get_column_value(col_val, &column_type)),
-                value_type: column_type,
-            }
-        })
-        .collect()
-}
-
-fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
-    match (column, column_type.as_ref()) {
-        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
-            CollectionValue(Collection::List(
-                list.into_iter()
-                    .map(|val| CassValue {
-                        value_type: list_type.clone(),
-                        value: Some(get_column_value(val, list_type)),
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
-            CollectionValue(Collection::Map(
-                map.into_iter()
-                    .map(|(key, val)| {
-                        (
-                            CassValue {
-                                value_type: key_type.clone(),
-                                value: Some(get_column_value(key, key_type)),
-                            },
-                            CassValue {
-                                value_type: value_type.clone(),
-                                value: Some(get_column_value(val, value_type)),
-                            },
-                        )
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
-            CollectionValue(Collection::Set(
-                set.into_iter()
-                    .map(|val| CassValue {
-                        value_type: set_type.clone(),
-                        value: Some(get_column_value(val, set_type)),
-                    })
-                    .collect(),
-            ))
-        }
-        (
-            CqlValue::UserDefinedType {
-                keyspace,
-                type_name,
-                fields,
-            },
-            CassDataType::UDT(udt_type),
-        ) => CollectionValue(Collection::UserDefinedType {
-            keyspace,
-            type_name,
-            fields: fields
-                .into_iter()
-                .enumerate()
-                .map(|(index, (name, val_opt))| {
-                    let udt_field_type_opt = udt_type.get_field_by_index(index);
-                    if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
-                        return (
-                            name,
-                            Some(CassValue {
-                                value_type: udt_field_type.clone(),
-                                value: Some(get_column_value(val, udt_field_type)),
-                            }),
-                        );
-                    }
-                    (name, None)
-                })
-                .collect(),
-        }),
-        (CqlValue::Tuple(tuple), CassDataType::Tuple(tuple_types)) => {
-            CollectionValue(Collection::Tuple(
-                tuple
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, val_opt)| {
-                        val_opt
-                            .zip(tuple_types.get(index))
-                            .map(|(val, tuple_field_type)| CassValue {
-                                value_type: tuple_field_type.clone(),
-                                value: Some(get_column_value(val, tuple_field_type)),
-                            })
-                    })
-                    .collect(),
-            ))
-        }
-        (regular_value, _) => RegularValue(regular_value),
-    }
+        cass_result
+    })
 }
 
 #[no_mangle]

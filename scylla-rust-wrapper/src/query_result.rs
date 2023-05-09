@@ -8,35 +8,31 @@ use crate::metadata::{
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
-use scylla::Bytes;
+use scylla::types::deserialize::FrameSlice;
+use scylla::QueryResult;
 use std::convert::TryInto;
 use std::os::raw::c_char;
-use std::sync::Arc;
-use uuid::Uuid;
+use std::sync::{Arc, Weak};
 
 pub struct CassResult {
-    pub rows: Option<Vec<CassRow>>,
-    pub metadata: Arc<CassResultData>,
-}
-
-pub struct CassResultData {
-    pub paging_state: Option<Bytes>,
-    pub col_specs: Vec<ColumnSpec>,
-    pub tracing_id: Option<Uuid>,
+    pub result: Arc<QueryResult>,
+    pub first_row: Option<CassRow>,
 }
 
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow {
+    pub result: Weak<CassResult>,
     pub columns: Vec<CassValue>,
-    pub result_metadata: Arc<CassResultData>,
 }
 
+#[derive(Clone)]
 pub enum Value {
     RegularValue(CqlValue),
     CollectionValue(Collection),
 }
 
+#[derive(Clone)]
 pub enum Collection {
     List(Vec<CassValue>),
     Map(Vec<(CassValue, CassValue)>),
@@ -49,13 +45,18 @@ pub enum Collection {
     Tuple(Vec<Option<CassValue>>),
 }
 
+#[derive(Clone)]
 pub struct CassValue {
     pub value: Option<Value>,
+    /// Represents a raw, unparsed column value.
+    pub frame_slice: Option<FrameSlice<'static>>,
+    pub is_null: bool,
     pub value_type: Arc<CassDataType>,
 }
 
 pub struct CassResultIterator {
     result: Arc<CassResult>,
+    row: Option<CassRow>,
     position: Option<usize>,
 }
 
@@ -136,8 +137,8 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             result_iterator.position = Some(new_pos);
 
-            match &result_iterator.result.rows {
-                Some(rs) => (new_pos < rs.len()) as cass_bool_t,
+            match result_iterator.result.result.rows_num() {
+                Some(rs) => (new_pos < rs) as cass_bool_t, // TODO: add next row decoding
                 None => false as cass_bool_t,
             }
         }
@@ -235,17 +236,12 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
             None => return std::ptr::null(),
         };
 
-        let row: &CassRow = match result_iterator
-            .result
-            .rows
-            .as_ref()
-            .and_then(|rs| rs.get(iter_position))
-        {
-            Some(row) => row,
-            None => return std::ptr::null(),
-        };
-
-        return row;
+        if let Some(rows_count) = result_iterator.result.result.rows_num() {
+            return match &result_iterator.row {
+                Some(row) if iter_position < rows_count => row,
+                _ => std::ptr::null(),
+            };
+        }
     }
 
     std::ptr::null()
@@ -596,9 +592,14 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw = clone_arced(result);
+    let row = result_from_raw.first_row.as_ref().map(|row| CassRow {
+        result: Arc::downgrade(&result_from_raw),
+        columns: row.columns.clone(), // C++ driver also clones columns of the first row into the iterator.
+    });
 
     let iterator = CassResultIterator {
         result: result_from_raw,
+        row,
         position: None,
     };
 
@@ -817,7 +818,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    result.metadata.paging_state.is_some() as cass_bool_t
+    result.result.paging_state().is_some() as cass_bool_t
 }
 
 #[no_mangle]
@@ -856,6 +857,8 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
     let row_from_raw = ptr_to_ref(row);
     let mut name_str = ptr_to_cstr_n(name, name_length).unwrap();
     let mut is_case_sensitive = false;
+    let result = row_from_raw.result.upgrade().unwrap(); // safe to unwrap as result lives longer than row.
+    let col_specs = result.result.column_specs();
 
     if name_str.starts_with('\"') && name_str.ends_with('\"') {
         name_str = name_str.strip_prefix('\"').unwrap();
@@ -863,22 +866,24 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
         is_case_sensitive = true;
     }
 
-    return row_from_raw
-        .result_metadata
-        .col_specs
-        .iter()
-        .enumerate()
-        .find(|(_, spec)| {
-            is_case_sensitive && spec.name == name_str
-                || !is_case_sensitive && spec.name.eq_ignore_ascii_case(name_str)
+    col_specs
+        .and_then(|col_specs| {
+            col_specs
+                .iter()
+                .enumerate()
+                .find(|(_, spec)| {
+                    is_case_sensitive && spec.name == name_str
+                        || !is_case_sensitive && spec.name.eq_ignore_ascii_case(name_str)
+                })
+                .map(|(index, _)| {
+                    if let Some(value) = row_from_raw.columns.get(index) {
+                        value as *const CassValue
+                    } else {
+                        std::ptr::null()
+                    }
+                })
         })
-        .map(|(index, _)| {
-            return match row_from_raw.columns.get(index) {
-                Some(value) => value as *const CassValue,
-                None => std::ptr::null(),
-            };
-        })
-        .unwrap_or(std::ptr::null());
+        .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
@@ -890,12 +895,17 @@ pub unsafe extern "C" fn cass_result_column_name(
 ) -> CassError {
     let result_from_raw = ptr_to_ref(result);
     let index_usize: usize = index.try_into().unwrap();
+    let col_specs = if let Some(specs) = result_from_raw.result.column_specs() {
+        specs
+    } else {
+        return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
+    };
 
-    if index_usize >= result_from_raw.metadata.col_specs.len() {
+    if index_usize >= col_specs.len() {
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     }
 
-    let column_spec: &ColumnSpec = result_from_raw.metadata.col_specs.get(index_usize).unwrap();
+    let column_spec: &ColumnSpec = col_specs.get(index_usize).unwrap();
     let column_name = column_spec.name.as_str();
 
     write_str_to_c(column_name, name, name_length);
@@ -1195,26 +1205,25 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.as_ref().is_none() {
-        return 0;
-    }
-
-    result.rows.as_ref().unwrap().len() as size_t
+    result.result.rows_num().as_ref().copied().unwrap_or(0) as size_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    result.metadata.col_specs.len() as size_t
+    result
+        .result
+        .column_specs()
+        .map_or(0, |col_specs| col_specs.len()) as size_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.is_some() || result.rows.as_ref().unwrap().is_empty() {
-        return result.rows.as_ref().unwrap().first().unwrap();
+    if let Some(first_row) = &result.first_row {
+        return first_row as *const CassRow;
     }
 
     std::ptr::null()
@@ -1232,7 +1241,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
     let result_from_raw = ptr_to_ref(result);
 
-    match &result_from_raw.metadata.paging_state {
+    match &result_from_raw.result.paging_state() {
         Some(result_paging_state) => {
             *paging_state_size = result_paging_state.len() as u64;
             *paging_state = result_paging_state.as_ptr() as *const c_char;
