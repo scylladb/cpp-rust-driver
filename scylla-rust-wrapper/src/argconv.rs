@@ -94,3 +94,14 @@ macro_rules! make_c_str {
 
 #[cfg(test)]
 pub(crate) use make_c_str;
+
+macro_rules! unwrap_or_return_false {
+    ( $e:expr ) => {
+        match $e {
+            Ok(x) => x,
+            Err(_) => return false,
+        }
+    };
+}
+
+pub(crate) use unwrap_or_return_false;

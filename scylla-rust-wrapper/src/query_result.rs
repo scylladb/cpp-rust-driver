@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, get_column_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -8,6 +8,7 @@ use crate::metadata::{
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
+use scylla::types::deserialize::row::ColumnIterator;
 use scylla::types::deserialize::FrameSlice;
 use scylla::QueryResult;
 use std::convert::TryInto;
@@ -121,6 +122,33 @@ pub enum CassIterator {
     CassViewMetaIterator(CassViewMetaIterator),
 }
 
+fn decode_next_row(result: &'static CassResult, row: &mut Option<CassRow>) -> bool {
+    if let Some(row) = row {
+        // Errors are ignored, but logging them may come in handy in the future.
+        let mut rows_iter = unwrap_or_return_false!(result.result.rows::<ColumnIterator>());
+        let next_cols_iter = unwrap_or_return_false!(rows_iter.next().unwrap());
+
+        for (i, raw_col) in next_cols_iter.into_iter().enumerate() {
+            let raw_col = unwrap_or_return_false!(raw_col);
+            let value_type = get_column_type(&raw_col.spec.typ);
+            let frame_slice = raw_col.slice;
+            let is_null = frame_slice.map_or(true, |f| f.is_empty());
+
+            let cass_value = CassValue {
+                value: None, // First `cass_value_get_*` call will deserialize frame_slice to CassValue
+                frame_slice,
+                is_null,
+                value_type: Arc::new(value_type),
+            };
+            // Below assignment is safe from out of bounds panic as,
+            // first [decode_first_row] call already initialized the columns vec
+            row.columns[i] = cass_value;
+        }
+    }
+
+    true
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
     free_boxed(iterator);
@@ -129,17 +157,20 @@ pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
 // After creating an iterator we have to call next() before accessing the value
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass_bool_t {
-    let mut iter = ptr_to_ref_mut(iterator);
+    let iter: &mut CassIterator = ptr_to_ref_mut(iterator);
 
-    match &mut iter {
+    match iter {
         CassIterator::CassResultIterator(result_iterator) => {
             let new_pos: usize = result_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
             result_iterator.position = Some(new_pos);
 
             match result_iterator.result.result.rows_num() {
-                Some(rs) => (new_pos < rs) as cass_bool_t, // TODO: add next row decoding
-                None => false as cass_bool_t,
+                Some(rs) if new_pos < rs => {
+                    decode_next_row(result_iterator.result.as_ref(), &mut result_iterator.row)
+                        as cass_bool_t
+                }
+                _ => false as cass_bool_t,
             }
         }
         CassIterator::CassRowIterator(row_iterator) => {

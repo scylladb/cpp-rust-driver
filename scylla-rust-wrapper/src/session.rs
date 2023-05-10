@@ -1,14 +1,14 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{CassDataType, UDTDataType};
+use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
-use crate::query_result::{CassResult, CassRow};
+use crate::query_result::{CassResult, CassRow, CassValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
@@ -16,6 +16,7 @@ use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
+use scylla::types::deserialize::row::ColumnIterator;
 use scylla::{QueryResult, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::future::Future;
@@ -298,21 +299,55 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-fn create_cass_result(result: QueryResult) -> Arc<CassResult> {
-    Arc::new_cyclic(|weak_res| {
+unsafe fn create_cass_result(result: QueryResult) -> Arc<CassResult> {
+    let cass_result = Arc::new_cyclic(|weak_res| {
         let mut cass_result = CassResult {
             result: Arc::new(result),
-            first_row: None, // TODO: add first row decoding
+            first_row: None,
         };
-
+        let cols_num = cass_result
+            .result
+            .column_specs()
+            .map_or(0, |col_specs| col_specs.len());
         let first_row = CassRow {
             result: weak_res.clone(),
-            columns: Vec::new(),
+            columns: Vec::with_capacity(cols_num),
         };
         cass_result.first_row = Some(first_row);
 
         cass_result
-    })
+    });
+    decode_first_row(Arc::as_ptr(&cass_result) as *mut CassResult);
+
+    cass_result
+}
+
+unsafe fn decode_first_row(result: *mut CassResult) -> bool {
+    let result = ptr_to_ref_mut(result);
+    // Errors are ignored, but logging them may come handy in the future.
+    let rows_iter = unwrap_or_return_false!(result.result.first_row::<ColumnIterator>());
+
+    if result.first_row.is_none() {
+        return false;
+    }
+
+    for raw_col in rows_iter.into_iter() {
+        let raw_col = unwrap_or_return_false!(raw_col);
+        let value_type = get_column_type(&raw_col.spec.typ);
+        let frame_slice = raw_col.slice;
+        let is_null = frame_slice.map_or(true, |f| f.is_empty());
+
+        let cass_value = CassValue {
+            value: None, // First `cass_value_get_*` call will deserialize frame_slice to CassValue
+            frame_slice,
+            is_null,
+            value_type: Arc::new(value_type),
+        };
+
+        result.first_row.as_mut().unwrap().columns.push(cass_value);
+    }
+
+    true
 }
 
 #[no_mangle]
