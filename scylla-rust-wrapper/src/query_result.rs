@@ -7,13 +7,19 @@ use crate::metadata::{
 };
 use crate::types::*;
 use crate::uuid::CassUuid;
-use scylla::frame::response::result::{ColumnSpec, CqlValue};
+use num_traits::Zero;
+use scylla::frame::frame_errors::ParseError;
+use scylla::frame::response::result::{ColumnSpec, ColumnType, CqlValue};
+use scylla::frame::value::Date;
 use scylla::types::deserialize::row::ColumnIterator;
+use scylla::types::deserialize::value::DeserializeCql;
 use scylla::types::deserialize::FrameSlice;
 use scylla::QueryResult;
 use std::convert::TryInto;
+use std::net::IpAddr;
 use std::os::raw::c_char;
 use std::sync::{Arc, Weak};
+use uuid::Uuid;
 
 pub struct CassResult {
     pub result: Arc<QueryResult>,
@@ -958,224 +964,186 @@ pub unsafe extern "C" fn cass_value_data_type(value: *const CassValue) -> *const
     Arc::as_ptr(&value_from_raw.value_type)
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_float(
-    value: *const CassValue,
-    output: *mut cass_float_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Float(f))) => std::ptr::write(output, f),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
+macro_rules! cass_value_get_strict_type {
+    ($name:ident, $t:ty, $cass_t:ty, $cass_value_type:pat, $col_type:expr, $conv:expr $(, $arg:tt : $arg_ty:ty)*) => {
+        #[no_mangle]
+        #[allow(unreachable_patterns)] // cass_value_type may match all patterns
+        pub unsafe extern "C" fn $name(value: *const CassValue, output: *mut $cass_t $(, $arg: $arg_ty)*) -> CassError {
+            if !cass_value_is_null(value).is_zero() {
+                return CassError::CASS_ERROR_LIB_NULL_VALUE;
+            }
 
-    CassError::CASS_OK
-}
+            match cass_value_type(value) {
+                $cass_value_type => {}
+                _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+            }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_double(
-    value: *const CassValue,
-    output: *mut cass_double_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Double(d))) => std::ptr::write(output, d),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
+            let cass_value: &CassValue = ptr_to_ref(value);
+            let decoded_val: Result<$t, ParseError> =
+                DeserializeCql::deserialize(&$col_type, cass_value.frame_slice);
 
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_bool(
-    value: *const CassValue,
-    output: *mut cass_bool_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Boolean(b))) => {
-            std::ptr::write(output, b as cass_bool_t)
+            match decoded_val {
+                Ok(val) => $conv(value, output $(, $arg)*, val),
+                Err(_) => CassError::CASS_ERROR_LIB_NOT_ENOUGH_DATA,
+            }
         }
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
-
-    CassError::CASS_OK
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_int8(
-    value: *const CassValue,
-    output: *mut cass_int8_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::TinyInt(i))) => std::ptr::write(output, i),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
+// fixed numeric types
 
-    CassError::CASS_OK
+macro_rules! cass_value_get_numeric_type {
+    ($name:ident, $t:ty, $cass_value_type:pat, $col_type:expr) => {
+        cass_value_get_strict_type!(
+            $name,
+            $t,
+            $t,
+            $cass_value_type,
+            $col_type,
+            |_value: *const CassValue, output: *mut $t, val: $t| {
+                std::ptr::write(output, val);
+                CassError::CASS_OK
+            }
+        );
+    };
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_int16(
-    value: *const CassValue,
-    output: *mut cass_int16_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::SmallInt(i))) => std::ptr::write(output, i),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_uint32(
-    value: *const CassValue,
-    output: *mut cass_uint32_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u), // FIXME: hack
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_int32(
-    value: *const CassValue,
-    output: *mut cass_int32_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Int(i))) => std::ptr::write(output, i),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_int64(
-    value: *const CassValue,
-    output: *mut cass_int64_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::BigInt(i))) => std::ptr::write(output, i),
-        Some(Value::RegularValue(CqlValue::Counter(i))) => {
-            std::ptr::write(output, i.0 as cass_int64_t)
-        }
-        Some(Value::RegularValue(CqlValue::Time(d))) => match d.num_nanoseconds() {
-            Some(nanos) => std::ptr::write(output, nanos as cass_int64_t),
-            None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-        },
-        Some(Value::RegularValue(CqlValue::Timestamp(d))) => {
-            std::ptr::write(output, d.num_milliseconds() as cass_int64_t)
-        }
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_uuid(
-    value: *const CassValue,
-    output: *mut CassUuid,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => std::ptr::write(output, uuid.into()),
-        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => std::ptr::write(output, uuid.into()),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_inet(
-    value: *const CassValue,
-    output: *mut CassInet,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Inet(inet))) => std::ptr::write(output, inet.into()),
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    };
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_string(
-    value: *const CassValue,
-    output: *mut *const c_char,
-    output_size: *mut size_t,
-) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
-    match &val.value {
-        // It seems that cpp driver doesn't check the type - you can call _get_string
-        // on any type and get internal represenation. I don't see how to do it easily in
-        // a compatible way in rust, so let's do something sensible - only return result
-        // for string values.
-        Some(Value::RegularValue(CqlValue::Ascii(s))) => {
-            write_str_to_c(s.as_str(), output, output_size)
-        }
-        Some(Value::RegularValue(CqlValue::Text(s))) => {
-            write_str_to_c(s.as_str(), output, output_size)
-        }
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+cass_value_get_strict_type!(
+    cass_value_get_bool,
+    bool,
+    cass_bool_t,
+    CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+    ColumnType::Boolean,
+    |_value: *const CassValue, output: *mut cass_bool_t, val: bool| {
+        std::ptr::write(output, val as cass_bool_t);
+        CassError::CASS_OK
     }
+);
 
-    CassError::CASS_OK
-}
+cass_value_get_numeric_type!(
+    cass_value_get_float,
+    cass_float_t,
+    CassValueType::CASS_VALUE_TYPE_FLOAT,
+    ColumnType::Float
+);
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_bytes(
-    value: *const CassValue,
-    output: *mut *const cass_byte_t,
-    output_size: *mut size_t,
-) -> CassError {
-    if value.is_null() {
-        return CassError::CASS_ERROR_LIB_NULL_VALUE;
+cass_value_get_numeric_type!(
+    cass_value_get_double,
+    cass_double_t,
+    CassValueType::CASS_VALUE_TYPE_DOUBLE,
+    ColumnType::Double
+);
+
+cass_value_get_numeric_type!(
+    cass_value_get_int8,
+    cass_int8_t,
+    CassValueType::CASS_VALUE_TYPE_TINY_INT,
+    ColumnType::TinyInt
+);
+
+cass_value_get_numeric_type!(
+    cass_value_get_int16,
+    cass_int16_t,
+    CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+    ColumnType::SmallInt
+);
+
+cass_value_get_numeric_type!(
+    cass_value_get_int32,
+    cass_int32_t,
+    CassValueType::CASS_VALUE_TYPE_INT,
+    ColumnType::Int
+);
+
+cass_value_get_numeric_type!(
+    cass_value_get_int64,
+    cass_int64_t,
+    CassValueType::CASS_VALUE_TYPE_BIGINT
+        | CassValueType::CASS_VALUE_TYPE_COUNTER
+        | CassValueType::CASS_VALUE_TYPE_TIMESTAMP
+        | CassValueType::CASS_VALUE_TYPE_TIME,
+    ColumnType::BigInt // or `Counter` types can be deserialized as i64 in Rust driver
+);
+
+// other numeric types
+// TODO: add decimal
+
+// string
+cass_value_get_strict_type!(
+    cass_value_get_string,
+    &str,
+    *const c_char,
+    CassValueType::CASS_VALUE_TYPE_ASCII
+        | CassValueType::CASS_VALUE_TYPE_TEXT
+        | CassValueType::CASS_VALUE_TYPE_VARCHAR,
+    ColumnType::Text,
+    |_value: *const CassValue, output: *mut *const c_char, output_size: *mut size_t, val: &str| {
+        write_str_to_c(val, output, output_size);
+        CassError::CASS_OK
+    },
+    output_size: *mut size_t // additional arguments
+);
+
+cass_value_get_strict_type!(
+    cass_value_get_bytes,
+    &[u8],
+    *const cass_byte_t,
+    _,
+    ColumnType::Blob,
+    |_value: *const CassValue,
+     output: *mut *const cass_byte_t,
+     output_size: *mut size_t,
+     val: &[u8]| {
+        *output = val.as_ptr() as *const cass_byte_t;
+        *output_size = val.len() as size_t;
+        CassError::CASS_OK
+    },
+    output_size: *mut size_t // additional arguments
+);
+
+// date and time types
+// TODO: add duration
+cass_value_get_strict_type!(
+    cass_value_get_uint32,
+    Date,
+    cass_uint32_t,
+    CassValueType::CASS_VALUE_TYPE_DATE,
+    ColumnType::Date,
+    |_value: *const CassValue, output: *mut cass_uint32_t, val: Date| {
+        *output = val.0;
+        CassError::CASS_OK
     }
+);
 
-    let value_from_raw: &CassValue = ptr_to_ref(value);
-
-    // FIXME: This should be implemented for all CQL types
-    // Note: currently rust driver does not allow to get raw bytes of the CQL value.
-    match &value_from_raw.value {
-        Some(Value::RegularValue(CqlValue::Blob(bytes))) => {
-            *output = bytes.as_ptr() as *const cass_byte_t;
-            *output_size = bytes.len() as u64;
-        }
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+// inet
+cass_value_get_strict_type!(
+    cass_value_get_inet,
+    IpAddr,
+    CassInet,
+    CassValueType::CASS_VALUE_TYPE_INET,
+    ColumnType::Inet,
+    |_value: *const CassValue, output: *mut CassInet, val: IpAddr| {
+        std::ptr::write(output, val.into());
+        CassError::CASS_OK
     }
+);
 
-    CassError::CASS_OK
-}
+// uuid
+cass_value_get_strict_type!(
+    cass_value_get_uuid,
+    Uuid,
+    CassUuid,
+    CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID,
+    ColumnType::Uuid, // or `Timeuuid` types can be deserialized as `Uuid` in Rust driver
+    |_value: *const CassValue, output: *mut CassUuid, val: Uuid| {
+        std::ptr::write(output, val.into());
+        CassError::CASS_OK
+    }
+);
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
-    let val: &CassValue = ptr_to_ref(value);
-    val.value.is_none() as cass_bool_t
+    value.as_ref().map_or(true, |val| val.is_null) as cass_bool_t
 }
 
 #[no_mangle]

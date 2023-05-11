@@ -289,6 +289,9 @@ mod tests {
         let wrapped_cass_fut = PtrWrapper(cass_fut);
         unsafe {
             let handle = thread::spawn(move || {
+                // dummy let to force the closure to capture the entire variable
+                // Migration guide for 2021 edition: https://doc.rust-lang.org/edition-guide/rust-2021/disjoint-capture-in-closures.html#migration
+                let _ = &wrapped_cass_fut;
                 let PtrWrapper(cass_fut) = wrapped_cass_fut;
                 let mut message: *const c_char = std::ptr::null();
                 let mut msg_len: size_t = 0;
