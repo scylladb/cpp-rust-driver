@@ -9,7 +9,8 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use num_traits::Zero;
 use scylla::frame::frame_errors::ParseError;
-use scylla::frame::response::result::{ColumnSpec, ColumnType, CqlValue};
+use scylla::frame::response::result::{ColumnSpec, ColumnType};
+use scylla::frame::types;
 use scylla::frame::value::Date;
 use scylla::types::deserialize::row::ColumnIterator;
 use scylla::types::deserialize::value::DeserializeCql;
@@ -34,30 +35,11 @@ pub struct CassRow {
 }
 
 #[derive(Clone)]
-pub enum Value {
-    RegularValue(CqlValue),
-    CollectionValue(Collection),
-}
-
-#[derive(Clone)]
-pub enum Collection {
-    List(Vec<CassValue>),
-    Map(Vec<(CassValue, CassValue)>),
-    Set(Vec<CassValue>),
-    UserDefinedType {
-        keyspace: String,
-        type_name: String,
-        fields: Vec<(String, Option<CassValue>)>,
-    },
-    Tuple(Vec<Option<CassValue>>),
-}
-
-#[derive(Clone)]
 pub struct CassValue {
-    pub value: Option<Value>,
     /// Represents a raw, unparsed column value.
     pub frame_slice: Option<FrameSlice<'static>>,
     pub is_null: bool,
+    pub count: usize,
     pub value_type: Arc<CassDataType>,
 }
 
@@ -73,20 +55,32 @@ pub struct CassRowIterator {
 }
 
 pub struct CassCollectionIterator {
-    value: &'static CassValue,
-    count: u64,
+    collection: &'static CassValue,
+    value: Option<CassValue>,
+    count: usize,
+    position: Option<usize>,
+}
+
+pub struct CassTupleIterator {
+    tuple: &'static CassValue,
+    value: Option<CassValue>,
+    count: usize,
     position: Option<usize>,
 }
 
 pub struct CassMapIterator {
-    value: &'static CassValue,
-    count: u64,
+    map: &'static CassValue,
+    key: Option<CassValue>,
+    value: Option<CassValue>,
+    count: usize,
     position: Option<usize>,
 }
 
 pub struct CassUdtIterator {
-    value: &'static CassValue,
-    count: u64,
+    udt: &'static CassValue,
+    field_value: Option<CassValue>,
+    field_name: Option<String>,
+    count: usize,
     position: Option<usize>,
 }
 
@@ -118,6 +112,7 @@ pub enum CassIterator {
     CassResultIterator(CassResultIterator),
     CassRowIterator(CassRowIterator),
     CassCollectionIterator(CassCollectionIterator),
+    CassTupleIterator(CassTupleIterator),
     CassMapIterator(CassMapIterator),
     CassUdtIterator(CassUdtIterator),
     CassSchemaMetaIterator(CassSchemaMetaIterator),
@@ -139,11 +134,17 @@ fn decode_next_row(result: &'static CassResult, row: &mut Option<CassRow>) -> bo
             let value_type = get_column_type(&raw_col.spec.typ);
             let frame_slice = raw_col.slice;
             let is_null = frame_slice.map_or(true, |f| f.is_empty());
+            let count = if let (Some(frame), true) = (frame_slice, value_type.is_collection()) {
+                let mut mem = frame.as_slice();
+                unwrap_or_return_false!(types::read_int_length(&mut mem))
+            } else {
+                0
+            };
 
             let cass_value = CassValue {
-                value: None, // First `cass_value_get_*` call will deserialize frame_slice to CassValue
                 frame_slice,
                 is_null,
+                count,
                 value_type: Arc::new(value_type),
             };
             // Below assignment is safe from out of bounds panic as,
@@ -191,23 +192,30 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
                 .position
                 .map_or(0, |prev_pos| prev_pos + 1);
 
-            collection_iterator.position = Some(new_pos);
+            collection_iterator.position = Some(new_pos); // TODO: add next value decoding for collection
 
-            (new_pos < collection_iterator.count.try_into().unwrap()) as cass_bool_t
+            (new_pos < collection_iterator.count) as cass_bool_t
+        }
+        CassIterator::CassTupleIterator(tuple_iterator) => {
+            let new_pos: usize = tuple_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+
+            tuple_iterator.position = Some(new_pos); // TODO: add next value decoding for collection
+
+            (new_pos < tuple_iterator.count) as cass_bool_t
         }
         CassIterator::CassMapIterator(map_iterator) => {
             let new_pos: usize = map_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-            map_iterator.position = Some(new_pos);
+            map_iterator.position = Some(new_pos); // TODO: add next key/value decoding for map
 
-            (new_pos < map_iterator.count.try_into().unwrap()) as cass_bool_t
+            (new_pos < map_iterator.count) as cass_bool_t
         }
         CassIterator::CassUdtIterator(udt_iterator) => {
             let new_pos: usize = udt_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-            udt_iterator.position = Some(new_pos);
+            udt_iterator.position = Some(new_pos); // TODO: add next field name/value decoding for udt
 
-            (new_pos < udt_iterator.count.try_into().unwrap()) as cass_bool_t
+            (new_pos < udt_iterator.count) as cass_bool_t
         }
         CassIterator::CassSchemaMetaIterator(schema_meta_iterator) => {
             let new_pos: usize = schema_meta_iterator
@@ -315,29 +323,15 @@ pub unsafe extern "C" fn cass_iterator_get_value(
     let iter = ptr_to_ref(iterator);
 
     // Defined only for collections(list and set) or tuple iterator, for other types should return null
-    if let CassIterator::CassCollectionIterator(collection_iterator) = iter {
-        let iter_position = match collection_iterator.position {
-            Some(pos) => pos,
-            None => return std::ptr::null(),
-        };
-
-        let value = match &collection_iterator.value.value {
-            Some(Value::CollectionValue(Collection::List(list))) => list.get(iter_position),
-            Some(Value::CollectionValue(Collection::Set(set))) => set.get(iter_position),
-            Some(Value::CollectionValue(Collection::Tuple(tuple))) => {
-                tuple.get(iter_position).and_then(|x| x.as_ref())
-            }
-            _ => return std::ptr::null(),
-        };
-
-        if value.is_none() {
-            return std::ptr::null();
-        }
-
-        return value.unwrap() as *const CassValue;
+    match iter {
+        CassIterator::CassCollectionIterator(CassCollectionIterator {
+            value: Some(value), ..
+        }) => value,
+        CassIterator::CassTupleIterator(CassTupleIterator {
+            value: Some(value), ..
+        }) => value,
+        _ => std::ptr::null(), // null is returned if value in iterator is not set
     }
-
-    std::ptr::null()
 }
 
 #[no_mangle]
@@ -346,25 +340,16 @@ pub unsafe extern "C" fn cass_iterator_get_map_key(
 ) -> *const CassValue {
     let iter = ptr_to_ref(iterator);
 
-    if let CassIterator::CassMapIterator(map_iterator) = iter {
-        let iter_position = match map_iterator.position {
-            Some(pos) => pos,
-            None => return std::ptr::null(),
-        };
-
-        let entry = match &map_iterator.value.value {
-            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return std::ptr::null(),
-        };
-
-        if entry.is_none() {
-            return std::ptr::null();
+    match iter {
+        CassIterator::CassMapIterator(map_iterator) => {
+            assert!(map_iterator
+                .position
+                .map(|pos| pos < map_iterator.count)
+                .is_some()); // assertion copied from c++ driver
+            map_iterator.key.as_ref().unwrap() // safe to unwrap if cass_iterator_next succeeded
         }
-
-        return &entry.unwrap().0 as *const CassValue;
+        _ => std::ptr::null(),
     }
-
-    std::ptr::null()
 }
 
 #[no_mangle]
@@ -373,25 +358,16 @@ pub unsafe extern "C" fn cass_iterator_get_map_value(
 ) -> *const CassValue {
     let iter = ptr_to_ref(iterator);
 
-    if let CassIterator::CassMapIterator(map_iterator) = iter {
-        let iter_position = match map_iterator.position {
-            Some(pos) => pos,
-            None => return std::ptr::null(),
-        };
-
-        let entry = match &map_iterator.value.value {
-            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return std::ptr::null(),
-        };
-
-        if entry.is_none() {
-            return std::ptr::null();
+    match iter {
+        CassIterator::CassMapIterator(map_iterator) => {
+            assert!(map_iterator
+                .position
+                .map(|pos| pos < map_iterator.count)
+                .is_some()); // assertion copied from c++ driver
+            map_iterator.value.as_ref().unwrap() // safe to unwrap if cass_iterator_next succeeded
         }
-
-        return &entry.unwrap().1 as *const CassValue;
+        _ => std::ptr::null(),
     }
-
-    std::ptr::null()
 }
 
 #[no_mangle]
@@ -402,31 +378,23 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 ) -> CassError {
     let iter = ptr_to_ref(iterator);
 
-    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
-        let iter_position = match udt_iterator.position {
-            Some(pos) => pos,
-            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
-        };
-
-        let udt_entry_opt = match &udt_iterator.value.value {
-            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-                fields.get(iter_position)
-            }
-            _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
-        };
-
-        match udt_entry_opt {
-            Some(udt_entry) => {
-                let field_name = &udt_entry.0;
-                write_str_to_c(field_name.as_str(), name, name_length);
-            }
-            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    match iter {
+        CassIterator::CassUdtIterator(CassUdtIterator {
+            field_name: Some(field_name),
+            count,
+            position,
+            ..
+        }) => {
+            assert!(position.map(|pos| pos < *count).is_some()); // assertion copied from c++ driver
+            write_str_to_c(
+                field_name.as_str(), // safe to unwrap if cass_iterator_next succeeded
+                name,
+                name_length,
+            );
+            CassError::CASS_OK
         }
-
-        return CassError::CASS_OK;
+        _ => CassError::CASS_ERROR_LIB_BAD_PARAMS,
     }
-
-    CassError::CASS_ERROR_LIB_BAD_PARAMS
 }
 
 #[no_mangle]
@@ -435,29 +403,18 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_value(
 ) -> *const CassValue {
     let iter = ptr_to_ref(iterator);
 
-    if let CassIterator::CassUdtIterator(udt_iterator) = iter {
-        let iter_position = match udt_iterator.position {
-            Some(pos) => pos,
-            None => return std::ptr::null(),
-        };
-
-        let udt_entry_opt = match &udt_iterator.value.value {
-            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-                fields.get(iter_position)
-            }
-            _ => return std::ptr::null(),
-        };
-
-        return match udt_entry_opt {
-            Some(udt_entry) => match &udt_entry.1 {
-                Some(value) => value as *const CassValue,
-                None => std::ptr::null(),
-            },
-            None => std::ptr::null(),
-        };
+    match iter {
+        CassIterator::CassUdtIterator(CassUdtIterator {
+            field_value: Some(field_value),
+            count,
+            position,
+            ..
+        }) => {
+            assert!(position.map(|pos| pos < *count).is_some()); // assertion copied from c++ driver
+            field_value
+        }
+        _ => std::ptr::null(),
     }
-
-    std::ptr::null()
 }
 
 #[no_mangle]
@@ -659,38 +616,14 @@ pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut Cas
 pub unsafe extern "C" fn cass_iterator_from_collection(
     value: *const CassValue,
 ) -> *mut CassIterator {
-    let is_collection = cass_value_is_collection(value) != 0;
+    let collection = ptr_to_ref(value);
 
-    if value.is_null() || !is_collection {
-        return std::ptr::null_mut();
-    }
-
-    let map_iterator = cass_iterator_from_map(value);
-    if !map_iterator.is_null() {
-        return map_iterator;
-    }
-
-    let val = ptr_to_ref(value);
-    let item_count = cass_value_item_count(value);
-
-    let iterator = CassCollectionIterator {
-        value: val,
-        count: item_count,
-        position: None,
-    };
-
-    Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator {
-    let tuple = ptr_to_ref(value);
-
-    if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
-        let item_count = val.len();
+    if !collection.is_null & collection.value_type.is_collection() {
+        let item_count = collection.count;
         let iterator = CassCollectionIterator {
-            value: tuple,
-            count: item_count as u64,
+            collection,
+            value: None,
+            count: item_count,
             position: None,
         };
 
@@ -701,14 +634,35 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *m
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator {
+    let tuple = ptr_to_ref(value);
+
+    if !tuple.is_null && tuple.value_type.is_tuple() {
+        let item_count = tuple.count;
+        let iterator = CassTupleIterator {
+            tuple,
+            value: None,
+            count: item_count,
+            position: None,
+        };
+
+        return Box::into_raw(Box::new(CassIterator::CassTupleIterator(iterator)));
+    }
+
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut CassIterator {
     let map = ptr_to_ref(value);
 
-    if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
-        let item_count = val.len();
+    if !map.is_null && map.value_type.is_map() {
+        let item_count = map.count;
         let iterator = CassMapIterator {
-            value: map,
-            count: item_count as u64,
+            map,
+            key: None,
+            value: None,
+            count: item_count,
             position: None,
         };
 
@@ -724,11 +678,13 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
 ) -> *mut CassIterator {
     let udt = ptr_to_ref(value);
 
-    if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
-        let item_count = fields.len();
+    if !udt.is_null && udt.value_type.is_user_type() {
+        let item_count = udt.count;
         let iterator = CassUdtIterator {
-            value: udt,
-            count: item_count as u64,
+            udt,
+            field_name: None,
+            field_value: None,
+            count: item_count,
             position: None,
         };
 
@@ -1149,29 +1105,13 @@ pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_boo
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t {
     let val = ptr_to_ref(value);
-
-    match val.value {
-        Some(Value::CollectionValue(Collection::List(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Set(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Map(_))) => true as cass_bool_t,
-        _ => false as cass_bool_t,
-    }
+    val.value_type.is_collection() as cass_bool_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_item_count(collection: *const CassValue) -> size_t {
     let val = ptr_to_ref(collection);
-
-    match &val.value {
-        Some(Value::CollectionValue(Collection::List(list))) => list.len() as size_t,
-        Some(Value::CollectionValue(Collection::Map(map))) => map.len() as size_t,
-        Some(Value::CollectionValue(Collection::Set(set))) => set.len() as size_t,
-        Some(Value::CollectionValue(Collection::Tuple(tuple))) => tuple.len() as size_t,
-        Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-            fields.len() as size_t
-        }
-        _ => 0 as size_t,
-    }
+    val.count as size_t
 }
 
 #[no_mangle]

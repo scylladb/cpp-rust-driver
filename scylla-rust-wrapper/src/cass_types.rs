@@ -249,6 +249,25 @@ impl CassDataType {
             CassDataType::Custom(..) => CassValueType::CASS_VALUE_TYPE_CUSTOM,
         }
     }
+
+    pub fn is_collection(&self) -> bool {
+        matches!(
+            self,
+            CassDataType::List(_) | CassDataType::Map(..) | CassDataType::Set(_)
+        )
+    }
+
+    pub fn is_map(&self) -> bool {
+        matches!(self, CassDataType::Map(..))
+    }
+
+    pub fn is_user_type(&self) -> bool {
+        matches!(self, CassDataType::UDT(..))
+    }
+
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, CassDataType::Tuple(..))
+    }
 }
 
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {

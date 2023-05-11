@@ -12,6 +12,7 @@ use crate::query_result::{CassResult, CassRow, CassValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
+use scylla::frame::types;
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -336,11 +337,17 @@ unsafe fn decode_first_row(result: *mut CassResult) -> bool {
         let value_type = get_column_type(&raw_col.spec.typ);
         let frame_slice = raw_col.slice;
         let is_null = frame_slice.map_or(true, |f| f.is_empty());
+        let count = if let (Some(frame), true) = (frame_slice, value_type.is_collection()) {
+            let mut mem = frame.as_slice();
+            unwrap_or_return_false!(types::read_int_length(&mut mem))
+        } else {
+            0
+        };
 
         let cass_value = CassValue {
-            value: None, // First `cass_value_get_*` call will deserialize frame_slice to CassValue
             frame_slice,
             is_null,
+            count,
             value_type: Arc::new(value_type),
         };
 
