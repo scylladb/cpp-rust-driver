@@ -4,7 +4,7 @@ use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
-use crate::exec_profile::ExecProfileName;
+use crate::exec_profile::{ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassResultValue};
 use crate::logging::init_logging;
 use crate::metadata::create_table_metadata;
@@ -22,6 +22,7 @@ use scylla::transport::execution_profile::ExecutionProfileHandle;
 use scylla::{QueryResult, Session};
 use std::collections::HashMap;
 use std::future::Future;
+use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +31,40 @@ use tokio::sync::RwLock;
 pub struct CassSessionInner {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
+}
+
+impl CassSessionInner {
+    pub(crate) fn resolve_exec_profile(
+        &self,
+        name: &ExecProfileName,
+    ) -> Result<&ExecutionProfileHandle, (CassError, String)> {
+        // Empty name means no execution profile set.
+        self.exec_profile_map.get(name).ok_or_else(|| {
+            (
+                CassError::CASS_ERROR_LIB_EXECUTION_PROFILE_INVALID,
+                format!("{} does not exist", name.deref()),
+            )
+        })
+    }
+
+    // Clippy claims it is possible to make this `async fn`, but it's terribly wrong,
+    // because async fn can't have its future bound to a specific lifetime, which is
+    // required in this case.
+    #[allow(clippy::manual_async_fn)]
+    fn get_or_resolve_profile_handle<'a>(
+        &'a self,
+        exec_profile: Option<&'a PerStatementExecProfile>,
+    ) -> impl Future<Output = Result<Option<ExecutionProfileHandle>, (CassError, String)>> + 'a
+    {
+        async move {
+            if let Some(profile) = exec_profile {
+                let handle = profile.get_or_resolve_profile_handle(self).await?;
+                Ok(Some(handle))
+            } else {
+                Ok(None)
+            }
+        }
+    }
 }
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
@@ -86,8 +121,13 @@ pub unsafe extern "C" fn cass_session_execute_batch(
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
     let batch_from_raw = ptr_to_ref(batch_raw);
-    let state = batch_from_raw.state.clone();
+    let mut state = batch_from_raw.state.clone();
     let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
+
+    // DO NOT refer to `batch_from_raw` inside the async block, as I've done just to face a segfault.
+    let batch_exec_profile = batch_from_raw.exec_profile.clone();
+    #[allow(unused, clippy::let_unit_value)]
+    let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
         let session_guard = session_opt.read().await;
@@ -100,6 +140,14 @@ pub unsafe extern "C" fn cass_session_execute_batch(
 
         let cass_session_inner = &session_guard.as_ref().unwrap();
         let session = &cass_session_inner.session;
+
+        let handle = cass_session_inner
+            .get_or_resolve_profile_handle(batch_exec_profile.as_ref())
+            .await?;
+
+        Arc::make_mut(&mut state)
+            .batch
+            .set_execution_profile_handle(handle);
 
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
@@ -141,12 +189,17 @@ pub unsafe extern "C" fn cass_session_execute(
     statement_raw: *const CassStatement,
 ) -> *const CassFuture {
     let session_opt = ptr_to_ref(session_raw);
+
+    // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = ptr_to_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
     let bound_values = statement_opt.bound_values.clone();
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
-    let statement = statement_opt.statement.clone();
+    let mut statement = statement_opt.statement.clone();
+    let statement_exec_profile = statement_opt.exec_profile.clone();
+    #[allow(unused, clippy::let_unit_value)]
+    let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
         let session_guard = session_opt.read().await;
@@ -158,6 +211,17 @@ pub unsafe extern "C" fn cass_session_execute(
         }
         let cass_session_inner = session_guard.as_ref().unwrap();
         let session = &cass_session_inner.session;
+
+        let handle = cass_session_inner
+            .get_or_resolve_profile_handle(statement_exec_profile.as_ref())
+            .await?;
+
+        match &mut statement {
+            Statement::Simple(query) => query.query.set_execution_profile_handle(handle),
+            Statement::Prepared(prepared) => {
+                Arc::make_mut(prepared).set_execution_profile_handle(handle)
+            }
+        }
 
         let query_res: Result<QueryResult, QueryError> = match statement {
             Statement::Simple(query) => {
@@ -510,17 +574,30 @@ mod tests {
     use super::*;
     use crate::{
         argconv::{make_c_str, ptr_to_ref},
+        batch::{cass_batch_add_statement, cass_batch_free, cass_batch_new},
+        cass_types::CassBatchType,
         cluster::{
             cass_cluster_free, cass_cluster_new, cass_cluster_set_contact_points_n,
             cass_cluster_set_execution_profile,
         },
-        exec_profile::{cass_execution_profile_free, cass_execution_profile_new, ExecProfileName},
+        exec_profile::{
+            cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
+            cass_execution_profile_free, cass_execution_profile_new,
+            cass_statement_set_execution_profile, cass_statement_set_execution_profile_n,
+            ExecProfileName,
+        },
         future::{
             cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
         },
+        statement::{cass_statement_free, cass_statement_new},
         testing::assert_cass_error_eq,
     };
-    use std::{collections::HashSet, convert::TryFrom, net::SocketAddr};
+    use std::{
+        collections::HashSet,
+        convert::{TryFrom, TryInto},
+        iter,
+        net::SocketAddr,
+    };
 
     // This is for convenient logs from failing tests. Just call it at the beginning of a test.
     #[allow(unused)]
@@ -667,6 +744,238 @@ mod tests {
                 cass_future_wait_check_and_free(cass_session_close(session_raw));
             }
             cass_execution_profile_free(profile_raw);
+            cass_session_free(session_raw);
+            cass_cluster_free(cluster_raw);
+        }
+        proxy
+    }
+
+    #[tokio::test]
+    #[ntest::timeout(5000)]
+    async fn session_resolves_exec_profile_on_first_query() {
+        init_logger();
+        test_with_one_proxy_one(
+            session_resolves_exec_profile_on_first_query_do,
+            handshake_rules().into_iter().chain(
+                iter::once(RequestRule(
+                    Condition::RequestOpcode(RequestOpcode::Query)
+                        .or(Condition::RequestOpcode(RequestOpcode::Batch))
+                        .and(Condition::BodyContainsCaseInsensitive(Box::new(
+                            *b"INSERT INTO system.",
+                        ))),
+                    // We simulate the write failure error that a Scylla node would respond with anyway.
+                    RequestReaction::forge().write_failure(),
+                ))
+                .chain(generic_drop_queries_rules()),
+            ),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn session_resolves_exec_profile_on_first_query_do(
+        node_addr: SocketAddr,
+        proxy: RunningProxy,
+    ) -> RunningProxy {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw, c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+
+            let session_raw = cass_session_new();
+
+            let profile_raw = cass_execution_profile_new();
+            // A name of a profile that will have been registered in the Cluster.
+            let valid_name = "profile";
+            let valid_name_c_str = make_c_str!("profile");
+            // A name of a profile that won't have been registered in the Cluster.
+            let nonexisting_name = "profile1";
+            let (nonexisting_name_c_str, nonexisting_name_len) = str_to_c_str_n(nonexisting_name);
+
+            // Inserting into virtual system tables is prohibited and results in WriteFailure error.
+            let invalid_query = make_c_str!("INSERT INTO system.runtime_info (group, item, value) VALUES ('bindings_test', 'bindings_test', 'bindings_test')");
+            let statement_raw = cass_statement_new(invalid_query, 0);
+            let batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            assert_cass_error_eq!(
+                cass_batch_add_statement(batch_raw, statement_raw),
+                CassError::CASS_OK
+            );
+
+            assert_cass_error_eq!(
+                cass_cluster_set_execution_profile(cluster_raw, valid_name_c_str, profile_raw,),
+                CassError::CASS_OK
+            );
+
+            cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
+            {
+                /* Test valid configurations */
+                let statement = ptr_to_ref(statement_raw);
+                let batch = ptr_to_ref(batch_raw);
+                {
+                    assert!(statement.exec_profile.is_none());
+                    assert!(batch.exec_profile.is_none());
+
+                    // Set exec profile - it is not yet resolved.
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, valid_name_c_str,),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, valid_name_c_str,),
+                        CassError::CASS_OK
+                    );
+                    assert_eq!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+                    assert_eq!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+
+                    // Make a query - this should resolve the profile.
+                    assert_cass_error_eq!(
+                        cass_future_error_code(cass_session_execute(session_raw, statement_raw)),
+                        CassError::CASS_ERROR_SERVER_WRITE_FAILURE
+                    );
+                    assert!(statement
+                        .exec_profile
+                        .as_ref()
+                        .unwrap()
+                        .inner()
+                        .read()
+                        .unwrap()
+                        .as_handle()
+                        .is_some());
+                    assert_cass_error_eq!(
+                        cass_future_error_code(cass_session_execute_batch(session_raw, batch_raw,)),
+                        CassError::CASS_ERROR_SERVER_WRITE_FAILURE
+                    );
+                    assert!(batch
+                        .exec_profile
+                        .as_ref()
+                        .unwrap()
+                        .inner()
+                        .read()
+                        .unwrap()
+                        .as_handle()
+                        .is_some());
+
+                    // NULL name sets exec profile to None
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, std::ptr::null::<i8>()),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, std::ptr::null::<i8>()),
+                        CassError::CASS_OK
+                    );
+                    assert!(statement.exec_profile.is_none());
+                    assert!(batch.exec_profile.is_none());
+
+                    // valid name again, but of nonexisting profile!
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile_n(
+                            statement_raw,
+                            nonexisting_name_c_str,
+                            nonexisting_name_len,
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile_n(
+                            batch_raw,
+                            nonexisting_name_c_str,
+                            nonexisting_name_len,
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert_eq!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &nonexisting_name.to_owned().try_into().unwrap()
+                    );
+                    assert_eq!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &nonexisting_name.to_owned().try_into().unwrap()
+                    );
+
+                    // So when we now issue a query, it should end with error and leave exec_profile_handle uninitialised.
+                    assert_cass_error_eq!(
+                        cass_future_error_code(cass_session_execute(session_raw, statement_raw)),
+                        CassError::CASS_ERROR_LIB_EXECUTION_PROFILE_INVALID
+                    );
+                    assert_eq!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &nonexisting_name.to_owned().try_into().unwrap()
+                    );
+                    assert_cass_error_eq!(
+                        cass_future_error_code(cass_session_execute_batch(session_raw, batch_raw)),
+                        CassError::CASS_ERROR_LIB_EXECUTION_PROFILE_INVALID
+                    );
+                    assert_eq!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &nonexisting_name.to_owned().try_into().unwrap()
+                    );
+                }
+            }
+
+            cass_future_wait_check_and_free(cass_session_close(session_raw));
+            cass_execution_profile_free(profile_raw);
+            cass_statement_free(statement_raw);
+            cass_batch_free(batch_raw);
             cass_session_free(session_raw);
             cass_cluster_free(cluster_raw);
         }

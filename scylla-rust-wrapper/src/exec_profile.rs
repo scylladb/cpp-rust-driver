@@ -1,5 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 use std::ffi::c_char;
+use std::future::Future;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -21,6 +22,7 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
 };
+use crate::session::CassSessionInner;
 use crate::statement::CassStatement;
 use crate::types::{
     cass_bool_t, cass_double_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t,
@@ -84,6 +86,42 @@ impl PerStatementExecProfile {
         Self(Arc::new(RwLock::new(
             PerStatementExecProfileInner::Unresolved(name),
         )))
+    }
+
+    // Clippy claims it is possible to make this `async fn`, but it's terribly wrong,
+    // because async fn can't have its future bound to a specific lifetime, which is
+    // required in this case.
+    #[allow(clippy::manual_async_fn)]
+    pub(crate) fn get_or_resolve_profile_handle<'a>(
+        &'a self,
+        cass_session_inner: &'a CassSessionInner,
+    ) -> impl Future<Output = Result<ExecutionProfileHandle, (CassError, String)>> + 'a {
+        async move {
+            let already_resolved = {
+                let read_guard = self.0.read().unwrap();
+                match read_guard.deref() {
+                    PerStatementExecProfileInner::Unresolved(_) => None,
+                    PerStatementExecProfileInner::Resolved(handle) => Some(handle.clone()),
+                }
+            };
+
+            let handle = if let Some(handle) = already_resolved {
+                handle
+            } else {
+                let inner = &mut *self.0.write().unwrap();
+                match &*inner {
+                    PerStatementExecProfileInner::Unresolved(name) => {
+                        let handle = cass_session_inner.resolve_exec_profile(name)?;
+                        *inner = PerStatementExecProfileInner::Resolved(handle.clone());
+                        handle
+                    }
+                    PerStatementExecProfileInner::Resolved(handle) => handle,
+                }
+                .clone()
+            };
+
+            Ok(handle)
+        }
     }
 }
 
