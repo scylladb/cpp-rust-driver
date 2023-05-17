@@ -1,15 +1,16 @@
 use std::convert::{TryFrom, TryInto};
 use std::ffi::c_char;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use scylla::execution_profile::ExecutionProfileBuilder;
+use scylla::execution_profile::{
+    ExecutionProfile, ExecutionProfileBuilder, ExecutionProfileHandle,
+};
 use scylla::load_balancing::LatencyAwarenessBuilder;
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
-use scylla::ExecutionProfile;
 
 use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut, strlen};
 use crate::batch::CassBatch;
@@ -71,6 +72,50 @@ impl Deref for ExecProfileName {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+// The resolved or not yet resolved execution profile that is specific
+// for a particular statement or batch.
+#[derive(Debug, Clone)]
+pub(crate) struct PerStatementExecProfile(Arc<RwLock<PerStatementExecProfileInner>>);
+
+impl PerStatementExecProfile {
+    pub(crate) fn new_unresolved(name: ExecProfileName) -> Self {
+        Self(Arc::new(RwLock::new(
+            PerStatementExecProfileInner::Unresolved(name),
+        )))
+    }
+}
+
+// The resolved or not yet resolved execution profile that is specific
+// for a particular statement or batch.
+#[derive(Debug)]
+pub(crate) enum PerStatementExecProfileInner {
+    // This is set eagerly on `cass_{statement,batch}_set_execution_profile()` call. CPP driver resolves
+    // the execution profile's name in the global hashmap on each query. As we want to avoid it,
+    // we resolve it only once, lazily, on the first query after the name it set. The reason why
+    // it can't be set eagerly is simple: the mentioned function does not provide any access
+    // to the Session.
+    Unresolved(ExecProfileName),
+
+    // This is the handle to be cloned as per-statement handle upon each query.
+    // We have to do that due to limitations of CPP driver API:
+    // `cass_{statement,batch}_set_execution_profile()` does not have access to exec profiles map,
+    // whereas `cass_session_execute[_batch]()` can't mutate the shared statement
+    // (but only its own copy of the statement).
+    //
+    // The purpose of this is to make it possible to resolve the profile only once after its alterations
+    // (e.g. re-setting an exec profile name) take place, and then (on further executions) used straight
+    // from here without resolution.
+    // In order to achieve that, we want the resolution's result to be saved into the Statement
+    // struct that is shared between calls to cass_session_execute().
+    // Note that we can't use references to that Statement inside of a CassFuture returned from
+    // `cass_session_execute()` because of lifetime issues (possible use-after-free).
+    // Therefore, we have to clone Statement's contents to inside the future and perform resolution
+    // there. If this struct weren't shared under Arc and we cloned it into the future,
+    // then the resolution inside the future would never propagate into the shared Statement struct.
+    // The same is true for Arc'ed `PerStatementExecProfileInner` in Batch.
+    Resolved(ExecutionProfileHandle),
 }
 
 #[no_mangle]
