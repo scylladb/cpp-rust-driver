@@ -10,6 +10,7 @@ use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::execution_profile::ExecutionProfileBuilder;
 use scylla::frame::Compression;
+use scylla::load_balancing::LatencyAwarenessBuilder;
 use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
@@ -25,6 +26,8 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
     pub(crate) dc_awareness: Option<DcAwareness>,
+    pub(crate) latency_awareness_enabled: bool,
+    pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
 }
 impl LoadBalancingConfig {
     // This is `async` to prevent running this function from beyond tokio context,
@@ -36,6 +39,9 @@ impl LoadBalancingConfig {
                 .prefer_datacenter(dc_awareness.local_dc.clone())
                 .permit_dc_failover(true)
         }
+        if self.latency_awareness_enabled {
+            builder = builder.latency_awareness(self.latency_awareness_builder);
+        }
         builder.build()
     }
 }
@@ -44,6 +50,8 @@ impl Default for LoadBalancingConfig {
         Self {
             token_awareness_enabled: true,
             dc_awareness: None,
+            latency_awareness_enabled: false,
+            latency_awareness_builder: Default::default(),
         }
     }
 }
@@ -507,4 +515,106 @@ pub unsafe extern "C" fn cass_cluster_set_compression(
     };
 
     cluster_from_raw.session_builder.config.compression = compression;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing(
+    cluster: *mut CassCluster,
+    enabled: cass_bool_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster);
+    cluster.load_balancing_config.latency_awareness_enabled = enabled != 0;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
+    cluster: *mut CassCluster,
+    exclusion_threshold: cass_double_t,
+    _scale_ms: cass_uint64_t, // Currently ignored, TODO: add this parameter to Rust driver
+    retry_period_ms: cass_uint64_t,
+    update_rate_ms: cass_uint64_t,
+    min_measured: cass_uint64_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster);
+    cluster.load_balancing_config.latency_awareness_builder = LatencyAwarenessBuilder::new()
+        .exclusion_threshold(exclusion_threshold)
+        .retry_period(Duration::from_millis(retry_period_ms))
+        .update_rate(Duration::from_millis(update_rate_ms))
+        .minimum_measurements(min_measured as usize);
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::testing::assert_cass_error_eq;
+
+    use super::*;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn test_load_balancing_config() {
+        unsafe {
+            let cluster_raw = cass_cluster_new();
+            {
+                /* Test valid configurations */
+                let cluster = ptr_to_ref(cluster_raw);
+                {
+                    assert_matches!(cluster.load_balancing_config.dc_awareness, None);
+                    assert!(cluster.load_balancing_config.token_awareness_enabled);
+                    assert!(!cluster.load_balancing_config.latency_awareness_enabled);
+                }
+                {
+                    cass_cluster_set_token_aware_routing(cluster_raw, 0);
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(
+                            cluster_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            0,
+                            0
+                        ),
+                        CassError::CASS_OK
+                    );
+                    cass_cluster_set_latency_aware_routing(cluster_raw, 1);
+                    // These values cannot currently be tested to be set properly in the latency awareness builder,
+                    // but at least we test that the function completed successfully.
+                    cass_cluster_set_latency_aware_routing_settings(
+                        cluster_raw,
+                        2.,
+                        1,
+                        2000,
+                        100,
+                        40,
+                    );
+
+                    let dc_awareness = cluster.load_balancing_config.dc_awareness.as_ref().unwrap();
+                    assert_eq!(dc_awareness.local_dc, "eu");
+                    assert!(!cluster.load_balancing_config.token_awareness_enabled);
+                    assert!(cluster.load_balancing_config.latency_awareness_enabled);
+                }
+                /* Test invalid configurations */
+                {
+                    // Nonzero deprecated parameters
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(
+                            cluster_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            1,
+                            0
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(
+                            cluster_raw,
+                            "eu\0".as_ptr() as *const i8,
+                            0,
+                            1
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                }
+            }
+
+            cass_cluster_free(cluster_raw);
+        }
+    }
 }
