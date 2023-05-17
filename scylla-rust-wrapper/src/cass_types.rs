@@ -238,6 +238,13 @@ impl CassDataType {
         }
     }
 
+    pub fn get_tuple_types(&self) -> &Vec<Arc<CassDataType>> {
+        match self {
+            CassDataType::Tuple(type_defs) => type_defs,
+            _ => panic!("Cannot get tuple out of non-tuple data type"),
+        }
+    }
+
     pub fn get_value_type(&self) -> CassValueType {
         match &self {
             CassDataType::Value(value_data_type) => *value_data_type,

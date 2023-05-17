@@ -1,18 +1,17 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
-use crate::query_result::{CassResult, CassRow, CassValue};
+use crate::query_result::{decode_value, CassResult, CassRow, RawValue};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
-use scylla::frame::types;
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
@@ -334,24 +333,16 @@ unsafe fn decode_first_row(result: *mut CassResult) -> bool {
 
     for raw_col in rows_iter.into_iter() {
         let raw_col = unwrap_or_return_false!(raw_col);
-        let value_type = get_column_type(&raw_col.spec.typ);
-        let frame_slice = raw_col.slice;
-        let is_null = frame_slice.map_or(true, |f| f.is_empty());
-        let count = if let (Some(frame), true) = (frame_slice, value_type.is_collection()) {
-            let mut mem = frame.as_slice();
-            unwrap_or_return_false!(types::read_int_length(&mut mem))
+        let raw_value = RawValue {
+            spec: &raw_col.spec.typ,
+            slice: raw_col.slice,
+        };
+        let cass_value = decode_value(raw_value, &raw_col.spec.typ);
+        if let Some(value) = cass_value {
+            result.first_row.as_mut().unwrap().columns.push(value);
         } else {
-            0
-        };
-
-        let cass_value = CassValue {
-            frame_slice,
-            is_null,
-            count,
-            value_type: Arc::new(value_type),
-        };
-
-        result.first_row.as_mut().unwrap().columns.push(cass_value);
+            return false;
+        }
     }
 
     true

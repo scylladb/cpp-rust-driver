@@ -13,7 +13,9 @@ use scylla::frame::response::result::{ColumnSpec, ColumnType};
 use scylla::frame::types;
 use scylla::frame::value::Date;
 use scylla::types::deserialize::row::ColumnIterator;
-use scylla::types::deserialize::value::DeserializeCql;
+use scylla::types::deserialize::value::{
+    DeserializeCql, MapIterator, SequenceIterator, UdtIterator,
+};
 use scylla::types::deserialize::FrameSlice;
 use scylla::QueryResult;
 use std::convert::TryInto;
@@ -34,6 +36,28 @@ pub struct CassRow {
     pub columns: Vec<CassValue>,
 }
 
+pub struct RawValue<'frame> {
+    pub spec: &'frame ColumnType,
+    pub slice: Option<FrameSlice<'frame>>,
+}
+
+impl<'frame> DeserializeCql<'frame> for RawValue<'frame> {
+    fn type_check(_typ: &ColumnType) -> Result<(), ParseError> {
+        // Raw bytes can be returned for all types
+        Ok(())
+    }
+
+    fn deserialize(
+        typ: &'frame ColumnType,
+        v: Option<FrameSlice<'frame>>,
+    ) -> Result<Self, ParseError> {
+        Ok(RawValue {
+            spec: typ,
+            slice: v,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct CassValue {
     /// Represents a raw, unparsed column value.
@@ -41,6 +65,7 @@ pub struct CassValue {
     pub is_null: bool,
     pub count: usize,
     pub value_type: Arc<CassDataType>,
+    pub column_type: &'static ColumnType,
 }
 
 pub struct CassResultIterator {
@@ -55,21 +80,21 @@ pub struct CassRowIterator {
 }
 
 pub struct CassCollectionIterator {
-    collection: &'static CassValue,
+    sequence_iterator: SequenceIterator<'static, RawValue<'static>>,
     value: Option<CassValue>,
     count: usize,
     position: Option<usize>,
 }
 
 pub struct CassTupleIterator {
-    tuple: &'static CassValue,
+    sequence_iterator: SequenceIterator<'static, RawValue<'static>>,
     value: Option<CassValue>,
     count: usize,
     position: Option<usize>,
 }
 
 pub struct CassMapIterator {
-    map: &'static CassValue,
+    map_iterator: MapIterator<'static, RawValue<'static>, RawValue<'static>>,
     key: Option<CassValue>,
     value: Option<CassValue>,
     count: usize,
@@ -77,7 +102,7 @@ pub struct CassMapIterator {
 }
 
 pub struct CassUdtIterator {
-    udt: &'static CassValue,
+    udt_iterator: UdtIterator<'static>,
     field_value: Option<CassValue>,
     field_name: Option<String>,
     count: usize,
@@ -131,29 +156,59 @@ fn decode_next_row(result: &'static CassResult, row: &mut Option<CassRow>) -> bo
 
         for (i, raw_col) in next_cols_iter.into_iter().enumerate() {
             let raw_col = unwrap_or_return_false!(raw_col);
-            let value_type = get_column_type(&raw_col.spec.typ);
-            let frame_slice = raw_col.slice;
-            let is_null = frame_slice.map_or(true, |f| f.is_empty());
-            let count = if let (Some(frame), true) = (frame_slice, value_type.is_collection()) {
-                let mut mem = frame.as_slice();
-                unwrap_or_return_false!(types::read_int_length(&mut mem))
-            } else {
-                0
+            let raw_value = RawValue {
+                spec: &raw_col.spec.typ,
+                slice: raw_col.slice,
             };
-
-            let cass_value = CassValue {
-                frame_slice,
-                is_null,
-                count,
-                value_type: Arc::new(value_type),
-            };
-            // Below assignment is safe from out of bounds panic as,
-            // first [decode_first_row] call already initialized the columns vec
-            row.columns[i] = cass_value;
+            let cass_value = decode_value(raw_value, &raw_col.spec.typ);
+            match cass_value {
+                Some(value) => {
+                    // Below assignment is safe from out of bounds panic, as
+                    // first [decode_first_row] call already initialized the columns vec
+                    row.columns[i] = value;
+                }
+                _ => return false,
+            }
         }
     }
 
     true
+}
+
+pub fn decode_value(
+    raw_value: RawValue<'static>,
+    val_type: &'static ColumnType,
+) -> Option<CassValue> {
+    let data_type = get_column_type(val_type);
+    let frame_slice = raw_value.slice;
+    let is_null = frame_slice.map_or(true, |f| f.is_empty());
+    let mut count = 0;
+
+    match frame_slice {
+        Some(frame) if data_type.is_collection() => {
+            // Frame is immutable, reading value len will not modify mem
+            let mut mem = frame.as_slice();
+            match types::read_int_length(&mut mem) {
+                Ok(len) => count = len,
+                Err(_) => return None,
+            }
+        }
+        Some(_frame) if data_type.is_user_type() => {
+            count = data_type.get_udt_type().field_types.len();
+        }
+        Some(_frame) if data_type.is_tuple() => count = data_type.get_tuple_types().len(),
+        _ => {}
+    }
+
+    let cass_value = CassValue {
+        frame_slice,
+        is_null,
+        count,
+        value_type: Arc::new(data_type),
+        column_type: val_type,
+    };
+
+    Some(cass_value)
 }
 
 #[no_mangle]
@@ -192,30 +247,88 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
                 .position
                 .map_or(0, |prev_pos| prev_pos + 1);
 
-            collection_iterator.position = Some(new_pos); // TODO: add next value decoding for collection
+            collection_iterator.position = Some(new_pos);
 
-            (new_pos < collection_iterator.count) as cass_bool_t
+            if new_pos < collection_iterator.count {
+                let raw_value = collection_iterator.sequence_iterator.next().unwrap();
+                if let Ok(raw) = raw_value {
+                    let raw_value_type = raw.spec;
+                    let value = decode_value(raw, raw_value_type);
+                    collection_iterator.value = value;
+
+                    return true as cass_bool_t;
+                }
+            }
+
+            false as cass_bool_t
         }
         CassIterator::CassTupleIterator(tuple_iterator) => {
             let new_pos: usize = tuple_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-            tuple_iterator.position = Some(new_pos); // TODO: add next value decoding for collection
+            tuple_iterator.position = Some(new_pos);
 
-            (new_pos < tuple_iterator.count) as cass_bool_t
+            if new_pos < tuple_iterator.count {
+                let raw_value = tuple_iterator.sequence_iterator.next().unwrap();
+                if let Ok(raw) = raw_value {
+                    let type_in_pos = match raw.spec {
+                        ColumnType::Tuple(type_defs) => type_defs.get(new_pos),
+                        _ => panic!("Cannot get tuple out of non-tuple column type"),
+                    };
+                    if let Some(spec) = type_in_pos {
+                        let value = decode_value(raw, spec);
+                        tuple_iterator.value = value;
+
+                        return true as cass_bool_t;
+                    }
+                }
+            }
+
+            false as cass_bool_t
         }
         CassIterator::CassMapIterator(map_iterator) => {
             let new_pos: usize = map_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-            map_iterator.position = Some(new_pos); // TODO: add next key/value decoding for map
+            map_iterator.position = Some(new_pos);
 
-            (new_pos < map_iterator.count) as cass_bool_t
+            if new_pos < map_iterator.count {
+                let raw_value = map_iterator.map_iterator.next().unwrap();
+                if let Ok((raw_key, raw_value)) = raw_value {
+                    let key_type = raw_key.spec;
+                    let key = decode_value(raw_key, key_type);
+                    let value_type = raw_value.spec;
+                    let value = decode_value(raw_value, value_type);
+                    map_iterator.key = key;
+                    map_iterator.value = value;
+
+                    return true as cass_bool_t;
+                }
+            }
+
+            false as cass_bool_t
         }
         CassIterator::CassUdtIterator(udt_iterator) => {
             let new_pos: usize = udt_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
-            udt_iterator.position = Some(new_pos); // TODO: add next field name/value decoding for udt
+            udt_iterator.position = Some(new_pos);
 
-            (new_pos < udt_iterator.count) as cass_bool_t
+            if new_pos < udt_iterator.count {
+                let raw_value = udt_iterator.udt_iterator.next().unwrap();
+                if let Ok((name_type, Some(frame_slice))) = raw_value {
+                    let name = &name_type.0;
+                    let field_type = &name_type.1;
+                    let raw = RawValue {
+                        spec: field_type,
+                        slice: frame_slice,
+                    };
+                    let value = decode_value(raw, field_type);
+                    udt_iterator.field_value = value;
+                    udt_iterator.field_name = Some(name.clone());
+
+                    return true as cass_bool_t;
+                }
+            }
+
+            false as cass_bool_t
         }
         CassIterator::CassSchemaMetaIterator(schema_meta_iterator) => {
             let new_pos: usize = schema_meta_iterator
@@ -618,16 +731,26 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
 ) -> *mut CassIterator {
     let collection = ptr_to_ref(value);
 
-    if !collection.is_null & collection.value_type.is_collection() {
+    if !collection.is_null && collection.value_type.is_collection() {
         let item_count = collection.count;
-        let iterator = CassCollectionIterator {
-            collection,
-            value: None,
-            count: item_count,
-            position: None,
-        };
+        let column_type = collection.column_type;
+        match column_type {
+            ColumnType::Set(_) | ColumnType::List(_) => {
+                let sequence_iterator =
+                    SequenceIterator::deserialize(column_type, collection.frame_slice);
+                if let Ok(seq_iterator) = sequence_iterator {
+                    let iterator = CassCollectionIterator {
+                        sequence_iterator: seq_iterator,
+                        value: None,
+                        count: item_count,
+                        position: None,
+                    };
 
-        return Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)));
+                    return Box::into_raw(Box::new(CassIterator::CassCollectionIterator(iterator)));
+                }
+            }
+            _ => panic!("Cannot create collection iterator from non-collection value"),
+        }
     }
 
     std::ptr::null_mut()
@@ -638,15 +761,19 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *m
     let tuple = ptr_to_ref(value);
 
     if !tuple.is_null && tuple.value_type.is_tuple() {
-        let item_count = tuple.count;
-        let iterator = CassTupleIterator {
-            tuple,
-            value: None,
-            count: item_count,
-            position: None,
-        };
+        if let Some(frame_slice) = tuple.frame_slice {
+            let item_count = tuple.count;
+            let column_type = tuple.column_type;
+            let sequence_iterator = SequenceIterator::new(column_type, item_count, frame_slice);
+            let iterator = CassTupleIterator {
+                sequence_iterator,
+                value: None,
+                count: item_count,
+                position: None,
+            };
 
-        return Box::into_raw(Box::new(CassIterator::CassTupleIterator(iterator)));
+            return Box::into_raw(Box::new(CassIterator::CassTupleIterator(iterator)));
+        }
     }
 
     std::ptr::null_mut()
@@ -658,15 +785,18 @@ pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut
 
     if !map.is_null && map.value_type.is_map() {
         let item_count = map.count;
-        let iterator = CassMapIterator {
-            map,
-            key: None,
-            value: None,
-            count: item_count,
-            position: None,
-        };
+        let map_iterator = MapIterator::deserialize(map.column_type, map.frame_slice);
+        if let Ok(map_iter) = map_iterator {
+            let iterator = CassMapIterator {
+                map_iterator: map_iter,
+                key: None,
+                value: None,
+                count: item_count,
+                position: None,
+            };
 
-        return Box::into_raw(Box::new(CassIterator::CassMapIterator(iterator)));
+            return Box::into_raw(Box::new(CassIterator::CassMapIterator(iterator)));
+        }
     }
 
     std::ptr::null_mut()
@@ -679,16 +809,23 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
     let udt = ptr_to_ref(value);
 
     if !udt.is_null && udt.value_type.is_user_type() {
-        let item_count = udt.count;
-        let iterator = CassUdtIterator {
-            udt,
-            field_name: None,
-            field_value: None,
-            count: item_count,
-            position: None,
-        };
+        if let Some(frame_slice) = udt.frame_slice {
+            let item_count = udt.count;
+            let fields = match udt.column_type {
+                ColumnType::UserDefinedType { field_types, .. } => field_types.as_slice(),
+                _ => panic!("Unexpected column type for map collection"),
+            };
+            let udt_iterator = UdtIterator::new(fields, frame_slice); // safe to unwrap as is_null is false
+            let iterator = CassUdtIterator {
+                udt_iterator,
+                field_name: None,
+                field_value: None,
+                count: item_count,
+                position: None,
+            };
 
-        return Box::into_raw(Box::new(CassIterator::CassUdtIterator(iterator)));
+            return Box::into_raw(Box::new(CassIterator::CassUdtIterator(iterator)));
+        }
     }
 
     std::ptr::null_mut()
