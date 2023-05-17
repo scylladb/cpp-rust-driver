@@ -13,6 +13,7 @@ use scylla::frame::Compression;
 use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
+use scylla::statement::Consistency;
 use scylla::SessionBuilder;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
@@ -95,6 +96,10 @@ pub fn build_session_builder(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
+    // According to `cassandra.h` the default CPP driver's consistency for statements is LOCAL_ONE.
+    let default_execution_profile_builder =
+        ExecutionProfileBuilder::default().consistency(Consistency::LocalOne);
+
     Box::into_raw(Box::new(CassCluster {
         session_builder: SessionBuilder::new(),
         port: 9042,
@@ -104,7 +109,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         use_beta_protocol_version: false,
         auth_username: None,
         auth_password: None,
-        default_execution_profile_builder: Default::default(),
+        default_execution_profile_builder,
         load_balancing_config: Default::default(),
     }))
 }
