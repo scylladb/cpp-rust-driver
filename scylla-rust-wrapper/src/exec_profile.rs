@@ -12,7 +12,7 @@ use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 
-use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut, strlen};
+use crate::argconv::{free_boxed, ptr_to_cstr_n, ptr_to_ref, ptr_to_ref_mut, strlen};
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
@@ -126,6 +126,52 @@ pub unsafe extern "C" fn cass_execution_profile_new() -> *mut CassExecProfile {
 #[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_free(profile: *mut CassExecProfile) {
     free_boxed(profile);
+}
+
+/* Exec profiles scope setters */
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_execution_profile(
+    statement: *mut CassStatement,
+    name: *const c_char,
+) -> CassError {
+    cass_statement_set_execution_profile_n(statement, name, strlen(name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
+    statement: *mut CassStatement,
+    name: *const c_char,
+    name_length: size_t,
+) -> CassError {
+    let statement = ptr_to_ref_mut(statement);
+    let name: Option<ExecProfileName> =
+        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
+    statement.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_batch_set_execution_profile(
+    batch: *mut CassBatch,
+    name: *const c_char,
+) -> CassError {
+    cass_batch_set_execution_profile_n(batch, name, strlen(name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
+    batch: *mut CassBatch,
+    name: *const c_char,
+    name_length: size_t,
+) -> CassError {
+    let batch = ptr_to_ref_mut(batch);
+    let name: Option<ExecProfileName> =
+        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
+    batch.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
+
+    CassError::CASS_OK
 }
 
 /* Config options setters */
@@ -326,45 +372,17 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     CassError::CASS_OK
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_execution_profile(
-    statement: *mut CassStatement,
-    name: *const c_char,
-) -> CassError {
-    unimplemented!()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
-    statement: *mut CassStatement,
-    name: *const c_char,
-    name_length: size_t,
-) -> CassError {
-    unimplemented!()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_batch_set_execution_profile(
-    batch: *mut CassBatch,
-    name: *const c_char,
-) -> CassError {
-    unimplemented!()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
-    batch: *mut CassBatch,
-    name: *const c_char,
-    name_length: size_t,
-) -> CassError {
-    unimplemented!()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::testing::assert_cass_error_eq;
+    use crate::{
+        argconv::{make_c_str, str_to_c_str_n},
+        batch::{cass_batch_add_statement, cass_batch_free, cass_batch_new},
+        cass_types::CassBatchType,
+        statement::{cass_statement_free, cass_statement_new},
+    };
 
     use assert_matches::assert_matches;
 
@@ -448,6 +466,163 @@ mod tests {
             }
 
             cass_execution_profile_free(profile_raw);
+        }
+    }
+
+    impl PerStatementExecProfile {
+        pub(crate) fn inner(&self) -> &Arc<RwLock<PerStatementExecProfileInner>> {
+            &self.0
+        }
+    }
+
+    impl PerStatementExecProfileInner {
+        pub(crate) fn as_name(&self) -> Option<&ExecProfileName> {
+            if let PerStatementExecProfileInner::Unresolved(name) = self {
+                Some(name)
+            } else {
+                None
+            }
+        }
+
+        pub(crate) fn as_handle(&self) -> Option<&ExecutionProfileHandle> {
+            if let PerStatementExecProfileInner::Resolved(profile) = self {
+                Some(profile)
+            } else {
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn test_statement_and_batch_set_exec_profile() {
+        unsafe {
+            let empty_query = make_c_str!("");
+            let statement_raw = cass_statement_new(empty_query, 0);
+            let batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            assert_cass_error_eq!(
+                cass_batch_add_statement(batch_raw, statement_raw),
+                CassError::CASS_OK
+            );
+
+            {
+                /* Test valid configurations */
+                let statement = ptr_to_ref(statement_raw);
+                let batch = ptr_to_ref(batch_raw);
+                {
+                    assert!(statement.exec_profile.is_none());
+                    assert!(batch.exec_profile.is_none());
+                }
+                {
+                    let valid_name = "profile";
+                    let valid_name_c_str = make_c_str!("profile");
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, valid_name_c_str,),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, valid_name_c_str,),
+                        CassError::CASS_OK
+                    );
+                    assert_eq!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .0
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+                    assert_eq!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .0
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+                }
+                {
+                    // NULL name sets exec profile to None
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, std::ptr::null::<i8>()),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, std::ptr::null::<i8>()),
+                        CassError::CASS_OK
+                    );
+                    assert!(statement.exec_profile.is_none());
+                    assert!(batch.exec_profile.is_none());
+                }
+                {
+                    // valid name again, this time using `..._n` setter
+                    let valid_name = "profile1";
+                    let (valid_name_c_str, valid_name_len) = str_to_c_str_n(valid_name);
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile_n(
+                            statement_raw,
+                            valid_name_c_str,
+                            valid_name_len,
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile_n(
+                            batch_raw,
+                            valid_name_c_str,
+                            valid_name_len,
+                        ),
+                        CassError::CASS_OK
+                    );
+                    assert_eq!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .0
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+                    assert_eq!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .0
+                            .read()
+                            .unwrap()
+                            .as_name()
+                            .unwrap(),
+                        &valid_name.to_owned().try_into().unwrap()
+                    );
+                }
+                {
+                    // empty name sets exec profile to None
+                    assert_cass_error_eq!(
+                        cass_statement_set_execution_profile(statement_raw, make_c_str!("")),
+                        CassError::CASS_OK
+                    );
+                    assert_cass_error_eq!(
+                        cass_batch_set_execution_profile(batch_raw, make_c_str!("")),
+                        CassError::CASS_OK
+                    );
+                    assert!(statement.exec_profile.is_none());
+                    assert!(batch.exec_profile.is_none());
+                }
+            }
+
+            cass_statement_free(statement_raw);
+            cass_batch_free(batch_raw);
         }
     }
 }
