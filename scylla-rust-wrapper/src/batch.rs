@@ -2,6 +2,7 @@ use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut};
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cass_types::{make_batch_type, CassBatchType};
+use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{CassStatement, Statement};
 use crate::types::*;
 use scylla::batch::Batch;
@@ -71,6 +72,29 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
     Arc::make_mut(&mut batch.state)
         .batch
         .set_serial_consistency(Some(serial_consistency));
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_batch_set_retry_policy(
+    batch: *mut CassBatch,
+    retry_policy: *const CassRetryPolicy,
+) -> CassError {
+    let batch = ptr_to_ref_mut(batch);
+
+    let maybe_arced_retry_policy: Option<Arc<dyn scylla::retry_policy::RetryPolicy>> =
+        retry_policy.as_ref().map(|policy| match policy {
+            CassRetryPolicy::DefaultRetryPolicy(default) => {
+                default.clone() as Arc<dyn scylla::retry_policy::RetryPolicy>
+            }
+            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
+            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+        });
+
+    Arc::make_mut(&mut batch.state)
+        .batch
+        .set_retry_policy(maybe_arced_retry_policy);
 
     CassError::CASS_OK
 }
