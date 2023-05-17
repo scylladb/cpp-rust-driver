@@ -2,6 +2,7 @@ use crate::argconv::{free_boxed, ptr_to_ref, ptr_to_ref_mut};
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cass_types::{make_batch_type, CassBatchType};
+use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{CassStatement, Statement};
 use crate::types::*;
@@ -14,6 +15,8 @@ use std::sync::Arc;
 pub struct CassBatch {
     pub state: Arc<CassBatchState>,
     pub batch_request_timeout_ms: Option<cass_uint64_t>,
+
+    pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
 #[derive(Clone)]
@@ -31,6 +34,7 @@ pub unsafe extern "C" fn cass_batch_new(type_: CassBatchType) -> *mut CassBatch 
                 bound_values: Vec::new(),
             }),
             batch_request_timeout_ms: None,
+            exec_profile: None,
         }))
     } else {
         std::ptr::null_mut()

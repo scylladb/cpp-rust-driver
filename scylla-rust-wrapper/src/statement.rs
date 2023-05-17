@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::exec_profile::PerStatementExecProfile;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
@@ -36,6 +37,8 @@ pub struct CassStatement {
     pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
     pub paging_state: Option<Bytes>,
     pub request_timeout_ms: Option<cass_uint64_t>,
+
+    pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
 impl CassStatement {
@@ -157,6 +160,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: None,
         request_timeout_ms: None,
+        exec_profile: None,
     }))
 }
 
