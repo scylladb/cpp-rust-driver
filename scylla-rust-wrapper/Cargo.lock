@@ -27,6 +27,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5d78ce20460b82d3fa150275ed9d55e21064fc7951177baacf86a145c4a4b1f"
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "async-trait"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -464,6 +470,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntest"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da8ec6d2b73d45307e926f5af46809768581044384637af6b3f3fe7c3c88f512"
+dependencies = [
+ "ntest_test_cases",
+ "ntest_timeout",
+]
+
+[[package]]
+name = "ntest_test_cases"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be7d33be719c6f4d09e64e27c1ef4e73485dc4cc1f4d22201f89860a7fe22e22"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.98",
+]
+
+[[package]]
+name = "ntest_timeout"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "066b468120587a402f0b47d8f80035c921f6a46f8209efd0632a89a16f5188a4"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.98",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -702,6 +741,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_pcg"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -754,8 +802,8 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "scylla"
-version = "0.7.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
+version = "0.8.1"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -772,6 +820,7 @@ dependencies = [
  "num_enum",
  "openssl",
  "rand",
+ "rand_pcg",
  "scylla-cql",
  "scylla-macros",
  "smallvec",
@@ -789,17 +838,20 @@ dependencies = [
 name = "scylla-cpp-driver-rust"
 version = "0.0.1"
 dependencies = [
+ "assert_matches",
  "bindgen",
  "chrono",
  "lazy_static",
  "libc",
  "machine-uid",
+ "ntest",
  "num-derive",
  "num-traits",
  "openssl",
  "openssl-sys",
  "rand",
  "scylla",
+ "scylla-proxy",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -808,8 +860,8 @@ dependencies = [
 
 [[package]]
 name = "scylla-cql"
-version = "0.0.3"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
+version = "0.0.6"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
 dependencies = [
  "async-trait",
  "bigdecimal",
@@ -828,12 +880,32 @@ dependencies = [
 
 [[package]]
 name = "scylla-macros"
-version = "0.1.2"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db#9dc6f4871f2477c8ebb5bd911a0ce8ddc05ba8db"
+version = "0.2.0"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.98",
+]
+
+[[package]]
+name = "scylla-proxy"
+version = "0.0.2"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=1a913a19#1a913a191fef6ba1ad05d4f4260037609d6fc64e"
+dependencies = [
+ "bigdecimal",
+ "byteorder",
+ "bytes",
+ "chrono",
+ "futures",
+ "num-bigint",
+ "num_enum",
+ "rand",
+ "scylla-cql",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -946,22 +1018,22 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.31"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd829fe32373d27f76265620b5309d0340cb8550f523c1dda251d6298069069a"
+checksum = "978c9a314bd8dc99be594bc3c175faaa9794be04a5a5e153caba6915336cebac"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.31"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0396bc89e626244658bef819e22d0cc459e795a5ebe878e6ec336d1674a8d79a"
+checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.98",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -1039,9 +1111,9 @@ dependencies = [
 
 [[package]]
 name = "tracing"
-version = "0.1.35"
+version = "0.1.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a400e31aa60b9d44a52a8ee0343b5b18566b03a8321e0d321f695cf56e940160"
+checksum = "8ce8c33a8d48bd45d624a6e523445fd21ec13d3653cd51f681abf67418f54eb8"
 dependencies = [
  "cfg-if",
  "pin-project-lite",
@@ -1051,9 +1123,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.22"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11c75893af559bc8e10716548bdef5cb2b983f8e637db9d0e15126b61b484ee2"
+checksum = "4017f8f45139870ca7e672686113917c71c7a6e02d4924eda67186083c03081a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1062,9 +1134,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.28"
+version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b7358be39f2f274f322d2aaed611acc57f382e8eb1e5b48cb9ae30933495ce7"
+checksum = "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
 dependencies = [
  "once_cell",
  "valuable",

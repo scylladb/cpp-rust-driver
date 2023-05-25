@@ -55,6 +55,7 @@ pub unsafe extern "C" fn cass_session_connect(
         }
 
         let session = build_session_builder(&cluster)
+            .await
             .build()
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;

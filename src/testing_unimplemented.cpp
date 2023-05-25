@@ -116,20 +116,6 @@ cass_cluster_set_host_listener_callback(CassCluster* cluster,
                                         void* data){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_host_listener_callback\n");
 }
-CASS_EXPORT void
-cass_cluster_set_latency_aware_routing(CassCluster* cluster,
-                                       cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_latency_aware_routing\n");
-}
-CASS_EXPORT void
-cass_cluster_set_latency_aware_routing_settings(CassCluster* cluster,
-                                                cass_double_t exclusion_threshold,
-                                                cass_uint64_t scale_ms,
-                                                cass_uint64_t retry_period_ms,
-                                                cass_uint64_t update_rate_ms,
-                                                cass_uint64_t min_measured){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_latency_aware_routing_settings\n");
-}
 CASS_EXPORT CassError
 cass_cluster_set_local_address(CassCluster* cluster,
                                const char* name){

@@ -8,36 +8,60 @@ use crate::types::*;
 use core::time::Duration;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
+use scylla::execution_profile::ExecutionProfileBuilder;
 use scylla::frame::Compression;
-use scylla::load_balancing::{
-    DcAwareRoundRobinPolicy, LoadBalancingPolicy, RoundRobinPolicy, TokenAwarePolicy,
-};
+use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::SessionBuilder;
+use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 
-#[derive(Clone)]
-enum CassClusterChildLoadBalancingPolicy {
-    RoundRobinPolicy,
-    DcAwareRoundRobinPolicy {
-        local_dc: String,
-        include_remote_nodes: bool,
-    },
+#[derive(Clone, Debug)]
+pub(crate) struct LoadBalancingConfig {
+    pub(crate) token_awareness_enabled: bool,
+    pub(crate) dc_awareness: Option<DcAwareness>,
+}
+impl LoadBalancingConfig {
+    // This is `async` to prevent running this function from beyond tokio context,
+    // as it results in panic due to DefaultPolicyBuilder::build() spawning a tokio task.
+    pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
+        let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
+        if let Some(dc_awareness) = self.dc_awareness.as_ref() {
+            builder = builder
+                .prefer_datacenter(dc_awareness.local_dc.clone())
+                .permit_dc_failover(true)
+        }
+        builder.build()
+    }
+}
+impl Default for LoadBalancingConfig {
+    fn default() -> Self {
+        Self {
+            token_awareness_enabled: true,
+            dc_awareness: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DcAwareness {
+    pub(crate) local_dc: String,
 }
 
 #[derive(Clone)]
 pub struct CassCluster {
     session_builder: SessionBuilder,
+    default_execution_profile_builder: ExecutionProfileBuilder,
 
     contact_points: Vec<String>,
     port: u16,
 
-    child_load_balancing_policy: CassClusterChildLoadBalancingPolicy,
-    token_aware_policy_enabled: bool,
+    load_balancing_config: LoadBalancingConfig,
+
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
@@ -45,48 +69,27 @@ pub struct CassCluster {
 
 pub struct CassCustomPayload;
 
-pub fn build_session_builder(cluster: &CassCluster) -> SessionBuilder {
-    let known_nodes: Vec<_> = cluster
+// We want to make sure that the returned future does not depend
+// on the provided &CassCluster, hence the `static here.
+pub fn build_session_builder(
+    cluster: &CassCluster,
+) -> impl Future<Output = SessionBuilder> + 'static {
+    let known_nodes = cluster
         .contact_points
-        .clone()
-        .into_iter()
-        .map(|cp| format!("{}:{}", cp, cluster.port))
-        .collect();
-
-    let load_balancing: Arc<dyn LoadBalancingPolicy> =
-        match cluster.child_load_balancing_policy.clone() {
-            CassClusterChildLoadBalancingPolicy::RoundRobinPolicy => {
-                if cluster.token_aware_policy_enabled {
-                    Arc::new(TokenAwarePolicy::new(Box::new(RoundRobinPolicy::new())))
-                } else {
-                    Arc::new(RoundRobinPolicy::new())
-                }
-            }
-            CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
-                local_dc,
-                include_remote_nodes,
-            } => {
-                let mut dc_aware_policy = DcAwareRoundRobinPolicy::new(local_dc);
-                dc_aware_policy.set_include_remote_nodes(include_remote_nodes);
-
-                if cluster.token_aware_policy_enabled {
-                    Arc::new(TokenAwarePolicy::new(Box::new(dc_aware_policy)))
-                } else {
-                    Arc::new(dc_aware_policy)
-                }
-            }
-        };
-
-    let builder = cluster
-        .session_builder
-        .clone()
-        .known_nodes(&known_nodes)
-        .load_balancing(load_balancing);
-
+        .iter()
+        .map(|cp| format!("{}:{}", cp, cluster.port));
+    let mut execution_profile_builder = cluster.default_execution_profile_builder.clone();
+    let load_balancing_config = cluster.load_balancing_config.clone();
+    let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
     if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
-        builder.user(username, password)
-    } else {
-        builder
+        session_builder = session_builder.user(username, password)
+    }
+
+    async move {
+        let load_balancing = load_balancing_config.clone().build().await;
+        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
+        session_builder
+            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
     }
 }
 
@@ -98,14 +101,11 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
         // defaults to using Datacenter-aware load balancing with token-aware routing.
-        child_load_balancing_policy: CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
-            local_dc: "".to_string(),
-            include_remote_nodes: true,
-        },
-        token_aware_policy_enabled: true,
         use_beta_protocol_version: false,
         auth_username: None,
         auth_password: None,
+        default_execution_profile_builder: Default::default(),
+        load_balancing_config: Default::default(),
     }))
 }
 
@@ -248,7 +248,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.child_load_balancing_policy = CassClusterChildLoadBalancingPolicy::RoundRobinPolicy;
+    cluster.load_balancing_config.dc_awareness = None;
 }
 
 #[no_mangle]
@@ -267,9 +267,8 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
     )
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
-    cluster_raw: *mut CassCluster,
+pub(crate) unsafe fn set_load_balance_dc_aware_n(
+    load_balancing_config: &mut LoadBalancingConfig,
     local_dc_raw: *const c_char,
     local_dc_length: size_t,
     used_hosts_per_remote_dc: c_uint,
@@ -279,8 +278,8 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    if used_hosts_per_remote_dc != 0 {
-        // TODO: Add warning that the parameter is deprecated and not supported in the driver.
+    if used_hosts_per_remote_dc != 0 || allow_remote_dcs_for_local_cl != 0 {
+        // TODO: Add warning that the parameters are deprecated and not supported in the driver.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
@@ -288,14 +287,28 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         .unwrap()
         .to_string();
 
-    let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.child_load_balancing_policy =
-        CassClusterChildLoadBalancingPolicy::DcAwareRoundRobinPolicy {
-            local_dc,
-            include_remote_nodes: allow_remote_dcs_for_local_cl != 0,
-        };
+    load_balancing_config.dc_awareness = Some(DcAwareness { local_dc });
 
     CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
+    cluster_raw: *mut CassCluster,
+    local_dc_raw: *const c_char,
+    local_dc_length: size_t,
+    used_hosts_per_remote_dc: c_uint,
+    allow_remote_dcs_for_local_cl: cass_bool_t,
+) -> CassError {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    set_load_balance_dc_aware_n(
+        &mut cluster.load_balancing_config,
+        local_dc_raw,
+        local_dc_length,
+        used_hosts_per_remote_dc,
+        allow_remote_dcs_for_local_cl,
+    )
 }
 
 #[no_mangle]
@@ -418,7 +431,9 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
         retry_interval: Duration::from_millis(constant_delay_ms as u64),
     };
 
-    cluster.session_builder.config.speculative_execution_policy = Some(Arc::new(policy));
+    cluster.default_execution_profile_builder =
+        std::mem::take(&mut cluster.default_execution_profile_builder)
+            .speculative_execution_policy(Some(Arc::new(policy)));
 
     CassError::CASS_OK
 }
@@ -428,8 +443,9 @@ pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     cluster_raw: *mut CassCluster,
 ) -> CassError {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.session_builder.config.speculative_execution_policy = None;
-
+    cluster.default_execution_profile_builder =
+        std::mem::take(&mut cluster.default_execution_profile_builder)
+            .speculative_execution_policy(None);
     CassError::CASS_OK
 }
 
@@ -439,7 +455,7 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
     enabled: cass_bool_t,
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.token_aware_policy_enabled = enabled != 0;
+    cluster.load_balancing_config.token_awareness_enabled = enabled != 0;
 }
 
 #[no_mangle]
@@ -449,14 +465,16 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
 
-    let retry_policy: &dyn RetryPolicy = match ptr_to_ref(retry_policy) {
-        DefaultRetryPolicy(default) => default,
-        FallthroughRetryPolicy(fallthrough) => fallthrough,
-        DowngradingConsistencyRetryPolicy(downgrading) => downgrading,
+    let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
+        DefaultRetryPolicy(default) => default.clone(),
+        FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
+        DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
     };
     let boxed_retry_policy = retry_policy.clone_boxed();
 
-    cluster.session_builder.config.retry_policy = boxed_retry_policy;
+    cluster.default_execution_profile_builder =
+        std::mem::take(&mut cluster.default_execution_profile_builder)
+            .retry_policy(boxed_retry_policy);
 }
 
 #[no_mangle]

@@ -255,17 +255,19 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: *mut CassStatement,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let retry_policy_from_raw: &dyn scylla::retry_policy::RetryPolicy =
+    let arced_retry_policy: Arc<dyn scylla::retry_policy::RetryPolicy> =
+        // Shouldn't this accept NULL ptr for unsetting retry policy on statement?
         match ptr_to_ref(retry_policy) {
-            CassRetryPolicy::DefaultRetryPolicy(default) => default,
-            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough,
-            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading,
+            CassRetryPolicy::DefaultRetryPolicy(default) => default.clone(),
+            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
+            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
         };
-    let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.query.set_retry_policy(boxed_retry_policy),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_retry_policy(boxed_retry_policy),
+        Statement::Simple(inner) => inner.query.set_retry_policy(Some(arced_retry_policy)),
+        Statement::Prepared(inner) => {
+            Arc::make_mut(inner).set_retry_policy(Some(arced_retry_policy))
+        }
     }
 
     CassError::CASS_OK

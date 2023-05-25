@@ -3,7 +3,7 @@ use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::batch::{BatchType, Consistency, SerialConsistency};
 use scylla::frame::response::result::ColumnType;
-use scylla::transport::topology::{CollectionType, CqlType, NativeType};
+use scylla::transport::topology::{CollectionType, CqlType, NativeType, UserDefinedType};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::os::raw::c_char;
@@ -33,13 +33,14 @@ impl UDTDataType {
     }
 
     pub fn create_with_params(
-        user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+        user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
         keyspace_name: &str,
         name: &str,
     ) -> UDTDataType {
         UDTDataType {
             field_types: user_defined_types
                 .get(name)
+                .map(|udf| &udf.field_types)
                 .unwrap_or(&vec![])
                 .iter()
                 .map(|(udt_field_name, udt_field_type)| {
@@ -128,7 +129,7 @@ impl From<NativeType> for CassValueType {
 
 pub fn get_column_type_from_cql_type(
     cql_type: &CqlType,
-    user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+    user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
     keyspace_name: &str,
 ) -> CassDataType {
     match cql_type {
@@ -165,9 +166,17 @@ pub fn get_column_type_from_cql_type(
                 })
                 .collect(),
         ),
-        CqlType::UserDefinedType { name, .. } => CassDataType::UDT(
-            UDTDataType::create_with_params(user_defined_types, keyspace_name, name),
-        ),
+        CqlType::UserDefinedType { definition, .. } => {
+            let name = match definition {
+                Ok(resolved) => &resolved.name,
+                Err(not_resolved) => &not_resolved.name,
+            };
+            CassDataType::UDT(UDTDataType::create_with_params(
+                user_defined_types,
+                keyspace_name,
+                name,
+            ))
+        }
     }
 }
 
