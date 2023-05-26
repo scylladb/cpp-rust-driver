@@ -989,12 +989,14 @@ name = "scylla-cpp-driver-rust"
 version = "0.0.1"
 dependencies = [
  "assert_matches",
+ "bigdecimal",
  "bindgen",
  "chrono",
  "lazy_static",
  "libc",
  "machine-uid",
  "ntest",
+ "num-bigint",
  "num-derive",
  "num-traits",
  "openssl",

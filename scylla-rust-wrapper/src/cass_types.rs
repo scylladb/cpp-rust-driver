@@ -285,6 +285,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ColumnType::Blob => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
         ColumnType::Counter => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_COUNTER),
         ColumnType::Decimal => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DECIMAL),
+        ColumnType::Duration => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DURATION),
         ColumnType::Date => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DATE),
         ColumnType::Double => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DOUBLE),
         ColumnType::Float => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_FLOAT),
@@ -326,7 +327,6 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ),
         ColumnType::Uuid => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UUID),
         ColumnType::Varint => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
-        _ => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
     }
 }
 

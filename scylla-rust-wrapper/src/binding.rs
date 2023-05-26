@@ -139,8 +139,6 @@ macro_rules! make_appender {
 
 // TODO: Types for which binding is not implemented yet:
 // custom - Not implemented in Rust driver?
-// decimal
-// duration - DURATION not implemented in Rust Driver
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -273,6 +271,32 @@ macro_rules! invoke_binder_maker_macro_with_type {
                 }
             },
             [v @ crate::inet::CassInet]
+        );
+    };
+    (decimal, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |v, v_size, scale| {
+                // The value is copied, the memory pointed to by this parameter can be freed after this call.
+                let val = std::slice::from_raw_parts(v as *const u8, v_size as usize).to_vec();
+                let int_value = num_bigint::BigInt::from_signed_bytes_be(val.as_slice());
+                Ok(Some(Decimal(bigdecimal::BigDecimal::from((int_value, scale as i64)))))
+            },
+            [v @ *const cass_byte_t, v_size @ size_t, scale @ cass_int32_t]
+        );
+    };
+    (duration, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |m, d, n| {
+                use scylla::frame::value::CqlDuration;
+                Ok(Some(Duration(CqlDuration {months: m, days: d, nanoseconds: n,})))
+            },
+            [m @ cass_int32_t, d @ cass_int32_t, n @ cass_int64_t]
         );
     };
     (collection, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {

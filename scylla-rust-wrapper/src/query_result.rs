@@ -11,7 +11,7 @@ use num_traits::Zero;
 use scylla::frame::frame_errors::ParseError;
 use scylla::frame::response::result::{ColumnSpec, ColumnType};
 use scylla::frame::types;
-use scylla::frame::value::Date;
+use scylla::frame::value::{CqlDuration, Date};
 use scylla::types::deserialize::row::ColumnIterator;
 use scylla::types::deserialize::value::{
     DeserializeCql, MapIterator, SequenceIterator, UdtIterator,
@@ -1231,7 +1231,40 @@ cass_value_get_numeric_type!(
 );
 
 // other numeric types
-// TODO: add decimal
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_get_decimal(
+    value: *const CassValue,
+    varint: *mut *const cass_byte_t,
+    varint_size: *mut size_t,
+    scale: *mut cass_int32_t,
+) -> CassError {
+    if !cass_value_is_null(value).is_zero() {
+        return CassError::CASS_ERROR_LIB_NULL_VALUE;
+    }
+
+    match cass_value_type(value) {
+        CassValueType::CASS_VALUE_TYPE_DECIMAL => {}
+        _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+    }
+
+    let cass_value: &CassValue = ptr_to_ref(value);
+    if let Some(frame) = cass_value.frame_slice {
+        let mut val = frame.as_slice();
+        let scale_res = types::read_int(&mut val);
+
+        if let Ok(s) = scale_res {
+            let decimal_len = val.len();
+
+            *scale = s;
+            *varint_size = decimal_len as size_t;
+            *varint = val.as_ptr();
+
+            return CassError::CASS_OK;
+        }
+    }
+
+    CassError::CASS_ERROR_LIB_NOT_ENOUGH_DATA
+}
 
 // string
 cass_value_get_strict_type!(
@@ -1267,7 +1300,26 @@ cass_value_get_strict_type!(
 );
 
 // date and time types
-// TODO: add duration
+cass_value_get_strict_type!(
+    cass_value_get_duration,
+    CqlDuration,
+    cass_int32_t,
+    CassValueType::CASS_VALUE_TYPE_DURATION,
+    ColumnType::Duration,
+    |_value: *const CassValue,
+     months: *mut cass_int32_t,
+     days: *mut cass_int32_t,
+     nanos: *mut cass_int64_t,
+     val: CqlDuration| {
+        std::ptr::write(months, val.months);
+        std::ptr::write(days, val.days);
+        std::ptr::write(nanos, val.nanoseconds);
+        CassError::CASS_OK
+    },
+    days: *mut cass_int32_t, // additional arguments
+    nanos: *mut cass_int64_t
+);
+
 cass_value_get_strict_type!(
     cass_value_get_uint32,
     Date,
