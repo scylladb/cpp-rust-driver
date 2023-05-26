@@ -52,9 +52,6 @@ jobs:
 :LoggingTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
-:*5.Integration_Cassandra_*\
-:*19.Integration_Cassandra_*\
-:*7.Integration_Cassandra_*\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :ExecutionProfileTest.InvalidName"
         run: valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite ./cassandra-integration-tests --version=4.0.7 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
