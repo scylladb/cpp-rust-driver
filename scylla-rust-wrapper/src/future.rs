@@ -275,6 +275,7 @@ mod tests {
     // In the incorrect implementation that inspired this test to be written, this test
     // results with unwrap on a PoisonError on the CassFuture's mutex.
     #[test]
+    #[ntest::timeout(100)]
     fn cass_future_thread_safety() {
         const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
         let fut = async {

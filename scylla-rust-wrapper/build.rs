@@ -9,7 +9,10 @@ fn prepare_full_bindings(out_path: &Path) {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(false)
         .generate_comments(false)
-        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
+        .default_enum_style(bindgen::EnumVariation::NewType {
+            is_bitfield: false,
+            is_global: false,
+        })
         .generate()
         .expect("Unable to generate bindings");
 
@@ -39,7 +42,10 @@ fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
-        .default_enum_style(bindgen::EnumVariation::NewType { is_bitfield: false })
+        .default_enum_style(bindgen::EnumVariation::NewType {
+            is_bitfield: false,
+            is_global: false,
+        })
         .derive_eq(true)
         .derive_ord(true);
     for t in allowed_types {

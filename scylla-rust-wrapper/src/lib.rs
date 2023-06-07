@@ -16,6 +16,7 @@ pub mod cass_error;
 pub mod cass_types;
 pub mod cluster;
 pub mod collection;
+pub mod exec_profile;
 mod external;
 pub mod future;
 pub mod inet;
@@ -28,6 +29,7 @@ pub mod retry_policy;
 pub mod session;
 pub mod ssl;
 pub mod statement;
+#[cfg(test)]
 pub mod testing;
 pub mod tuple;
 pub mod types;

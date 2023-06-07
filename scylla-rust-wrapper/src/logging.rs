@@ -16,7 +16,7 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 
 mod cass_log {
-    #![allow(non_camel_case_types)]
+    #![allow(non_camel_case_types, non_snake_case)]
     include!(concat!(env!("OUT_DIR"), "/cppdriver_log.rs"));
 }
 use cass_log::*;

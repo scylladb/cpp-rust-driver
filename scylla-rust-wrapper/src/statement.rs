@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::exec_profile::PerStatementExecProfile;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
@@ -36,6 +37,8 @@ pub struct CassStatement {
     pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
     pub paging_state: Option<Bytes>,
     pub request_timeout_ms: Option<cass_uint64_t>,
+
+    pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
 impl CassStatement {
@@ -146,7 +149,6 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     // Set Cpp Driver default configuration for queries:
     query.disable_paging();
-    query.set_consistency(Consistency::One);
 
     let simple_query = SimpleQuery {
         query,
@@ -158,6 +160,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: None,
         request_timeout_ms: None,
+        exec_profile: None,
     }))
 }
 
@@ -252,17 +255,20 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: *mut CassStatement,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let retry_policy_from_raw: &dyn scylla::retry_policy::RetryPolicy =
-        match ptr_to_ref(retry_policy) {
-            CassRetryPolicy::DefaultRetryPolicy(default) => default,
-            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough,
-            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading,
-        };
-    let boxed_retry_policy = retry_policy_from_raw.clone_boxed();
+    let maybe_arced_retry_policy: Option<Arc<dyn scylla::retry_policy::RetryPolicy>> =
+        retry_policy.as_ref().map(|policy| match policy {
+            CassRetryPolicy::DefaultRetryPolicy(default) => {
+                default.clone() as Arc<dyn scylla::retry_policy::RetryPolicy>
+            }
+            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
+            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+        });
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.query.set_retry_policy(boxed_retry_policy),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_retry_policy(boxed_retry_policy),
+        Statement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
+        Statement::Prepared(inner) => {
+            Arc::make_mut(inner).set_retry_policy(maybe_arced_retry_policy)
+        }
     }
 
     CassError::CASS_OK

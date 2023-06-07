@@ -30,5 +30,6 @@ pub unsafe extern "C" fn cass_prepared_bind(
         bound_values: vec![Unset; bound_values_size],
         paging_state: None,
         request_timeout_ms: None,
+        exec_profile: None,
     }))
 }

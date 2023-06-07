@@ -53,11 +53,6 @@ cass_authenticator_set_error(CassAuthenticator* auth,
 	throw std::runtime_error("UNIMPLEMENTED cass_authenticator_set_error\n");
 }
 CASS_EXPORT CassError
-cass_batch_set_execution_profile(CassBatch* batch,
-                                 const char* name){
-	throw std::runtime_error("UNIMPLEMENTED cass_batch_set_execution_profile\n");
-}
-CASS_EXPORT CassError
 cass_batch_set_keyspace(CassBatch* batch,
                         const char* keyspace){
 	throw std::runtime_error("UNIMPLEMENTED cass_batch_set_keyspace\n");
@@ -105,30 +100,10 @@ cass_cluster_set_core_connections_per_host(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_core_connections_per_host\n");
 }
 CASS_EXPORT CassError
-cass_cluster_set_execution_profile(CassCluster* cluster,
-                                   const char* name,
-                                   CassExecProfile* profile){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_execution_profile\n");
-}
-CASS_EXPORT CassError
 cass_cluster_set_host_listener_callback(CassCluster* cluster,
                                         CassHostListenerCallback callback,
                                         void* data){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_host_listener_callback\n");
-}
-CASS_EXPORT void
-cass_cluster_set_latency_aware_routing(CassCluster* cluster,
-                                       cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_latency_aware_routing\n");
-}
-CASS_EXPORT void
-cass_cluster_set_latency_aware_routing_settings(CassCluster* cluster,
-                                                cass_double_t exclusion_threshold,
-                                                cass_uint64_t scale_ms,
-                                                cass_uint64_t retry_period_ms,
-                                                cass_uint64_t update_rate_ms,
-                                                cass_uint64_t min_measured){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_latency_aware_routing_settings\n");
 }
 CASS_EXPORT CassError
 cass_cluster_set_local_address(CassCluster* cluster,
@@ -217,14 +192,6 @@ cass_custom_payload_set(CassCustomPayload* payload,
                         size_t value_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_set\n");
 }
-CASS_EXPORT void
-cass_execution_profile_free(CassExecProfile* profile){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_free\n");
-}
-CASS_EXPORT CassExecProfile*
-cass_execution_profile_new(){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_new\n");
-}
 CASS_EXPORT CassError
 cass_execution_profile_set_blacklist_dc_filtering(CassExecProfile* profile,
                                                   const char* dcs){
@@ -234,53 +201,6 @@ CASS_EXPORT CassError
 cass_execution_profile_set_blacklist_filtering(CassExecProfile* profile,
                                                const char* hosts){
 	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_blacklist_filtering\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_consistency(CassExecProfile* profile,
-                                       CassConsistency consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_consistency\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_constant_speculative_execution_policy(CassExecProfile* profile,
-                                                                 cass_int64_t constant_delay_ms,
-                                                                 int max_speculative_executions){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_constant_speculative_execution_policy\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_latency_aware_routing(CassExecProfile* profile,
-                                                 cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_latency_aware_routing\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_load_balance_dc_aware(CassExecProfile* profile,
-                                                 const char* local_dc,
-                                                 unsigned used_hosts_per_remote_dc,
-                                                 cass_bool_t allow_remote_dcs_for_local_cl){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_load_balance_dc_aware\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_load_balance_round_robin(CassExecProfile* profile){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_load_balance_round_robin\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_request_timeout(CassExecProfile* profile,
-                                           cass_uint64_t timeout_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_request_timeout\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_retry_policy(CassExecProfile* profile,
-                                        CassRetryPolicy* retry_policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_retry_policy\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_serial_consistency(CassExecProfile* profile,
-                                              CassConsistency serial_consistency){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_serial_consistency\n");
-}
-CASS_EXPORT CassError
-cass_execution_profile_set_token_aware_routing(CassExecProfile* profile,
-                                               cass_bool_t enabled){
-	throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_token_aware_routing\n");
 }
 CASS_EXPORT CassError
 cass_execution_profile_set_whitelist_dc_filtering(CassExecProfile* profile,
@@ -472,11 +392,6 @@ CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,
                                   const CassCustomPayload* payload){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_custom_payload\n");
-}
-CASS_EXPORT CassError
-cass_statement_set_execution_profile(CassStatement* statement,
-                                     const char* name){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_execution_profile\n");
 }
 CASS_EXPORT CassError
 cass_statement_set_host(CassStatement* statement,

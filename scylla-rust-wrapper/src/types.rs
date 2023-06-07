@@ -16,6 +16,7 @@ pub type cass_int64_t = i64;
 pub type cass_uint64_t = u64;
 pub type cass_byte_t = cass_uint8_t;
 pub type cass_duration_t = cass_uint64_t;
+pub type size_t = cass_uint64_t;
 
 // Implementation directly ported from Cpp Driver implementation:
 

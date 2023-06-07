@@ -2,7 +2,7 @@ use crate::argconv::*;
 use crate::cass_types::get_column_type_from_cql_type;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::transport::topology::{ColumnKind, CqlType, Table};
+use scylla::transport::topology::{ColumnKind, Table, UserDefinedType};
 use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -47,7 +47,7 @@ pub unsafe fn create_table_metadata(
     keyspace_name: &str,
     table_name: &str,
     table_metadata: &Table,
-    user_defined_types: &HashMap<String, Vec<(String, CqlType)>>,
+    user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
 ) -> CassTableMeta {
     let mut columns_metadata = HashMap::new();
     table_metadata

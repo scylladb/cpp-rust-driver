@@ -63,27 +63,28 @@ public:
    */
   static ExecutionProfile build() { return ExecutionProfile(); }
 
-  /**
-   * Append/Assign/Set the blacklist hosts for statement/batch execution
-   *
-   * @param hosts A comma delimited list of hosts addresses
-   * @return Execution profile object
-   */
-  ExecutionProfile& with_blacklist_filtering(const std::string& hosts) {
-    EXPECT_EQ(CASS_OK, cass_execution_profile_set_blacklist_filtering(get(), hosts.c_str()));
-    return *this;
-  }
+  // Host filtering is not supported in cpp-rust-driver
+  // /**
+  //  * Append/Assign/Set the blacklist hosts for statement/batch execution
+  //  *
+  //  * @param hosts A comma delimited list of hosts addresses
+  //  * @return Execution profile object
+  //  */
+  // ExecutionProfile& with_blacklist_filtering(const std::string& hosts) {
+  //   EXPECT_EQ(CASS_OK, cass_execution_profile_set_blacklist_filtering(get(), hosts.c_str()));
+  //   return *this;
+  // }
 
-  /**
-   * Append/Assign/Set the blacklist data centers for statement/batch execution
-   *
-   * @param dcs A comma delimited list of data center names
-   * @return Execution profile object
-   */
-  ExecutionProfile& with_blacklist_dc_filtering(const std::string& dcs) {
-    EXPECT_EQ(CASS_OK, cass_execution_profile_set_blacklist_dc_filtering(get(), dcs.c_str()));
-    return *this;
-  }
+  // /**
+  //  * Append/Assign/Set the blacklist data centers for statement/batch execution
+  //  *
+  //  * @param dcs A comma delimited list of data center names
+  //  * @return Execution profile object
+  //  */
+  // ExecutionProfile& with_blacklist_dc_filtering(const std::string& dcs) {
+  //   EXPECT_EQ(CASS_OK, cass_execution_profile_set_blacklist_dc_filtering(get(), dcs.c_str()));
+  //   return *this;
+  // }
 
   /**
    * Assign/Set the profile consistency level for statement/batch execution
@@ -257,27 +258,28 @@ public:
     return *this;
   }
 
-  /**
-   * Append/Assign/Set the whitelist hosts for statement/batch execution
-   *
-   * @param hosts A comma delimited list of hosts addresses
-   * @return Execution profile object
-   */
-  ExecutionProfile& with_whitelist_filtering(const std::string& hosts) {
-    EXPECT_EQ(CASS_OK, cass_execution_profile_set_whitelist_filtering(get(), hosts.c_str()));
-    return *this;
-  }
+  // Host filtering is not supported in cpp-rust-driver
+  // /**
+  //  * Append/Assign/Set the whitelist hosts for statement/batch execution
+  //  *
+  //  * @param hosts A comma delimited list of hosts addresses
+  //  * @return Execution profile object
+  //  */
+  // ExecutionProfile& with_whitelist_filtering(const std::string& hosts) {
+  //   EXPECT_EQ(CASS_OK, cass_execution_profile_set_whitelist_filtering(get(), hosts.c_str()));
+  //   return *this;
+  // }
 
-  /**
-   * Append/Assign/Set the whitelist data centers for statement/batch execution
-   *
-   * @param dcs A comma delimited list of data center names
-   * @return Execution profile object
-   */
-  ExecutionProfile& with_whitelist_dc_filtering(const std::string& dcs) {
-    EXPECT_EQ(CASS_OK, cass_execution_profile_set_whitelist_dc_filtering(get(), dcs.c_str()));
-    return *this;
-  }
+  // /**
+  //  * Append/Assign/Set the whitelist data centers for statement/batch execution
+  //  *
+  //  * @param dcs A comma delimited list of data center names
+  //  * @return Execution profile object
+  //  */
+  // ExecutionProfile& with_whitelist_dc_filtering(const std::string& dcs) {
+  //   EXPECT_EQ(CASS_OK, cass_execution_profile_set_whitelist_dc_filtering(get(), dcs.c_str()));
+  //   return *this;
+  // }
 };
 
 }} // namespace test::driver

@@ -14,6 +14,7 @@ impl From<&QueryError> for CassError {
             QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
             QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
+            QueryError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
         }
     }
 }
@@ -79,6 +80,7 @@ impl From<&NewSessionError> for CassError {
             NewSessionError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
+            NewSessionError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
         }
     }
 }
