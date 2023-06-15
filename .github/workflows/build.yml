@@ -54,3 +54,10 @@ jobs:
 :*19.Integration_Cassandra_*\
 :ExecutionProfileTest.InvalidName"
       run: valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite ./cassandra-integration-tests --scylla --version=release:5.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
+
+    - name: Upload test logs
+      uses: actions/upload-artifact@v3
+      if: success() || failure()
+      with:
+        name: test-logs-scylla
+        path: ./log/*

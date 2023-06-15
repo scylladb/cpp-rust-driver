@@ -1,12 +1,10 @@
 #![allow(clippy::missing_safety_doc)]
 
-use crate::logging::set_tracing_subscriber_with_level;
 use crate::logging::stderr_log_callback;
 use crate::logging::Logger;
 use lazy_static::lazy_static;
 use std::sync::RwLock;
 use tokio::runtime::Runtime;
-use tracing::dispatcher::DefaultGuard;
 
 #[macro_use]
 mod binding;
@@ -42,9 +40,6 @@ lazy_static! {
         cb: Some(stderr_log_callback),
         data: std::ptr::null_mut(),
     });
-    pub static ref LOG: RwLock<Option<DefaultGuard>> = RwLock::new(Some(
-        set_tracing_subscriber_with_level(tracing::Level::WARN)
-    ));
 }
 
 // To send a Rust object to C:

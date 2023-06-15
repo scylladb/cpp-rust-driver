@@ -1,6 +1,5 @@
 use crate::argconv::{arr_to_cstr, ptr_to_cstr, ptr_to_ref, str_to_arr};
 use crate::types::size_t;
-use crate::LOG;
 use crate::LOGGER;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -8,7 +7,6 @@ use std::fmt::Write;
 use std::os::raw::{c_char, c_void};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::debug;
-use tracing::dispatcher::DefaultGuard;
 use tracing::field::Field;
 use tracing::Level;
 use tracing_subscriber::layer::Context;
@@ -143,10 +141,10 @@ where
     }
 }
 
-// Sets tracing subscriber with specified `level` and returns `DefaultGuard`.
-// The subscriber is valid for the duration of the lifetime of the returned `DefaultGuard`.
-pub fn set_tracing_subscriber_with_level(level: Level) -> DefaultGuard {
-    tracing::subscriber::set_default(
+// Sets tracing subscriber with specified `level`.
+// The subscriber is valid for the duration of the entire program.
+pub fn set_tracing_subscriber_with_level(level: Level) {
+    tracing::subscriber::set_global_default(
         tracing_subscriber::registry()
             .with(
                 tracing_subscriber::EnvFilter::from_default_env()
@@ -154,30 +152,20 @@ pub fn set_tracing_subscriber_with_level(level: Level) -> DefaultGuard {
             )
             .with(CustomLayer),
     )
-}
-
-pub fn init_logging() {
-    let _log = (*LOG.read().unwrap()).as_ref().unwrap();
+    .unwrap_or(()) // Ignore if it is set already
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_log_set_level(log_level: CassLogLevel) {
     if log_level == CassLogLevel::CASS_LOG_DISABLED {
         debug!("Logging is disabled!");
-        *LOG.write().unwrap() = None;
         return;
     }
 
     let level = Level::try_from(log_level).unwrap_or(Level::WARN);
 
-    // Drops the `DefaultGuard` of the current tracing subscriber making it invalid.
-    // Setting LOG to None is vital, otherwise, the new tracing subscriber created in
-    // `set_tracing_subscriber_with_level` will be ignored as the previous `DefaultGuard` is
-    // still alive.
-    *LOG.write().unwrap() = None;
     // Sets the tracing subscriber with new log level.
-    *LOG.write().unwrap() = Some(set_tracing_subscriber_with_level(level));
-
+    set_tracing_subscriber_with_level(level);
     debug!("Log level is set to {}", level);
 }
 
