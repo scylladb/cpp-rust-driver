@@ -5,14 +5,12 @@ use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
-use crate::statement::CassStatement;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
-use scylla::{BufMut, Bytes, BytesMut};
+use scylla::Bytes;
 use std::convert::TryInto;
 use std::os::raw::c_char;
-use std::slice;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -1244,31 +1242,6 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
             *paging_state = std::ptr::null();
         }
     }
-
-    CassError::CASS_OK
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_statement_set_paging_state_token(
-    statement: *mut CassStatement,
-    paging_state: *const c_char,
-    paging_state_size: size_t,
-) -> CassError {
-    let statement_from_raw = ptr_to_ref_mut(statement);
-
-    if paging_state.is_null() {
-        statement_from_raw.paging_state = None;
-        return CassError::CASS_ERROR_LIB_NULL_VALUE;
-    }
-
-    let paging_state_usize: usize = paging_state_size.try_into().unwrap();
-    let mut b = BytesMut::with_capacity(paging_state_usize + 1);
-    b.put_slice(slice::from_raw_parts(
-        paging_state as *const u8,
-        paging_state_usize,
-    ));
-    b.extend_from_slice(b"\0");
-    statement_from_raw.paging_state = Some(b.freeze());
 
     CassError::CASS_OK
 }
