@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 pub struct CassResult {
     pub result: Arc<QueryResult>,
-    pub first_row: Option<CassRow>,
+    pub first_row: CassRow,
 }
 
 /// The lifetime of CassRow is bound to CassResult.
@@ -70,7 +70,7 @@ pub struct CassValue {
 
 pub struct CassResultIterator {
     result: Arc<CassResult>,
-    row: Option<CassRow>,
+    row: CassRow,
     position: Option<usize>,
 }
 
@@ -154,27 +154,25 @@ pub enum CassIterator {
     CassViewMetaIterator(CassViewMetaIterator),
 }
 
-fn decode_next_row(result: &'static CassResult, row: &mut Option<CassRow>) -> bool {
-    if let Some(row) = row {
-        // Errors are ignored, but logging them may come in handy in the future.
-        let mut rows_iter = unwrap_or_return_false!(result.result.rows::<ColumnIterator>());
-        let next_cols_iter = unwrap_or_return_false!(rows_iter.next().unwrap());
+fn decode_next_row(result: &'static CassResult, row: &mut CassRow) -> bool {
+    // Errors are ignored, but logging them may come in handy in the future.
+    let mut rows_iter = unwrap_or_return_false!(result.result.rows::<ColumnIterator>());
+    let next_cols_iter = unwrap_or_return_false!(rows_iter.next().unwrap());
 
-        for (i, raw_col) in next_cols_iter.into_iter().enumerate() {
-            let raw_col = unwrap_or_return_false!(raw_col);
-            let raw_value = RawValue {
-                spec: &raw_col.spec.typ,
-                slice: raw_col.slice,
-            };
-            let cass_value = decode_value(raw_value, &raw_col.spec.typ);
-            match cass_value {
-                Some(value) => {
-                    // Below assignment is safe from out of bounds panic, as
-                    // first [decode_first_row] call already initialized the columns vec
-                    row.columns[i] = value;
-                }
-                _ => return false,
+    for (i, raw_col) in next_cols_iter.into_iter().enumerate() {
+        let raw_col = unwrap_or_return_false!(raw_col);
+        let raw_value = RawValue {
+            spec: &raw_col.spec.typ,
+            slice: raw_col.slice,
+        };
+        let cass_value = decode_value(raw_value, &raw_col.spec.typ);
+        match cass_value {
+            Some(value) => {
+                // Below assignment is safe from out of bounds panic, as
+                // first [decode_first_row] call already initialized the columns vec
+                row.columns[i] = value;
             }
+            _ => return false,
         }
     }
 
@@ -422,12 +420,10 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
             None => return std::ptr::null(),
         };
 
-        if let Some(rows_count) = result_iterator.result.result.rows_num() {
-            return match &result_iterator.row {
-                Some(row) if iter_position < rows_count => row,
-                _ => std::ptr::null(),
-            };
-        }
+        return match result_iterator.result.result.rows_num() {
+            Some(rows_count) if iter_position < rows_count => &result_iterator.row,
+            _ => std::ptr::null(),
+        };
     }
 
     std::ptr::null()
@@ -757,10 +753,10 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
     let result_from_raw = clone_arced(result);
-    let row = result_from_raw.first_row.as_ref().map(|row| CassRow {
+    let row = CassRow {
         result: Arc::downgrade(&result_from_raw),
-        columns: row.columns.clone(), // C++ driver also clones columns of the first row into the iterator.
-    });
+        columns: result_from_raw.first_row.columns.clone(), // C++ driver also clones columns of the first row into the iterator.
+    };
 
     let iterator = CassResultIterator {
         result: result_from_raw,
@@ -1422,11 +1418,7 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult)
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    if let Some(first_row) = &result.first_row {
-        return first_row as *const CassRow;
-    }
-
-    std::ptr::null()
+    &result.first_row
 }
 
 #[no_mangle]

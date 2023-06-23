@@ -301,21 +301,15 @@ pub unsafe extern "C" fn cass_session_execute(
 
 unsafe fn create_cass_result(result: QueryResult) -> Arc<CassResult> {
     let cass_result = Arc::new_cyclic(|weak_res| {
-        let mut cass_result = CassResult {
-            result: Arc::new(result),
-            first_row: None,
-        };
-        let cols_num = cass_result
-            .result
-            .column_specs()
-            .map_or(0, |col_specs| col_specs.len());
+        let cols_num = result.column_specs().map_or(0, |col_specs| col_specs.len());
         let first_row = CassRow {
             result: weak_res.clone(),
             columns: Vec::with_capacity(cols_num),
         };
-        cass_result.first_row = Some(first_row);
-
-        cass_result
+        CassResult {
+            result: Arc::new(result),
+            first_row,
+        }
     });
     decode_first_row(Arc::as_ptr(&cass_result) as *mut CassResult);
 
@@ -327,10 +321,6 @@ unsafe fn decode_first_row(result: *mut CassResult) -> bool {
     // Errors are ignored, but logging them may come handy in the future.
     let rows_iter = unwrap_or_return_false!(result.result.first_row::<ColumnIterator>());
 
-    if result.first_row.is_none() {
-        return false;
-    }
-
     for raw_col in rows_iter.into_iter() {
         let raw_col = unwrap_or_return_false!(raw_col);
         let raw_value = RawValue {
@@ -339,7 +329,7 @@ unsafe fn decode_first_row(result: *mut CassResult) -> bool {
         };
         let cass_value = decode_value(raw_value, &raw_col.spec.typ);
         if let Some(value) = cass_value {
-            result.first_row.as_mut().unwrap().columns.push(value);
+            result.first_row.columns.push(value);
         } else {
             return false;
         }
