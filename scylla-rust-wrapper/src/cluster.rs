@@ -10,6 +10,7 @@ use crate::types::*;
 use core::time::Duration;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
+use scylla::cloud::CloudConfigError;
 use scylla::execution_profile::ExecutionProfileBuilder;
 use scylla::frame::Compression;
 use scylla::load_balancing::LatencyAwarenessBuilder;
@@ -17,11 +18,13 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::SessionBuilder;
+use scylla::transport::errors::NewSessionError;
+use scylla::{CloudSessionBuilder, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
+use std::path::Path;
 use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
@@ -65,6 +68,69 @@ pub(crate) struct DcAwareness {
     pub(crate) local_dc: String,
 }
 
+pub enum SessionConfigError {
+    Cloud(CloudConfigError),
+}
+
+#[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
+pub enum CassSessionBuilder {
+    DefaultSessionBuilder(SessionBuilder),
+    CloudSessionBuilder(CloudSessionBuilder),
+}
+
+impl CassSessionBuilder {
+    async fn execution_profile_handle(
+        self,
+        mut execution_profile_builder: ExecutionProfileBuilder,
+        load_balancing_config: LoadBalancingConfig,
+    ) -> Result<Self, SessionConfigError> {
+        let load_balancing = load_balancing_config.build().await;
+        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
+        let handle = execution_profile_builder.build().into_handle();
+        let session_builder = match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                CassSessionBuilder::DefaultSessionBuilder(
+                    session_builder.default_execution_profile_handle(handle),
+                )
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                CassSessionBuilder::CloudSessionBuilder(
+                    cloud_session_builder.default_execution_profile_handle(handle),
+                )
+            }
+        };
+
+        Ok(session_builder)
+    }
+
+    pub fn use_keyspace(self, keyspace_name: impl Into<String>, case_sensitive: bool) -> Self {
+        match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                CassSessionBuilder::DefaultSessionBuilder(
+                    session_builder.use_keyspace(keyspace_name, case_sensitive),
+                )
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                CassSessionBuilder::CloudSessionBuilder(
+                    cloud_session_builder.use_keyspace(keyspace_name, case_sensitive),
+                )
+            }
+        }
+    }
+
+    pub async fn build(self) -> Result<Session, NewSessionError> {
+        match self {
+            CassSessionBuilder::DefaultSessionBuilder(session_builder) => {
+                session_builder.build().await
+            }
+            CassSessionBuilder::CloudSessionBuilder(cloud_session_builder) => {
+                cloud_session_builder.build().await
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct CassCluster {
     session_builder: SessionBuilder,
@@ -79,6 +145,8 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+
+    pub(crate) connection_bundle_path: Option<String>,
 }
 
 impl CassCluster {
@@ -93,23 +161,35 @@ pub struct CassCustomPayload;
 // on the provided &CassCluster, hence the `static here.
 pub fn build_session_builder(
     cluster: &CassCluster,
-) -> impl Future<Output = SessionBuilder> + 'static {
-    let known_nodes = cluster
-        .contact_points
-        .iter()
-        .map(|cp| format!("{}:{}", cp, cluster.port));
-    let mut execution_profile_builder = cluster.default_execution_profile_builder.clone();
+) -> impl Future<Output = Result<CassSessionBuilder, SessionConfigError>> + 'static {
+    let session_builder: Result<CassSessionBuilder, SessionConfigError> =
+        if let Some(ref cloud_config_path) = cluster.connection_bundle_path {
+            let cloud_session_builder = CloudSessionBuilder::new(Path::new(cloud_config_path));
+            match cloud_session_builder {
+                Ok(builder) => Ok(CassSessionBuilder::CloudSessionBuilder(builder)),
+                Err(err) => Err(SessionConfigError::Cloud(err)),
+            }
+        } else {
+            let known_nodes = cluster
+                .contact_points
+                .iter()
+                .map(|cp| format!("{}:{}", cp, cluster.port));
+            let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
+            if let (Some(username), Some(password)) =
+                (&cluster.auth_username, &cluster.auth_password)
+            {
+                session_builder = session_builder.user(username, password)
+            }
+
+            Ok(CassSessionBuilder::DefaultSessionBuilder(session_builder))
+        };
+    let execution_profile_builder = cluster.default_execution_profile_builder.clone();
     let load_balancing_config = cluster.load_balancing_config.clone();
-    let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
-    if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
-        session_builder = session_builder.user(username, password)
-    }
 
     async move {
-        let load_balancing = load_balancing_config.clone().build().await;
-        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
-        session_builder
-            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        session_builder?
+            .execution_profile_handle(execution_profile_builder, load_balancing_config)
+            .await
     }
 }
 
@@ -131,6 +211,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         default_execution_profile_builder,
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
+        connection_bundle_path: None,
     }))
 }
 
@@ -334,22 +415,6 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
         used_hosts_per_remote_dc,
         allow_remote_dcs_for_local_cl,
     )
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
-    _cluster_raw: *mut CassCluster,
-    path: *const c_char,
-    path_length: size_t,
-) -> CassError {
-    // FIXME: Should unzip file associated with the path
-    let zip_file = ptr_to_cstr_n(path, path_length).unwrap();
-
-    if zip_file == "invalid_filename" {
-        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
-
-    CassError::CASS_OK
 }
 
 #[no_mangle]

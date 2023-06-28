@@ -2,8 +2,8 @@ use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
 use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
-use crate::cluster::build_session_builder;
-use crate::cluster::CassCluster;
+use crate::cluster::{build_session_builder, CassSessionBuilder};
+use crate::cluster::{CassCluster, SessionConfigError};
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
@@ -18,7 +18,7 @@ use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
-use scylla::{QueryResult, Session, SessionBuilder};
+use scylla::{QueryResult, Session};
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
@@ -71,7 +71,7 @@ impl CassSessionInner {
         // the returned future's lifetime constrained by real lifetime of the session's RwLock,
         // but this is impossible to be guaranteed due to C/Rust cross-language barrier.
         session_opt: &'static RwLock<Option<CassSessionInner>>,
-        cluster: &CassCluster,
+        cluster: &'static CassCluster,
         keyspace: Option<String>,
     ) -> *const CassFuture {
         let session_builder = build_session_builder(cluster);
@@ -87,7 +87,7 @@ impl CassSessionInner {
 
     async fn connect_fut(
         session_opt: &RwLock<Option<CassSessionInner>>,
-        session_builder_fut: impl Future<Output = SessionBuilder>,
+        session_builder_fut: impl Future<Output = Result<CassSessionBuilder, SessionConfigError>>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         keyspace: Option<String>,
     ) -> CassFutureResult {
@@ -105,7 +105,9 @@ impl CassSessionInner {
             exec_profile_map.insert(name, builder.build().await.into_handle());
         }
 
-        let mut session_builder = session_builder_fut.await;
+        let mut session_builder = session_builder_fut
+            .await
+            .map_err(|err| (CassError::from(&err), err.msg()))?;
         if let Some(keyspace) = keyspace {
             session_builder = session_builder.use_keyspace(keyspace, false);
         }

@@ -1,3 +1,5 @@
+use crate::cluster::SessionConfigError;
+use scylla::cloud::CloudConfigError;
 use scylla::transport::errors::*;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_errors.rs"));
@@ -85,6 +87,27 @@ impl From<&NewSessionError> for CassError {
     }
 }
 
+impl From<&SessionConfigError> for CassError {
+    fn from(value: &SessionConfigError) -> Self {
+        let SessionConfigError::Cloud(value) = value;
+
+        match value {
+            CloudConfigError::YamlOpen(_io_err) => CassError::CASS_ERROR_CLOUD_CONFIG_OPEN_ERROR,
+            CloudConfigError::YamlParse(_parse_err) => {
+                CassError::CASS_ERROR_CLOUD_CONFIG_PARSE_ERROR
+            }
+            CloudConfigError::Base64(_decode_err) => {
+                CassError::CASS_ERROR_CLOUD_CONFIG_DECODE_ERROR
+            }
+            CloudConfigError::Validation(_validation_err) => {
+                CassError::CASS_ERROR_CLOUD_CONFIG_VALIDATION_ERROR
+            }
+            CloudConfigError::Ssl(_ssl_err) => CassError::CASS_ERROR_CLOUD_CONFIG_BAD_SSL_PARAMS,
+            _ => CassError::CASS_ERROR_CLOUD_CONFIG_UNKNOWN_ERROR,
+        }
+    }
+}
+
 impl From<&BadKeyspaceName> for CassError {
     fn from(error: &BadKeyspaceName) -> Self {
         match error {
@@ -120,6 +143,14 @@ impl CassErrorMessage for BadQuery {
 impl CassErrorMessage for NewSessionError {
     fn msg(&self) -> String {
         self.to_string()
+    }
+}
+
+impl CassErrorMessage for SessionConfigError {
+    fn msg(&self) -> String {
+        match self {
+            SessionConfigError::Cloud(err) => err.to_string(),
+        }
     }
 }
 
