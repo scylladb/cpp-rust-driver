@@ -38,5 +38,9 @@ scylla-proxy = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev
 name = "scylla_cpp_driver"
 crate-type = ["cdylib", "staticlib"]
 
+[profile.dev]
+panic = "abort"
+
 [profile.release]
 lto = true
+panic = "abort"
