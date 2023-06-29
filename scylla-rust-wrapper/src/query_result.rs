@@ -1564,6 +1564,296 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
     CassError::CASS_OK
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::cass_error::CassError;
+    use crate::query_result::{
+        cass_iterator_get_value, cass_iterator_next, cass_value_get_bool, CassCollectionIterator,
+        CassIterator, CassIteratorStateInfo, CassMapIterator, CassSequenceIterator,
+        CassTupleIterator, CassUdtIterator,
+    };
+    use crate::testing::assert_cass_error_eq;
+    use crate::types::cass_bool_t;
+    use bytes::{BufMut, Bytes, BytesMut};
+    use scylla::frame::response::result::ColumnType;
+    use scylla::frame::value::Value;
+    use scylla::types::deserialize::value::{DeserializeCql, MapIterator};
+    use scylla::types::deserialize::value::{SequenceIterator, UdtIterator};
+    use scylla::types::deserialize::FrameSlice;
+    use std::collections::HashMap;
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_seq_iterator_empty_raw_value() {
+        unsafe {
+            let mut bytes_mut = BytesMut::new();
+            bytes_mut.put_i32(1); // Number of values
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType = &ColumnType::List(Box::new(ColumnType::Text));
+            let sequence_iterator =
+                SequenceIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame))
+                    .unwrap();
+            let mut collection_iterator = CassIterator::CassCollectionIterator(
+                CassCollectionIterator::SequenceIterator(CassSequenceIterator {
+                    sequence_iterator,
+                    count: 1,
+                    state_info: CassIteratorStateInfo::NoValue,
+                }),
+            );
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_seq_iterator_reached_the_end() {
+        unsafe {
+            let mut bytes_mut = Vec::new();
+            let text = vec!["test"];
+            text.serialize(&mut bytes_mut).unwrap();
+            bytes_mut.drain(0..4); // Drop number of bytes before deserialization
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType = &ColumnType::List(Box::new(ColumnType::Text));
+            let sequence_iterator =
+                SequenceIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame))
+                    .unwrap();
+            let mut collection_iterator = CassIterator::CassCollectionIterator(
+                CassCollectionIterator::SequenceIterator(CassSequenceIterator {
+                    sequence_iterator,
+                    count: 1,
+                    state_info: CassIteratorStateInfo::NoValue,
+                }),
+            );
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_ne!(has_next, 0);
+            // Reached the end
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_map_iterator_empty_raw_value() {
+        unsafe {
+            let mut bytes_mut = BytesMut::new();
+            bytes_mut.put_i32(1); // Number of values
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType =
+                &ColumnType::Map(Box::new(ColumnType::Text), Box::new(ColumnType::Text));
+            let map_iterator =
+                MapIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame)).unwrap();
+            let mut collection_iterator = CassIterator::CassCollectionIterator(
+                CassCollectionIterator::SeqMapIterator(CassMapIterator {
+                    map_iterator,
+                    count: 2,
+                    state_info: CassIteratorStateInfo::NoValue,
+                }),
+            );
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_eq!(has_next, 0);
+
+            let map_iterator =
+                MapIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame)).unwrap();
+            let mut map_iterator = CassIterator::CassMapIterator(CassMapIterator {
+                map_iterator,
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut map_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_map_iterator_reached_the_end() {
+        unsafe {
+            let mut bytes_mut = Vec::new();
+            let mut map = HashMap::new();
+            map.insert("key", true);
+            map.serialize(&mut bytes_mut).unwrap();
+            bytes_mut.drain(0..4); // Drop number of bytes before deserialization
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType =
+                &ColumnType::Map(Box::new(ColumnType::Text), Box::new(ColumnType::Boolean));
+            let map_iterator =
+                MapIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame)).unwrap();
+            let mut collection_iterator = CassIterator::CassCollectionIterator(
+                CassCollectionIterator::SeqMapIterator(CassMapIterator {
+                    map_iterator,
+                    count: 2,
+                    state_info: CassIteratorStateInfo::NoValue,
+                }),
+            );
+            let has_next = cass_iterator_next(&mut collection_iterator); // Position on key
+            assert_ne!(has_next, 0);
+            let has_next = cass_iterator_next(&mut collection_iterator); // Position on value
+            assert_ne!(has_next, 0);
+            // Reached the end
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_eq!(has_next, 0);
+
+            let map_iterator =
+                MapIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame)).unwrap();
+            let mut map_iterator = CassIterator::CassMapIterator(CassMapIterator {
+                map_iterator,
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut map_iterator);
+            assert_ne!(has_next, 0);
+            // Reached the end
+            let has_next = cass_iterator_next(&mut map_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_seq_map_iterator_deserialize_pair() {
+        // To test that sequential iterator deserializes in pairs,
+        // after the first `cass_iterator_next` call the value of the first pair
+        // will be retrieved.
+        unsafe {
+            let mut bytes_mut = Vec::new();
+            let mut map = HashMap::new();
+            map.insert("key", true);
+            map.serialize(&mut bytes_mut).unwrap();
+            bytes_mut.drain(0..4); // Drop number of bytes before deserialization
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType =
+                &ColumnType::Map(Box::new(ColumnType::Text), Box::new(ColumnType::Boolean));
+            let map_iterator =
+                MapIterator::deserialize(column_type.as_ref().unwrap(), Some(slice_frame)).unwrap();
+            let mut collection_iterator = CassIterator::CassCollectionIterator(
+                CassCollectionIterator::SeqMapIterator(CassMapIterator {
+                    map_iterator,
+                    count: 2,
+                    state_info: CassIteratorStateInfo::NoValue,
+                }),
+            );
+
+            let has_next = cass_iterator_next(&mut collection_iterator);
+            assert_ne!(has_next, 0);
+
+            // Hacking the iterator to not change the value but increment the position
+            if let CassIterator::CassCollectionIterator(CassCollectionIterator::SeqMapIterator(
+                CassMapIterator { state_info, .. },
+            )) = &mut collection_iterator
+            {
+                state_info.advance();
+            } else {
+                unreachable!()
+            }
+
+            // Reached the end
+            let value = cass_iterator_get_value(&collection_iterator);
+            let mut output = cass_bool_t::default();
+            assert_cass_error_eq!(cass_value_get_bool(value, &mut output), CassError::CASS_OK);
+            assert_ne!(output, 0); // Value should be true
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_tuple_iterator_empty_raw_value() {
+        unsafe {
+            let mut bytes_mut = BytesMut::new();
+            bytes_mut.put_i32(1); // Number of values
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType = &ColumnType::Tuple(vec![ColumnType::Text]);
+            let sequence_iterator =
+                SequenceIterator::new(column_type.as_ref().unwrap(), 1, slice_frame);
+            let mut tuple_iterator = CassIterator::CassTupleIterator(CassTupleIterator {
+                sequence_iterator,
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut tuple_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_tuple_iterator_reached_the_end() {
+        unsafe {
+            let mut bytes_mut = Vec::new();
+            let tuple = ("test",);
+            tuple.serialize(&mut bytes_mut).unwrap();
+            bytes_mut.drain(0..4); // Drop number of bytes before deserialization
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let column_type: *const ColumnType = &ColumnType::Tuple(vec![ColumnType::Text]);
+            let sequence_iterator =
+                SequenceIterator::new(column_type.as_ref().unwrap(), 1, slice_frame);
+            let mut tuple_iterator = CassIterator::CassTupleIterator(CassTupleIterator {
+                sequence_iterator,
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut tuple_iterator);
+            assert_ne!(has_next, 0);
+            // Reached the end
+            let has_next = cass_iterator_next(&mut tuple_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_udt_iterator_empty_raw_value() {
+        unsafe {
+            let mut bytes_mut = BytesMut::new();
+            bytes_mut.put_i32(1); // Number of values
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let fields: *const Vec<(String, ColumnType)> =
+                &vec![("string".to_owned(), ColumnType::Text)];
+            let mut udt_iterator = CassIterator::CassUdtIterator(CassUdtIterator {
+                udt_iterator: UdtIterator::new(fields.as_ref().unwrap(), slice_frame),
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut udt_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(100)]
+    fn test_collection_udt_iterator_reached_the_end() {
+        unsafe {
+            let mut bytes_mut = Vec::new();
+            let tuple = ("test",);
+            tuple.serialize(&mut bytes_mut).unwrap();
+            bytes_mut.drain(0..4); // Drop number of bytes before deserialization
+            let bytes: *const Bytes = &Bytes::from(bytes_mut);
+            let slice_frame = FrameSlice::new(bytes.as_ref().unwrap());
+            let fields: *const Vec<(String, ColumnType)> =
+                &vec![("string".to_owned(), ColumnType::Text)];
+            let mut udt_iterator = CassIterator::CassUdtIterator(CassUdtIterator {
+                udt_iterator: UdtIterator::new(fields.as_ref().unwrap(), slice_frame),
+                count: 1,
+                state_info: CassIteratorStateInfo::NoValue,
+            });
+            let has_next = cass_iterator_next(&mut udt_iterator);
+            assert_ne!(has_next, 0);
+            // Reached the end
+            let has_next = cass_iterator_next(&mut udt_iterator);
+            assert_eq!(has_next, 0);
+        }
+    }
+}
+
 // CassResult functions:
 /*
 extern "C" {

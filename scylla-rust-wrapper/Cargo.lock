@@ -103,9 +103,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-version = "1.2.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0b3de4a0c5e67e16066a0715723abd91edc2f9001d09c46e1dca929351e130e"
+checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
 
 [[package]]
 name = "cc"
@@ -971,8 +971,8 @@ dependencies = [
  "openssl",
  "rand",
  "rand_pcg",
- "scylla-cql",
- "scylla-macros",
+ "scylla-cql 0.0.6",
+ "scylla-macros 0.2.0 (git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06)",
  "smallvec",
  "snap",
  "strum",
@@ -991,6 +991,7 @@ dependencies = [
  "assert_matches",
  "bigdecimal",
  "bindgen",
+ "bytes",
  "chrono",
  "lazy_static",
  "libc",
@@ -1004,6 +1005,7 @@ dependencies = [
  "rand",
  "rusty-fork",
  "scylla",
+ "scylla-cql 0.0.7",
  "scylla-proxy",
  "tokio",
  "tracing",
@@ -1024,11 +1026,43 @@ dependencies = [
  "lz4_flex",
  "num-bigint",
  "num_enum",
- "scylla-macros",
+ "scylla-macros 0.2.0 (git+https://github.com/Gor027/scylla-rust-driver.git?rev=6585f06)",
  "snap",
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "scylla-cql"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7ed843e6c6a19c7a719f02f4d9d264beb00f2867d994442fd8b7d66f5af2781"
+dependencies = [
+ "async-trait",
+ "bigdecimal",
+ "byteorder",
+ "bytes",
+ "chrono",
+ "lz4_flex",
+ "num-bigint",
+ "num_enum",
+ "scylla-macros 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "snap",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "scylla-macros"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32d777dadbf7163d1524ea4f5a095146298d263a686febb96d022cf46d06df32"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.98",
 ]
 
 [[package]]
@@ -1055,7 +1089,7 @@ dependencies = [
  "num-bigint",
  "num_enum",
  "rand",
- "scylla-cql",
+ "scylla-cql 0.0.6",
  "thiserror",
  "tokio",
  "tracing",
