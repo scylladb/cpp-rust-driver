@@ -543,7 +543,7 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing(
 pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
     cluster: *mut CassCluster,
     exclusion_threshold: cass_double_t,
-    _scale_ms: cass_uint64_t, // Currently ignored, TODO: add this parameter to Rust driver
+    scale_ms: cass_uint64_t,
     retry_period_ms: cass_uint64_t,
     update_rate_ms: cass_uint64_t,
     min_measured: cass_uint64_t,
@@ -551,6 +551,7 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
     let cluster = ptr_to_ref_mut(cluster);
     cluster.load_balancing_config.latency_awareness_builder = LatencyAwarenessBuilder::new()
         .exclusion_threshold(exclusion_threshold)
+        .scale(Duration::from_millis(scale_ms))
         .retry_period(Duration::from_millis(retry_period_ms))
         .update_rate(Duration::from_millis(update_rate_ms))
         .minimum_measurements(min_measured as usize);
