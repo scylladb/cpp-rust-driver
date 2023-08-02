@@ -7,7 +7,6 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::types::*;
-use core::time::Duration;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::execution_profile::ExecutionProfileBuilder;
@@ -23,6 +22,7 @@ use std::convert::TryInto;
 use std::future::Future;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
+use std::time::Duration;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 

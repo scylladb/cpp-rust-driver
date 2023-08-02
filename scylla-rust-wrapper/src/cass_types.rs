@@ -1,8 +1,9 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
-use scylla::batch::{BatchType, Consistency, SerialConsistency};
+use scylla::batch::BatchType;
 use scylla::frame::response::result::ColumnType;
+use scylla::frame::types::{Consistency, SerialConsistency};
 use scylla::transport::topology::{CollectionType, CqlType, NativeType, UserDefinedType};
 use std::collections::HashMap;
 use std::convert::TryFrom;

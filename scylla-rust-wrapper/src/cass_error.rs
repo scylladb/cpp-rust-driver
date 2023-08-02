@@ -65,7 +65,7 @@ impl From<&BadQuery> for CassError {
 impl From<&NewSessionError> for CassError {
     fn from(error: &NewSessionError) -> Self {
         match error {
-            NewSessionError::FailedToResolveAddress(_string) => {
+            NewSessionError::FailedToResolveAnyHostname(_hostnames) => {
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             NewSessionError::EmptyKnownNodesList => CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
