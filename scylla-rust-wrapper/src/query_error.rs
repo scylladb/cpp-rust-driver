@@ -1,8 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::*;
 use crate::types::*;
-use scylla::batch::SerialConsistency;
-use scylla::frame::types::LegacyConsistency;
+use scylla::frame::types::{LegacyConsistency, SerialConsistency};
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
 
