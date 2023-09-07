@@ -240,7 +240,7 @@ ExternalProject_Add(
     scylla-rust-cpp-driver
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,,--release>
+    BUILD_COMMAND ./build-cmake-compat.sh $<IF:$<CONFIG:Debug>,DEBUG,RELEASE> $<IF:$<BOOL:${CASS_BUILD_STATIC}>,STATIC,NO_STATIC>
     BINARY_DIR "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper"
     INSTALL_COMMAND ""
     LOG_BUILD ON
@@ -250,11 +250,11 @@ add_library(scylla-cpp-driver SHARED IMPORTED)
 set_target_properties(scylla-cpp-driver PROPERTIES IMPORTED_NO_SONAME TRUE)
 set_property(TARGET scylla-cpp-driver APPEND PROPERTY IMPORTED_CONFIGURATIONS DEBUG)
 set_target_properties(scylla-cpp-driver PROPERTIES
-  IMPORTED_LOCATION_DEBUG "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/debug/libscylla_cpp_driver.so"
+  IMPORTED_LOCATION_DEBUG "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/debug/cmake-compat/libscylla-cpp-driver.so"
 )
 set_property(TARGET scylla-cpp-driver APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
 set_target_properties(scylla-cpp-driver PROPERTIES
-  IMPORTED_LOCATION_RELEASE "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/release/libscylla_cpp_driver.so"
+  IMPORTED_LOCATION_RELEASE "${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/release/cmake-compat/libscylla-cpp-driver.so"
 )
 set_target_properties(scylla-cpp-driver PROPERTIES
   MAP_IMPORTED_CONFIG_MINSIZEREL Release
@@ -272,3 +272,33 @@ endif()
 if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
+
+#-------------------------------------
+# Installation
+#-------------------------------------
+
+# Determine if the library directory needs to be determined
+if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
+  if ("${CMAKE_SYSTEM_NAME}" MATCHES "Linux" AND ("${CMAKE_INSTALL_PREFIX}" STREQUAL "/usr" OR
+    "${CMAKE_INSTALL_PREFIX}" STREQUAL "/usr/local"))
+    if(EXISTS "/etc/debian_version")
+      set (CMAKE_INSTALL_LIBDIR "lib/${CMAKE_LIBRARY_ARCHITECTURE}")
+    elseif(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release" OR
+        EXISTS "/etc/slackware-version" OR EXISTS "/etc/gentoo-release")
+      if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set (CMAKE_INSTALL_LIBDIR "lib64")
+      else()
+        set (CMAKE_INSTALL_LIBDIR "lib")
+      endif()
+    else()
+      set (CMAKE_INSTALL_LIBDIR "lib")
+    endif()
+  else()
+    set (CMAKE_INSTALL_LIBDIR "lib")
+  endif()
+endif()
+
+file(GLOB CASS_API_HEADER_FILES ${CASS_INCLUDE_DIR}/*.h)
+install(FILES ${CASS_API_HEADER_FILES} DESTINATION "include")
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/scylla-rust-wrapper/target/$<IF:$<CONFIG:Debug>,debug,release>/cmake-compat/ DESTINATION ${CMAKE_INSTALL_LIBDIR})
