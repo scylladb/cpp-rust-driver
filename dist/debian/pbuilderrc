@@ -1,0 +1,20 @@
+USENETWORK=yes
+BUILD_HOME=/tmp
+ARCHITECTURE="$ARCH"
+DISTRIBUTION="$DIST"
+BASETGZ="/var/cache/pbuilder/$DRIVER_NAME-$DIST-$ARCH-base.tgz"
+APTCACHE="/var/cache/pbuilder/$DRIVER_NAME-$DIST-$ARCH/aptcache/"
+EXTRAPACKAGES="sudo"
+
+if [ "$DIST" = "bionic" ] || [ "$DIST" = "focal" ] || [ "$DIST" = "jammy" ] || [ "$DIST" = "mantic" ] || [ "$DIST" = "noble" ]; then
+    MIRRORSITE="http://archive.ubuntu.com/ubuntu/"
+    COMPONENTS="main restricted universe multiverse"
+    DEBOOTSTRAPOPTS="--keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+elif [ "$DIST" = "buster" ] || [ "$DIST" = "bullseye" ] || [ "$DIST" = "bookworm" ] || [ "$DIST" = "trixie" ] || [ "$DIST" = "sid" ]; then
+    MIRRORSITE="http://deb.debian.org/debian/"
+    COMPONENTS="main contrib non-free"
+    DEBOOTSTRAPOPTS="--keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
+else
+    echo "Unknown distribution: $DIST"
+    exit 1
+fi

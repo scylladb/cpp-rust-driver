@@ -318,6 +318,37 @@ Now, use `--gtest_filter` to run certain integration tests:
 
 ##### Note: Tests that pass with ScyllaDB and Cassandra clusters can be found in GitHub Actions [`build.yml`](https://github.com/scylladb/cpp-rust-driver/blob/master/.github/workflows/build.yml) and [`cassandra.yml`](https://github.com/scylladb/cpp-rust-driver/blob/master/.github/workflows/cassandra.yml) workflows.
 
+# Build rpm package
+___
+
+To build rpm package, run the following command:
+```shell
+./dist/redhat/build_rpm.sh --target rocky-8-x86_64
+```
+It will construct chrooted build environment of target distribution using mock,
+and build rpm in the environment.
+Target parameter should be mock .cfg file name.
+Currently tested on rocky-8-x86_64, rocky-9-x86_64, fedora-38-x86_64, fedora-39-x86_64, fedora-40-x86_64, fedora-rawhide-x86_64.
+Build environment should be Fedora or RHEL variants + EPEL, since
+other distribution does not provide mock package.
+Built result will placed under build/redhat/{rpms,srpms}.
+
+# Build deb package
+___
+
+To build deb package, run the following command:
+```shell
+./dist/redhat/build_deb.sh --target mantic
+```
+It will construct chrooted build environment of target distribution using
+pbuilder, and build deb in the environment.
+Target parameter should be debian/ubuntu codename.
+On Ubuntu targets, currently tested on focal (20.04), jammy (22.04), mantic (23.10), noble (24.04).
+On Debian targets, currently tested on buster (10), bullseye (11), bookworm (12), trixie (13), sid (unstable).
+Build environment should be Fedora, Ubuntu or Debian, since these distribution
+provides pbuilder package.
+Built result will placed under build/debian/debs.
+
 # Getting Help
 ___
 

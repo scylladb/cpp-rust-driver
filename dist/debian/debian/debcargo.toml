@@ -1,0 +1,5 @@
+overlay = "."
+uploaders = ["Takuya ASADA <syuu@scylladb.com>"]
+
+[source]
+section = "libs"
