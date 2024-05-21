@@ -41,7 +41,7 @@ impl CassUserType {
                 if !is_compatible_type(field_type, &value) {
                     return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
                 }
-                self.field_values[index] = value.clone();
+                self.field_values[index].clone_from(&value);
             }
         }
 

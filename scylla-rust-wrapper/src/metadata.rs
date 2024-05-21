@@ -179,7 +179,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     let table_meta = keyspace_meta.tables.get(table_name);
 
     match table_meta {
-        Some(meta) => Arc::as_ptr(meta) as *const CassTableMeta,
+        Some(meta) => Arc::as_ptr(meta),
         None => std::ptr::null(),
     }
 }

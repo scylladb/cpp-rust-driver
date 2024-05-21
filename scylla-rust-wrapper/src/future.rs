@@ -147,6 +147,9 @@ impl CassFuture {
     }
 }
 
+// Do not remove; this asserts that `CassFuture` implements Send + Sync,
+// which is required by the cpp-driver (saying that `CassFuture` is thread-safe).
+#[allow(unused)]
 trait CheckSendSync: Send + Sync {}
 impl CheckSendSync for CassFuture {}
 

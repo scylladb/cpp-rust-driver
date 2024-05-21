@@ -473,7 +473,7 @@ pub unsafe extern "C" fn cass_iterator_get_table_meta(
             .nth(iter_position);
 
         return match table_meta_entry_opt {
-            Some(table_meta_entry) => Arc::as_ptr(table_meta_entry.1) as *const CassTableMeta,
+            Some(table_meta_entry) => Arc::as_ptr(table_meta_entry.1),
             None => std::ptr::null(),
         };
     }
@@ -570,9 +570,7 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
             let view_meta_entry_opt = keyspace_meta_iterator.value.views.iter().nth(iter_position);
 
             match view_meta_entry_opt {
-                Some(view_meta_entry) => {
-                    Arc::as_ptr(view_meta_entry.1) as *const CassMaterializedViewMeta
-                }
+                Some(view_meta_entry) => Arc::as_ptr(view_meta_entry.1),
                 None => std::ptr::null(),
             }
         }
