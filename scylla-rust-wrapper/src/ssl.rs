@@ -43,8 +43,15 @@ pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> *const CassSsl {
         trusted_store,
     };
 
-    Arc::into_raw(Arc::new(ssl)) as *const CassSsl
+    Arc::into_raw(Arc::new(ssl))
 }
+
+// This is required for the type system to impl Send + Sync for Arc<CassSsl>.
+// Otherwise, clippy complains about using Arc where Rc would do.
+// In our case, though, we need to use Arc because we potentially do share
+// the Arc between threads, so employing Rc here would lead to races.
+unsafe impl Send for CassSsl {}
+unsafe impl Sync for CassSsl {}
 
 impl Drop for CassSsl {
     fn drop(&mut self) {
