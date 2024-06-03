@@ -1,7 +1,5 @@
 #!/bin/bash -e
 
-. /etc/os-release
-
 print_usage() {
     echo "$0 --profile release"
     echo "  --profile   specify profile"
@@ -20,8 +18,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-TARGET="$PROFILE"
-case "$PROFILE" in
+TARGET="${PROFILE}"
+case "${PROFILE}" in
     "dev")
         TARGET="debug"
         ;;
