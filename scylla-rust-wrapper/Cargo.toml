@@ -44,3 +44,10 @@ panic = "abort"
 [profile.release]
 lto = true
 panic = "abort"
+
+[profile.packaging]
+inherits = "release"
+opt-level = 3
+codegen-units = 1
+debug = 2
+strip = "none"
