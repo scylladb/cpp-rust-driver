@@ -338,7 +338,7 @@ ___
 
 To build deb package, run the following command:
 ```shell
-./dist/redhat/build_deb.sh --target mantic
+./dist/debian/build_deb.sh --target mantic
 ```
 It will construct chrooted build environment of target distribution using
 pbuilder, and build deb in the environment.
