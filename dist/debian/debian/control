@@ -6,12 +6,12 @@ Priority: optional
 Standards-Version: 4.6.0
 Build-Depends: debhelper-compat (= 11),
                libssl-dev,
-               libclang-dev,
                pkg-config,
                openssl,
                ca-certificates,
                curl,
-               clang
+               clang,
+               cmake
 
 Package: libscylla-cpp-driver0
 Architecture: any

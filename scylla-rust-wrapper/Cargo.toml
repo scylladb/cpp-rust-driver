@@ -47,7 +47,7 @@ panic = "abort"
 lto = true
 panic = "abort"
 
-[profile.packaging]
+[profile.relwithdebinfo]
 inherits = "release"
 opt-level = 3
 codegen-units = 1

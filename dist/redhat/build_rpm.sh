@@ -2,7 +2,7 @@
 
 . /etc/os-release
 print_usage() {
-    echo "build_rpm.sh --jobs 2 --target rocky+epel-9-x86_64"
+    echo "build_rpm.sh --jobs 2 --target rocky-9-x86_64"
     echo "  --jobs  specify number of jobs"
     echo "  --target target distribution in mock cfg name"
     exit 1

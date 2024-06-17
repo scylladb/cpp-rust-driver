@@ -23,7 +23,7 @@ jobs:
     - name: Setup environment
       run: |
         sudo apt-get update
-        sudo apt-get install libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
+        sudo apt-get install libssl-dev libuv1-dev libkrb5-dev pkg-config openssl ca-certificates clang cmake cargo libc6-dbg
         sudo snap install valgrind --classic
         pip3 install https://github.com/scylladb/scylla-ccm/archive/master.zip
         sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"

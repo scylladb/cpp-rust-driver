@@ -343,11 +343,23 @@ To build deb package, run the following command:
 It will construct chrooted build environment of target distribution using
 pbuilder, and build deb in the environment.
 Target parameter should be debian/ubuntu codename.
-On Ubuntu targets, currently tested on focal (20.04), jammy (22.04), mantic (23.10), noble (24.04).
+On Ubuntu targets, currently tested on bionic (18.04), focal (20.04), jammy (22.04), mantic (23.10), noble (24.04).
 On Debian targets, currently tested on buster (10), bullseye (11), bookworm (12), trixie (13), sid (unstable).
 Build environment should be Fedora, Ubuntu or Debian, since these distribution
 provides pbuilder package.
 Built result will placed under build/debian/debs.
+
+# Build & install HomeBrew package (macOS)
+
+---
+
+To build HomeBrew pacakge, run the following command:
+```shell
+cd dist/homebrew
+brew install --HEAD ./scylla-cpp-rust-driver.rb
+```
+It will run build & install the driver in HomeBrew environment.
+Tested on macOS 14.5.
 
 # Getting Help
 ___
