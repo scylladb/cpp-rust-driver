@@ -10,7 +10,8 @@ Build-Depends: debhelper-compat (= 11),
                openssl,
                ca-certificates,
                curl,
-               clang
+               clang,
+               cmake
 
 Package: libscylla-cpp-driver0
 Architecture: any
