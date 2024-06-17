@@ -8,7 +8,7 @@ License:        LGPLv2.1
 URL:            https://github.com/scylladb/cpp-rust-driver
 Source0:        %{name}-%{driver_version}-%{driver_release}.tar
 BuildRequires:  openssl-devel
-BuildRequires:  clang-devel
+BuildRequires:  clang
 BuildRequires:  curl
 Conflicts:      scylla-cpp-driver
 
