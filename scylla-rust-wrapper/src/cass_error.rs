@@ -58,6 +58,8 @@ impl From<&BadQuery> for CassError {
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::SerializationError(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }

@@ -178,7 +178,10 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |v| Ok(Some(Date(v))),
+            |v| {
+                use scylla::frame::value::CqlDate;
+                Ok(Some(Date(CqlDate(v))))
+            },
             [v @ cass_uint32_t]
         );
     };

@@ -999,7 +999,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
 ) -> CassError {
     let val: &CassValue = ptr_to_ref(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u), // FIXME: hack
+        Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u.0), // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -1033,12 +1033,9 @@ pub unsafe extern "C" fn cass_value_get_int64(
         Some(Value::RegularValue(CqlValue::Counter(i))) => {
             std::ptr::write(output, i.0 as cass_int64_t)
         }
-        Some(Value::RegularValue(CqlValue::Time(d))) => match d.num_nanoseconds() {
-            Some(nanos) => std::ptr::write(output, nanos as cass_int64_t),
-            None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-        },
+        Some(Value::RegularValue(CqlValue::Time(d))) => std::ptr::write(output, d.0),
         Some(Value::RegularValue(CqlValue::Timestamp(d))) => {
-            std::ptr::write(output, d.num_milliseconds() as cass_int64_t)
+            std::ptr::write(output, d.0 as cass_int64_t)
         }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
@@ -1055,7 +1052,9 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     let val: &CassValue = ptr_to_ref(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Uuid(uuid))) => std::ptr::write(output, uuid.into()),
-        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => std::ptr::write(output, uuid.into()),
+        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => {
+            std::ptr::write(output, Into::<Uuid>::into(uuid).into())
+        }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };

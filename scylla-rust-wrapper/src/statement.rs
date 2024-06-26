@@ -5,8 +5,7 @@ use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use scylla::frame::response::result::CqlValue;
-use scylla::frame::types::LegacyConsistency::{Regular, Serial};
-use scylla::frame::types::{Consistency, LegacyConsistency};
+use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
@@ -83,8 +82,7 @@ impl CassStatement {
         match &self.statement {
             Statement::Prepared(prepared) => {
                 let indices: Vec<usize> = prepared
-                    .get_prepared_metadata()
-                    .col_specs
+                    .get_variable_col_specs()
                     .iter()
                     .enumerate()
                     .filter(|(_, col)| {
@@ -178,10 +176,10 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
 ) -> CassError {
     let consistency_opt = get_consistency_from_cass_consistency(consistency);
 
-    if let Some(Regular(regular_consistency)) = consistency_opt {
+    if let Some(consistency) = consistency_opt {
         match &mut ptr_to_ref_mut(statement).statement {
-            Statement::Simple(inner) => inner.query.set_consistency(regular_consistency),
-            Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(regular_consistency),
+            Statement::Simple(inner) => inner.query.set_consistency(consistency),
+            Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(consistency),
         }
     }
 
@@ -307,40 +305,43 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     statement: *mut CassStatement,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let consistency = get_consistency_from_cass_consistency(serial_consistency);
-
-    let serial_consistency = match consistency {
-        Some(Serial(s)) => Some(s),
-        _ => None,
+    // cpp-driver doesn't validate passed value in any way.
+    // If it is an incorrect serial-consistency value then it will be set
+    // and sent as-is.
+    // Before adapting the driver to Rust Driver 0.12 this code
+    // set serial consistency if a user passed correct value and set it to
+    // None otherwise.
+    // I think that failing explicitly is a better idea, so I decided to return
+    // and error
+    let consistency = match get_consistency_from_cass_consistency(serial_consistency) {
+        Some(Consistency::Serial) => SerialConsistency::Serial,
+        Some(Consistency::LocalSerial) => SerialConsistency::LocalSerial,
+        _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
     };
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),
+        Statement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
         Statement::Prepared(inner) => {
-            Arc::make_mut(inner).set_serial_consistency(serial_consistency)
+            Arc::make_mut(inner).set_serial_consistency(Some(consistency))
         }
     }
 
     CassError::CASS_OK
 }
 
-fn get_consistency_from_cass_consistency(
-    consistency: CassConsistency,
-) -> Option<LegacyConsistency> {
+fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option<Consistency> {
     match consistency {
-        CassConsistency::CASS_CONSISTENCY_ANY => Some(Regular(Consistency::Any)),
-        CassConsistency::CASS_CONSISTENCY_ONE => Some(Regular(Consistency::One)),
-        CassConsistency::CASS_CONSISTENCY_TWO => Some(Regular(Consistency::Two)),
-        CassConsistency::CASS_CONSISTENCY_THREE => Some(Regular(Consistency::Three)),
-        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Regular(Consistency::Quorum)),
-        CassConsistency::CASS_CONSISTENCY_ALL => Some(Regular(Consistency::All)),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Regular(Consistency::LocalQuorum)),
-        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Regular(Consistency::EachQuorum)),
-        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Serial(SerialConsistency::Serial)),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => {
-            Some(Serial(SerialConsistency::LocalSerial))
-        }
-        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Regular(Consistency::LocalOne)),
+        CassConsistency::CASS_CONSISTENCY_ANY => Some(Consistency::Any),
+        CassConsistency::CASS_CONSISTENCY_ONE => Some(Consistency::One),
+        CassConsistency::CASS_CONSISTENCY_TWO => Some(Consistency::Two),
+        CassConsistency::CASS_CONSISTENCY_THREE => Some(Consistency::Three),
+        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Consistency::Quorum),
+        CassConsistency::CASS_CONSISTENCY_ALL => Some(Consistency::All),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Consistency::LocalQuorum),
+        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Consistency::EachQuorum),
+        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Consistency::Serial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Some(Consistency::LocalSerial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Consistency::LocalOne),
         _ => None,
     }
 }

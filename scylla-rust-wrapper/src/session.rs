@@ -617,7 +617,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 #[cfg(test)]
 mod tests {
     use rusty_fork::rusty_fork_test;
-    use scylla::{frame::types::LegacyConsistency, transport::errors::DbError};
+    use scylla::transport::errors::DbError;
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,
@@ -1070,7 +1070,7 @@ mod tests {
                 // We don't use the example ReadTimeout error that is included in proxy,
                 // because in order to trigger a retry we need data_present=false.
                 RequestReaction::forge_with_error(DbError::ReadTimeout {
-                    consistency: LegacyConsistency::Regular(Consistency::All),
+                    consistency: Consistency::All,
                     received: 1,
                     required: 1,
                     data_present: false,
