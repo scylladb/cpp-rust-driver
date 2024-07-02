@@ -215,15 +215,8 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td colspan=2 align="center" style="font-weight:bold">Value</td>
         </tr>
         <tr>
-            <td>cass_value_is_duration</td>
-            <td>Unimplemented</td>
-        </tr>
-        <tr>
             <td>cass_value_get_decimal</td>
-            <td rowspan="2">Getting raw bytes of Decimal and Duration values requires lazy deserialization feature in the Rust driver.</td>
-        </tr>
-        <tr>
-            <td>cass_value_get_duration</td>
+            <td>Getting raw bytes of Decimal values requires lazy deserialization feature in the Rust driver.</td>
         </tr>
         <tr>
             <td>cass_value_get_bytes</td>

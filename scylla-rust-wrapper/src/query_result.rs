@@ -1103,6 +1103,28 @@ pub unsafe extern "C" fn cass_value_get_string(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_get_duration(
+    value: *const CassValue,
+    months: *mut cass_int32_t,
+    days: *mut cass_int32_t,
+    nanos: *mut cass_int64_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+
+    match &val.value {
+        Some(Value::RegularValue(CqlValue::Duration(duration))) => {
+            std::ptr::write(months, duration.months);
+            std::ptr::write(days, duration.days);
+            std::ptr::write(nanos, duration.nanoseconds);
+        }
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
     value: *const CassValue,
     output: *mut *const cass_byte_t,
@@ -1144,6 +1166,13 @@ pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> ca
         Some(Value::CollectionValue(Collection::Map(_))) => true as cass_bool_t,
         _ => false as cass_bool_t,
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t {
+    let val = ptr_to_ref(value);
+
+    (val.value_type.get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
 }
 
 #[no_mangle]
@@ -1505,14 +1534,6 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     scale: *mut cass_int32_t,
 ) -> CassError {
 }
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_duration(
-    value: *const CassValue,
-    months: *mut cass_int32_t,
-    days: *mut cass_int32_t,
-    nanos: *mut cass_int64_t,
-) -> CassError {
-}
 extern "C" {
     pub fn cass_value_data_type(value: *const CassValue) -> *const CassDataType;
 }
@@ -1521,9 +1542,6 @@ extern "C" {
 }
 extern "C" {
     pub fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t;
-}
-extern "C" {
-    pub fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t;
 }
 extern "C" {
     pub fn cass_value_item_count(collection: *const CassValue) -> size_t;

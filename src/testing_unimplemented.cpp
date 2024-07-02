@@ -501,10 +501,3 @@ cass_value_get_decimal(const CassValue* value,
                        cass_int32_t* scale){
 	throw std::runtime_error("UNIMPLEMENTED cass_value_get_decimal\n");
 }
-CASS_EXPORT CassError
-cass_value_get_duration(const CassValue* value,
-                        cass_int32_t* months,
-                        cass_int32_t* days,
-                        cass_int64_t* nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_get_duration\n");
-}
