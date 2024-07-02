@@ -169,13 +169,6 @@ cass_collection_append_decimal(CassCollection* collection,
                                cass_int32_t scale){
 	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_decimal\n");
 }
-CASS_EXPORT CassError
-cass_collection_append_duration(CassCollection* collection,
-                                cass_int32_t months,
-                                cass_int32_t days,
-                                cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_duration\n");
-}
 CASS_EXPORT const CassValue*
 cass_column_meta_field_by_name(const CassColumnMeta* column_meta,
                                const char* name){
