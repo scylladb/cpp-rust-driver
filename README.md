@@ -197,13 +197,10 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
         <tr>
             <td>cass_user_type_set_custom[by_name]</td>
-            <td rowspan="3">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
+            <td rowspan="2">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
         </tr>
         <tr>
             <td>cass_user_type_set_decimal[by_name]</td>
-        </tr>
-        <tr>
-            <td>cass_user_type_set_duration[by_name]</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Value</td>

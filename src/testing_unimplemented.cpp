@@ -456,14 +456,6 @@ cass_user_type_set_decimal_by_name(CassUserType* user_type,
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_decimal_by_name\n");
 }
 CASS_EXPORT CassError
-cass_user_type_set_duration_by_name(CassUserType* user_type,
-                                    const char* name,
-                                    cass_int32_t months,
-                                    cass_int32_t days,
-                                    cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_duration_by_name\n");
-}
-CASS_EXPORT CassError
 cass_value_get_decimal(const CassValue* value,
                        const cass_byte_t** varint,
                        size_t* varint_size,
