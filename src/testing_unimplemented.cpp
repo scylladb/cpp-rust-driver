@@ -366,22 +366,6 @@ cass_statement_bind_decimal_by_name(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_decimal_by_name\n");
 }
 CASS_EXPORT CassError
-cass_statement_bind_duration(CassStatement* statement,
-                             size_t index,
-                             cass_int32_t months,
-                             cass_int32_t days,
-                             cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_duration\n");
-}
-CASS_EXPORT CassError
-cass_statement_bind_duration_by_name(CassStatement* statement,
-                                     const char* name,
-                                     cass_int32_t months,
-                                     cass_int32_t days,
-                                     cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_duration_by_name\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,
                                   const CassCustomPayload* payload){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_custom_payload\n");
