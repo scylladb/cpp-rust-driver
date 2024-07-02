@@ -432,14 +432,6 @@ cass_tuple_set_decimal(CassTuple* tuple,
 	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_decimal\n");
 }
 CASS_EXPORT CassError
-cass_tuple_set_duration(CassTuple* tuple,
-                        size_t index,
-                        cass_int32_t months,
-                        cass_int32_t days,
-                        cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_duration\n");
-}
-CASS_EXPORT CassError
 cass_user_type_set_custom(CassUserType* user_type,
                           size_t index,
                           const char* class_name,
