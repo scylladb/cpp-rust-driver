@@ -938,6 +938,36 @@ pub unsafe extern "C" fn cass_result_column_name(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_result_column_type(
+    result: *const CassResult,
+    index: size_t,
+) -> CassValueType {
+    let data_type_ptr = cass_result_column_data_type(result, index);
+    if data_type_ptr.is_null() {
+        return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
+    }
+    cass_data_type_type(data_type_ptr)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_column_data_type(
+    result: *const CassResult,
+    index: size_t,
+) -> *const CassDataType {
+    let result_from_raw: &CassResult = ptr_to_ref(result);
+    let index_usize: usize = index
+        .try_into()
+        .expect("Provided index is out of bounds. Max possible value is usize::MAX");
+
+    result_from_raw
+        .metadata
+        .col_data_types
+        .get(index_usize)
+        .map(Arc::as_ptr)
+        .unwrap_or(std::ptr::null())
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_type(value: *const CassValue) -> CassValueType {
     let value_from_raw = ptr_to_ref(value);
 
