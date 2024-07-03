@@ -1345,11 +1345,12 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult)
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.is_some() || result.rows.as_ref().unwrap().is_empty() {
-        return result.rows.as_ref().unwrap().first().unwrap();
-    }
-
-    std::ptr::null()
+    result
+        .rows
+        .as_ref()
+        .and_then(|rows| rows.first())
+        .map(|row| row as *const CassRow)
+        .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
