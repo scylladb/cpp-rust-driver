@@ -1,6 +1,8 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType, MapDataType};
+use crate::cass_types::{
+    cass_data_type_type, get_column_type, CassDataType, CassValueType, MapDataType,
+};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -22,7 +24,37 @@ pub struct CassResult {
 pub struct CassResultData {
     pub paging_state_response: PagingStateResponse,
     pub col_specs: Vec<ColumnSpec>,
+    pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
     pub tracing_id: Option<Uuid>,
+}
+
+impl CassResultData {
+    pub fn from_result_payload(
+        paging_state_response: PagingStateResponse,
+        col_specs: Vec<ColumnSpec>,
+        maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
+        tracing_id: Option<Uuid>,
+    ) -> CassResultData {
+        // `maybe_col_data_types` is:
+        // - Some(_) for prepared statements executions
+        // - None for unprepared (simple) queries executions
+        let col_data_types = maybe_col_data_types.unwrap_or_else(|| {
+            // This allocation is unfortunately necessary, because of the type of CassResultData::col_data_types.
+            Arc::new(
+                col_specs
+                    .iter()
+                    .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+                    .collect(),
+            )
+        });
+
+        CassResultData {
+            paging_state_response,
+            col_specs,
+            col_data_types,
+            tracing_id,
+        }
+    }
 }
 
 /// The lifetime of CassRow is bound to CassResult.
