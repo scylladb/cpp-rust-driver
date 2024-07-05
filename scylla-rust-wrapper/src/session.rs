@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -204,11 +204,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
-                metadata: Arc::new(CassResultData {
-                    paging_state: None,
-                    col_specs: vec![],
-                    tracing_id: None,
-                }),
+                metadata: Arc::new(CassResultData::from_result_payload(None, vec![], None)),
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
@@ -289,11 +285,11 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match query_res {
             Ok(result) => {
-                let metadata = Arc::new(CassResultData {
-                    paging_state: result.paging_state,
-                    col_specs: result.col_specs,
-                    tracing_id: result.tracing_id,
-                });
+                let metadata = Arc::new(CassResultData::from_result_payload(
+                    result.paging_state,
+                    result.col_specs,
+                    result.tracing_id,
+                ));
                 let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
                 let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
@@ -333,9 +329,9 @@ fn create_cass_rows_from_rows(
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {
     row.columns
         .into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(val, col)| {
-            let column_type = Arc::new(get_column_type(&col.typ));
+        .zip(metadata.col_data_types.iter())
+        .map(|(val, col_data_type)| {
+            let column_type = Arc::clone(col_data_type);
             CassValue {
                 value: val.map(|col_val| get_column_value(col_val, &column_type)),
                 value_type: column_type,

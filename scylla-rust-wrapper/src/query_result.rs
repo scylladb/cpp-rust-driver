@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, get_column_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -22,7 +22,28 @@ pub struct CassResult {
 pub struct CassResultData {
     pub paging_state: Option<Bytes>,
     pub col_specs: Vec<ColumnSpec>,
+    pub col_data_types: Vec<Arc<CassDataType>>,
     pub tracing_id: Option<Uuid>,
+}
+
+impl CassResultData {
+    pub fn from_result_payload(
+        paging_state: Option<Bytes>,
+        col_specs: Vec<ColumnSpec>,
+        tracing_id: Option<Uuid>,
+    ) -> CassResultData {
+        let col_data_types = col_specs
+            .iter()
+            .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+            .collect();
+
+        CassResultData {
+            paging_state,
+            col_specs,
+            col_data_types,
+            tracing_id,
+        }
+    }
 }
 
 /// The lifetime of CassRow is bound to CassResult.
