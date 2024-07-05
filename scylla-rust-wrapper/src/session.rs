@@ -377,7 +377,7 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-fn create_cass_rows_from_rows(
+pub(crate) fn create_cass_rows_from_rows(
     rows: Option<Vec<Row>>,
     metadata: &Arc<CassResultData>,
 ) -> Option<Vec<CassRow>> {
