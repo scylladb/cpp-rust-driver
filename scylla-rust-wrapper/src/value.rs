@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use scylla::{
     frame::{response::result::ColumnType, value::CqlDate},
     serialize::{
-        value::{BuiltinSerializationErrorKind, SerializeCql},
+        value::{BuiltinSerializationErrorKind, SerializeCql, TupleSerializationErrorKind},
         writers::WrittenCellProof,
         CellWriter, SerializationError,
     },
@@ -80,7 +80,7 @@ impl CassCqlValue {
             CassCqlValue::Uuid(v) => serialize_uuid(v, writer),
             CassCqlValue::Date(v) => serialize_date(v, writer),
             CassCqlValue::Inet(v) => serialize_inet(v, writer),
-            CassCqlValue::Tuple { .. } => todo!(),
+            CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(_) => todo!(),
             CassCqlValue::Map(_) => todo!(),
             CassCqlValue::Set(_) => todo!(),
@@ -189,3 +189,26 @@ fn_serialize_via_writer!(serialize_inet, IpAddr, |me, writer| {
         IpAddr::V6(ip) => writer.set_value(&ip.octets()).unwrap(),
     }
 });
+
+fn serialize_tuple_like<'t, 'b>(
+    field_values: impl Iterator<Item = &'t Option<CassCqlValue>>,
+    writer: CellWriter<'b>,
+) -> Result<WrittenCellProof<'b>, SerializationError> {
+    let mut builder = writer.into_value_builder();
+
+    for (index, el) in field_values.enumerate() {
+        let sub = builder.make_sub_writer();
+        match el {
+            None => sub.set_null(),
+            Some(el) => el.do_serialize(sub).map_err(|err| {
+                mk_ser_err::<CassCqlValue>(
+                    TupleSerializationErrorKind::ElementSerializationFailed { index, err },
+                )
+            })?,
+        };
+    }
+
+    builder
+        .finish()
+        .map_err(|_| mk_ser_err::<CassCqlValue>(BuiltinSerializationErrorKind::SizeOverflow))
+}
