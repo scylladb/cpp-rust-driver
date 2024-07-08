@@ -4,8 +4,8 @@ use scylla::{
     frame::{response::result::ColumnType, value::CqlDate},
     serialize::{
         value::{
-            BuiltinSerializationErrorKind, SerializeCql, SetOrListSerializationErrorKind,
-            TupleSerializationErrorKind,
+            BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeCql,
+            SetOrListSerializationErrorKind, TupleSerializationErrorKind,
         },
         writers::WrittenCellProof,
         CellWriter, SerializationError,
@@ -85,7 +85,9 @@ impl CassCqlValue {
             CassCqlValue::Inet(v) => serialize_inet(v, writer),
             CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
-            CassCqlValue::Map(_) => todo!(),
+            CassCqlValue::Map(m) => {
+                serialize_mapping(m.len(), m.iter().map(|p| (&p.0, &p.1)), writer)
+            }
             CassCqlValue::Set(s) => serialize_sequence(s.len(), s.iter(), writer),
             CassCqlValue::UserDefinedType {
                 keyspace,
@@ -235,6 +237,40 @@ fn serialize_sequence<'t, 'b>(
             mk_ser_err_named(
                 rust_name,
                 SetOrListSerializationErrorKind::ElementSerializationFailed(err),
+            )
+        })?;
+    }
+
+    builder
+        .finish()
+        .map_err(|_| mk_ser_err_named(rust_name, BuiltinSerializationErrorKind::SizeOverflow))
+}
+
+fn serialize_mapping<'t, 'b>(
+    len: usize,
+    iter: impl Iterator<Item = (&'t CassCqlValue, &'t CassCqlValue)>,
+    writer: CellWriter<'b>,
+) -> Result<WrittenCellProof<'b>, SerializationError> {
+    let rust_name = std::any::type_name::<CassCqlValue>();
+
+    let mut builder = writer.into_value_builder();
+
+    let element_count: i32 = len
+        .try_into()
+        .map_err(|_| mk_ser_err_named(rust_name, MapSerializationErrorKind::TooManyElements))?;
+    builder.append_bytes(&element_count.to_be_bytes());
+
+    for (k, v) in iter {
+        k.do_serialize(builder.make_sub_writer()).map_err(|err| {
+            mk_ser_err_named(
+                rust_name,
+                MapSerializationErrorKind::KeySerializationFailed(err),
+            )
+        })?;
+        v.do_serialize(builder.make_sub_writer()).map_err(|err| {
+            mk_ser_err_named(
+                rust_name,
+                MapSerializationErrorKind::ValueSerializationFailed(err),
             )
         })?;
     }
