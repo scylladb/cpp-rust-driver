@@ -54,9 +54,42 @@ impl SerializeCql for CassCqlValue {
     fn serialize<'b>(
         &self,
         _typ: &ColumnType,
-        _writer: CellWriter<'b>,
+        writer: CellWriter<'b>,
     ) -> Result<WrittenCellProof<'b>, SerializationError> {
-        todo!()
+        // _typ is not used, since we do the typechecks during binding (this is still a TODO, high priority).
+        // This is the same approach as cpp-driver.
+        self.do_serialize(writer)
+    }
+}
+
+impl CassCqlValue {
+    fn do_serialize<'b>(
+        &self,
+        writer: CellWriter<'b>,
+    ) -> Result<WrittenCellProof<'b>, SerializationError> {
+        match self {
+            CassCqlValue::TinyInt(v) => serialize_i8(v, writer),
+            CassCqlValue::SmallInt(v) => serialize_i16(v, writer),
+            CassCqlValue::Int(v) => serialize_i32(v, writer),
+            CassCqlValue::BigInt(v) => serialize_i64(v, writer),
+            CassCqlValue::Float(v) => serialize_f32(v, writer),
+            CassCqlValue::Double(v) => serialize_f64(v, writer),
+            CassCqlValue::Boolean(v) => serialize_bool(v, writer),
+            CassCqlValue::Text(v) => serialize_text(v, writer),
+            CassCqlValue::Blob(v) => serialize_blob(v, writer),
+            CassCqlValue::Uuid(v) => serialize_uuid(v, writer),
+            CassCqlValue::Date(v) => serialize_date(v, writer),
+            CassCqlValue::Inet(v) => serialize_inet(v, writer),
+            CassCqlValue::Tuple { .. } => todo!(),
+            CassCqlValue::List(_) => todo!(),
+            CassCqlValue::Map(_) => todo!(),
+            CassCqlValue::Set(_) => todo!(),
+            CassCqlValue::UserDefinedType {
+                keyspace,
+                type_name,
+                fields,
+            } => todo!(),
+        }
     }
 }
 
@@ -112,3 +145,47 @@ macro_rules! fn_serialize_via_writer {
         }
     };
 }
+
+fn_serialize_via_writer!(serialize_i8, i8, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_i16, i16, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_i32, i32, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_i64, i64, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_f32, f32, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_f64, f64, |me, writer| {
+    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_bool, bool, |me, writer| {
+    writer.set_value(&[*me as u8]).unwrap()
+});
+fn_serialize_via_writer!(serialize_text, String, |me, writer| {
+    writer
+        .set_value(me.as_bytes())
+        .map_err(|_| mk_ser_err::<String>(BuiltinSerializationErrorKind::SizeOverflow))?
+});
+fn_serialize_via_writer!(serialize_blob, Vec<u8>, |me, writer| {
+    writer
+        .set_value(me.as_ref())
+        .map_err(|_| mk_ser_err::<Vec<u8>>(BuiltinSerializationErrorKind::SizeOverflow))?
+});
+fn_serialize_via_writer!(serialize_uuid, Uuid, |me, writer| {
+    writer.set_value(me.as_bytes().as_ref()).unwrap()
+});
+fn_serialize_via_writer!(serialize_date, CqlDate, |me, writer| {
+    writer.set_value(me.0.to_be_bytes().as_slice()).unwrap()
+});
+fn_serialize_via_writer!(serialize_inet, IpAddr, |me, writer| {
+    match me {
+        IpAddr::V4(ip) => writer.set_value(&ip.octets()).unwrap(),
+        IpAddr::V6(ip) => writer.set_value(&ip.octets()).unwrap(),
+    }
+});
