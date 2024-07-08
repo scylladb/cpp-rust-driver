@@ -1,9 +1,12 @@
-use std::net::IpAddr;
+use std::{convert::TryInto, net::IpAddr};
 
 use scylla::{
     frame::{response::result::ColumnType, value::CqlDate},
     serialize::{
-        value::{BuiltinSerializationErrorKind, SerializeCql, TupleSerializationErrorKind},
+        value::{
+            BuiltinSerializationErrorKind, SerializeCql, SetOrListSerializationErrorKind,
+            TupleSerializationErrorKind,
+        },
         writers::WrittenCellProof,
         CellWriter, SerializationError,
     },
@@ -81,9 +84,9 @@ impl CassCqlValue {
             CassCqlValue::Date(v) => serialize_date(v, writer),
             CassCqlValue::Inet(v) => serialize_inet(v, writer),
             CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
-            CassCqlValue::List(_) => todo!(),
+            CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
             CassCqlValue::Map(_) => todo!(),
-            CassCqlValue::Set(_) => todo!(),
+            CassCqlValue::Set(s) => serialize_sequence(s.len(), s.iter(), writer),
             CassCqlValue::UserDefinedType {
                 keyspace,
                 type_name,
@@ -211,4 +214,32 @@ fn serialize_tuple_like<'t, 'b>(
     builder
         .finish()
         .map_err(|_| mk_ser_err::<CassCqlValue>(BuiltinSerializationErrorKind::SizeOverflow))
+}
+
+fn serialize_sequence<'t, 'b>(
+    len: usize,
+    iter: impl Iterator<Item = &'t CassCqlValue>,
+    writer: CellWriter<'b>,
+) -> Result<WrittenCellProof<'b>, SerializationError> {
+    let rust_name = std::any::type_name::<CassCqlValue>();
+
+    let mut builder = writer.into_value_builder();
+
+    let element_count: i32 = len.try_into().map_err(|_| {
+        mk_ser_err_named(rust_name, SetOrListSerializationErrorKind::TooManyElements)
+    })?;
+    builder.append_bytes(&element_count.to_be_bytes());
+
+    for el in iter {
+        el.do_serialize(builder.make_sub_writer()).map_err(|err| {
+            mk_ser_err_named(
+                rust_name,
+                SetOrListSerializationErrorKind::ElementSerializationFailed(err),
+            )
+        })?;
+    }
+
+    builder
+        .finish()
+        .map_err(|_| mk_ser_err_named(rust_name, BuiltinSerializationErrorKind::SizeOverflow))
 }
