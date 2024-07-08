@@ -1,8 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
-use scylla::frame::response::result::CqlValue::*;
+use crate::value::CassCqlValue;
 use std::convert::TryFrom;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
@@ -11,11 +10,11 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
 pub struct CassCollection {
     pub collection_type: CassCollectionType,
     pub capacity: usize,
-    pub items: Vec<CqlValue>,
+    pub items: Vec<CassCqlValue>,
 }
 
 impl CassCollection {
-    pub fn append_cql_value(&mut self, value: Option<CqlValue>) -> CassError {
+    pub fn append_cql_value(&mut self, value: Option<CassCqlValue>) -> CassError {
         // FIXME: Bounds check, type check
         // There is no API to append null, so unwrap is safe
         self.items.push(value.unwrap());
@@ -23,12 +22,14 @@ impl CassCollection {
     }
 }
 
-impl TryFrom<&CassCollection> for CqlValue {
+impl TryFrom<&CassCollection> for CassCqlValue {
     type Error = ();
     fn try_from(collection: &CassCollection) -> Result<Self, Self::Error> {
         // FIXME: validate that collection items are correct
         match collection.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => Ok(List(collection.items.clone())),
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => {
+                Ok(CassCqlValue::List(collection.items.clone()))
+            }
             CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
                 let mut grouped_items = Vec::new();
                 // FIXME: validate even number of items
@@ -39,10 +40,10 @@ impl TryFrom<&CassCollection> for CqlValue {
                     grouped_items.push((key, value));
                 }
 
-                Ok(Map(grouped_items))
+                Ok(CassCqlValue::Map(grouped_items))
             }
             CassCollectionType::CASS_COLLECTION_TYPE_SET => {
-                Ok(CqlValue::Set(collection.items.clone()))
+                Ok(CassCqlValue::Set(collection.items.clone()))
             }
             _ => Err(()),
         }

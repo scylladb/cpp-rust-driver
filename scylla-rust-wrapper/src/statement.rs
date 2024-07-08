@@ -4,7 +4,7 @@ use crate::exec_profile::PerStatementExecProfile;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
+use crate::value::CassCqlValue;
 use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
@@ -35,7 +35,7 @@ pub struct SimpleQuery {
 
 pub struct CassStatement {
     pub statement: Statement,
-    pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
+    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
     pub paging_state: Option<Bytes>,
     pub request_timeout_ms: Option<cass_uint64_t>,
 
@@ -43,7 +43,7 @@ pub struct CassStatement {
 }
 
 impl CassStatement {
-    fn bind_cql_value(&mut self, index: usize, value: Option<CqlValue>) -> CassError {
+    fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.bound_values.len() {
             CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
         } else {
@@ -55,7 +55,7 @@ impl CassStatement {
     fn bind_multiple_values_by_name(
         &mut self,
         indices: &[usize],
-        value: Option<CqlValue>,
+        value: Option<CassCqlValue>,
     ) -> CassError {
         for i in indices {
             let bind_status = self.bind_cql_value(*i, value.clone());
@@ -68,7 +68,7 @@ impl CassStatement {
         CassError::CASS_OK
     }
 
-    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
+    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut set_bound_val_index: Option<usize> = None;
         let mut name_str = name;
         let mut is_case_sensitive = false;

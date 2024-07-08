@@ -47,10 +47,9 @@
 //!     It can be used for binding named parameter in CassStatement or field by name in CassUserType.
 //!  * Functions from make_appender don't take any extra argument, as they are for use by CassCollection
 //!     functions - values are appended to collection.
-use crate::cass_types::CassDataType;
-use scylla::frame::response::result::CqlValue;
+use crate::{cass_types::CassDataType, value::CassCqlValue};
 
-pub fn is_compatible_type(_data_type: &CassDataType, _value: &Option<CqlValue>) -> bool {
+pub fn is_compatible_type(_data_type: &CassDataType, _value: &Option<CassCqlValue>) -> bool {
     // TODO: cppdriver actually checks types.
     true
 }
@@ -66,7 +65,7 @@ macro_rules! make_index_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), index as usize, v),
                 Err(e) => e,
@@ -86,7 +85,7 @@ macro_rules! make_name_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr(name).unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), name, v),
@@ -108,7 +107,7 @@ macro_rules! make_name_n_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr_n(name, name_length).unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), name, v),
@@ -128,7 +127,7 @@ macro_rules! make_appender {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), v),
                 Err(e) => e,
@@ -298,7 +297,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |p: *const crate::tuple::CassTuple| {
-                std::convert::TryInto::try_into(ptr_to_ref(p)).map(Some)
+                Ok(Some(ptr_to_ref(p).into()))
             },
             [p @ *const crate::tuple::CassTuple]
         );
