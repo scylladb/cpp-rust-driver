@@ -2,7 +2,11 @@ use std::net::IpAddr;
 
 use scylla::{
     frame::{response::result::ColumnType, value::CqlDate},
-    serialize::{value::SerializeCql, writers::WrittenCellProof, CellWriter, SerializationError},
+    serialize::{
+        value::{BuiltinSerializationErrorKind, SerializeCql},
+        writers::WrittenCellProof,
+        CellWriter, SerializationError,
+    },
 };
 use uuid::Uuid;
 
@@ -54,4 +58,57 @@ impl SerializeCql for CassCqlValue {
     ) -> Result<WrittenCellProof<'b>, SerializationError> {
         todo!()
     }
+}
+
+/// Serialization of one of the built-in types failed.
+#[derive(Debug, Clone)]
+pub struct CassSerializationError {
+    /// Name of the Rust type being serialized.
+    pub rust_name: &'static str,
+
+    /// Detailed information about the failure.
+    pub kind: BuiltinSerializationErrorKind,
+}
+
+impl std::fmt::Display for CassSerializationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Failed to serialize Rust type {}: {}",
+            self.rust_name, self.kind
+        )
+    }
+}
+
+impl std::error::Error for CassSerializationError {}
+
+fn mk_ser_err<T>(kind: impl Into<BuiltinSerializationErrorKind>) -> SerializationError {
+    mk_ser_err_named(std::any::type_name::<T>(), kind)
+}
+
+fn mk_ser_err_named(
+    name: &'static str,
+    kind: impl Into<BuiltinSerializationErrorKind>,
+) -> SerializationError {
+    SerializationError::new(CassSerializationError {
+        rust_name: name,
+        kind: kind.into(),
+    })
+}
+
+/// Generates a function that serializes a value of given type.
+macro_rules! fn_serialize_via_writer {
+    ($ser_fn:ident,
+     $rust_typ:tt$(<$($targ:tt),+>)?,
+     |$ser_me:ident, $writer:ident| $ser:expr) => {
+        fn $ser_fn<'b>(
+            v: &$rust_typ$(<$($targ),+>)?,
+            writer: CellWriter<'b>,
+        ) -> Result<WrittenCellProof<'b>, SerializationError> {
+            let $writer = writer;
+            let $ser_me = v;
+            let proof = $ser;
+            Ok(proof)
+        }
+    };
 }
