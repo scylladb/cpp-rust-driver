@@ -6,6 +6,7 @@ use scylla::{
         value::{
             BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeCql,
             SetOrListSerializationErrorKind, TupleSerializationErrorKind,
+            UdtSerializationErrorKind,
         },
         writers::WrittenCellProof,
         CellWriter, SerializationError,
@@ -89,11 +90,7 @@ impl CassCqlValue {
                 serialize_mapping(m.len(), m.iter().map(|p| (&p.0, &p.1)), writer)
             }
             CassCqlValue::Set(s) => serialize_sequence(s.len(), s.iter(), writer),
-            CassCqlValue::UserDefinedType {
-                keyspace,
-                type_name,
-                fields,
-            } => todo!(),
+            CassCqlValue::UserDefinedType { fields, .. } => serialize_udt(fields, writer),
         }
     }
 }
@@ -278,4 +275,27 @@ fn serialize_mapping<'t, 'b>(
     builder
         .finish()
         .map_err(|_| mk_ser_err_named(rust_name, BuiltinSerializationErrorKind::SizeOverflow))
+}
+
+fn serialize_udt<'b>(
+    values: &[(String, Option<CassCqlValue>)],
+    writer: CellWriter<'b>,
+) -> Result<WrittenCellProof<'b>, SerializationError> {
+    let mut builder = writer.into_value_builder();
+    for (fname, fvalue) in values {
+        let writer = builder.make_sub_writer();
+        match fvalue {
+            None => writer.set_null(),
+            Some(v) => v.do_serialize(writer).map_err(|err| {
+                mk_ser_err::<CassCqlValue>(UdtSerializationErrorKind::FieldSerializationFailed {
+                    field_name: fname.clone(),
+                    err,
+                })
+            })?,
+        };
+    }
+
+    builder
+        .finish()
+        .map_err(|_| mk_ser_err::<CassCqlValue>(BuiltinSerializationErrorKind::SizeOverflow))
 }
