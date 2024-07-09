@@ -703,7 +703,7 @@ mod tests {
             Condition::RequestOpcode(RequestOpcode::Query),
             // We won't respond to any queries (including metadata fetch),
             // but the driver will manage to continue with dummy metadata.
-            RequestReaction::drop_connection(),
+            RequestReaction::forge().server_error(),
         )]
     }
 
