@@ -22,6 +22,7 @@ pub struct UDTDataType {
 
     pub keyspace: String,
     pub name: String,
+    pub frozen: bool,
 }
 
 impl UDTDataType {
@@ -30,6 +31,7 @@ impl UDTDataType {
             field_types: Vec::new(),
             keyspace: "".to_string(),
             name: "".to_string(),
+            frozen: false,
         }
     }
 
@@ -37,6 +39,7 @@ impl UDTDataType {
         user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
         keyspace_name: &str,
         name: &str,
+        frozen: bool,
     ) -> UDTDataType {
         UDTDataType {
             field_types: user_defined_types
@@ -57,6 +60,7 @@ impl UDTDataType {
                 .collect(),
             keyspace: keyspace_name.to_string(),
             name: name.to_owned(),
+            frozen,
         }
     }
 
@@ -65,6 +69,7 @@ impl UDTDataType {
             field_types: Vec::with_capacity(capacity),
             keyspace: "".to_string(),
             name: "".to_string(),
+            frozen: false,
         }
     }
 
@@ -188,7 +193,7 @@ pub fn get_column_type_from_cql_type(
                 })
                 .collect(),
         ),
-        CqlType::UserDefinedType { definition, .. } => {
+        CqlType::UserDefinedType { definition, frozen } => {
             let name = match definition {
                 Ok(resolved) => &resolved.name,
                 Err(not_resolved) => &not_resolved.name,
@@ -197,6 +202,7 @@ pub fn get_column_type_from_cql_type(
                 user_defined_types,
                 keyspace_name,
                 name,
+                *frozen,
             ))
         }
     }
@@ -317,6 +323,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
                 .collect(),
             keyspace: (*keyspace).clone(),
             name: (*type_name).clone(),
+            frozen: false,
         }),
         ColumnType::SmallInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
         ColumnType::TinyInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT),

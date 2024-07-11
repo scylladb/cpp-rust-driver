@@ -573,6 +573,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,
+                    false,
                 ))),
             );
         }
