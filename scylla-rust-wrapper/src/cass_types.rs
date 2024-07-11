@@ -403,8 +403,19 @@ pub unsafe extern "C" fn cass_data_type_type(data_type: *const CassDataType) -> 
     data_type.get_value_type()
 }
 
-// #[no_mangle]
-// pub unsafe extern "C" fn cass_data_type_is_frozen(data_type: *const CassDataType) -> cass_bool_t {}
+#[no_mangle]
+pub unsafe extern "C" fn cass_data_type_is_frozen(data_type: *const CassDataType) -> cass_bool_t {
+    let data_type = ptr_to_ref(data_type);
+    let is_frozen = match data_type {
+        CassDataType::UDT(udt) => udt.frozen,
+        CassDataType::List { frozen, .. } => *frozen,
+        CassDataType::Set { frozen, .. } => *frozen,
+        CassDataType::Map { frozen, .. } => *frozen,
+        _ => false,
+    };
+
+    is_frozen as cass_bool_t
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_type_name(
