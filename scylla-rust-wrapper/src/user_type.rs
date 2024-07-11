@@ -16,7 +16,7 @@ pub struct CassUserType {
 }
 
 impl CassUserType {
-    fn set_option_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
+    fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.field_values.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
@@ -27,7 +27,7 @@ impl CassUserType {
         CassError::CASS_OK
     }
 
-    fn set_option_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
+    fn set_field_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut found_field: bool = false;
         for (index, (field_name, field_type)) in
             self.data_type.get_udt_type().field_types.iter().enumerate()
@@ -97,8 +97,8 @@ pub unsafe extern "C" fn cass_user_type_data_type(
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,
-    |udt: &mut CassUserType, index, v| udt.set_option_by_index(index, v),
-    |udt: &mut CassUserType, name, v| udt.set_option_by_name(name, v));
+    |udt: &mut CassUserType, index, v| udt.set_field_by_index(index, v),
+    |udt: &mut CassUserType, name, v| udt.set_field_by_name(name, v));
 
 make_binders!(
     null,
