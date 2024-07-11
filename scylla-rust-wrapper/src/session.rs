@@ -346,44 +346,57 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
 
 fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
     match (column, column_type.as_ref()) {
-        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
-            CollectionValue(Collection::List(
-                list.into_iter()
-                    .map(|val| CassValue {
-                        value_type: list_type.clone(),
-                        value: Some(get_column_value(val, list_type)),
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
-            CollectionValue(Collection::Map(
-                map.into_iter()
-                    .map(|(key, val)| {
-                        (
-                            CassValue {
-                                value_type: key_type.clone(),
-                                value: Some(get_column_value(key, key_type)),
-                            },
-                            CassValue {
-                                value_type: value_type.clone(),
-                                value: Some(get_column_value(val, value_type)),
-                            },
-                        )
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
-            CollectionValue(Collection::Set(
-                set.into_iter()
-                    .map(|val| CassValue {
-                        value_type: set_type.clone(),
-                        value: Some(get_column_value(val, set_type)),
-                    })
-                    .collect(),
-            ))
-        }
+        (
+            CqlValue::List(list),
+            CassDataType::List {
+                typ: Some(list_type),
+                ..
+            },
+        ) => CollectionValue(Collection::List(
+            list.into_iter()
+                .map(|val| CassValue {
+                    value_type: list_type.clone(),
+                    value: Some(get_column_value(val, list_type)),
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Map(map),
+            CassDataType::Map {
+                key_type: Some(key_typ),
+                val_type: Some(value_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Map(
+            map.into_iter()
+                .map(|(key, val)| {
+                    (
+                        CassValue {
+                            value_type: key_typ.clone(),
+                            value: Some(get_column_value(key, key_typ)),
+                        },
+                        CassValue {
+                            value_type: value_type.clone(),
+                            value: Some(get_column_value(val, value_type)),
+                        },
+                    )
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Set(set),
+            CassDataType::Set {
+                typ: Some(set_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Set(
+            set.into_iter()
+                .map(|val| CassValue {
+                    value_type: set_type.clone(),
+                    value: Some(get_column_value(val, set_type)),
+                })
+                .collect(),
+        )),
         (
             CqlValue::UserDefinedType {
                 keyspace,
