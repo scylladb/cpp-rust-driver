@@ -51,9 +51,18 @@ pub enum CassCqlValue {
         data_type: Option<Arc<CassDataType>>,
         fields: Vec<Option<CassCqlValue>>,
     },
-    List(Vec<CassCqlValue>),
-    Map(Vec<(CassCqlValue, CassCqlValue)>),
-    Set(Vec<CassCqlValue>),
+    List {
+        data_type: Option<Arc<CassDataType>>,
+        values: Vec<CassCqlValue>,
+    },
+    Map {
+        data_type: Option<Arc<CassDataType>>,
+        values: Vec<(CassCqlValue, CassCqlValue)>,
+    },
+    Set {
+        data_type: Option<Arc<CassDataType>>,
+        values: Vec<CassCqlValue>,
+    },
     UserDefinedType {
         data_type: Arc<CassDataType>,
         /// Order of `fields` vector must match the order of fields as defined in the UDT. The
@@ -130,9 +139,30 @@ impl CassCqlValue {
                 // Untyped tuple.
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_TUPLE
             }
-            CassCqlValue::List(_) => todo!(),
-            CassCqlValue::Map(_) => todo!(),
-            CassCqlValue::Set(_) => todo!(),
+            CassCqlValue::List { data_type, .. } => {
+                if let Some(dt) = data_type {
+                    dt.typecheck_equals(typ)
+                } else {
+                    // Untyped list.
+                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_LIST
+                }
+            }
+            CassCqlValue::Map { data_type, .. } => {
+                if let Some(dt) = data_type {
+                    dt.typecheck_equals(typ)
+                } else {
+                    // Untyped map.
+                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_MAP
+                }
+            }
+            CassCqlValue::Set { data_type, .. } => {
+                if let Some(dt) = data_type {
+                    dt.typecheck_equals(typ)
+                } else {
+                    // Untyped set.
+                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_SET
+                }
+            }
             CassCqlValue::UserDefinedType { data_type, .. } => data_type.typecheck_equals(typ),
         }
     }
@@ -207,11 +237,15 @@ impl CassCqlValue {
                 <CqlDecimal as SerializeValue>::serialize(v, &ColumnType::Decimal, writer)
             }
             CassCqlValue::Tuple { fields, .. } => serialize_tuple_like(fields.iter(), writer),
-            CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
-            CassCqlValue::Map(m) => {
-                serialize_mapping(m.len(), m.iter().map(|p| (&p.0, &p.1)), writer)
+            CassCqlValue::List { values, .. } => {
+                serialize_sequence(values.len(), values.iter(), writer)
             }
-            CassCqlValue::Set(s) => serialize_sequence(s.len(), s.iter(), writer),
+            CassCqlValue::Map { values, .. } => {
+                serialize_mapping(values.len(), values.iter().map(|p| (&p.0, &p.1)), writer)
+            }
+            CassCqlValue::Set { values, .. } => {
+                serialize_sequence(values.len(), values.iter(), writer)
+            }
             CassCqlValue::UserDefinedType { fields, .. } => serialize_udt(fields, writer),
         }
     }
@@ -585,6 +619,22 @@ mod tests {
             frozen: false,
         }));
 
+        let data_type_int_list = Arc::new(CassDataType::List {
+            typ: Some(data_type_int.clone()),
+            frozen: false,
+        });
+
+        let data_type_int_set = Arc::new(CassDataType::Set {
+            typ: Some(data_type_int.clone()),
+            frozen: false,
+        });
+
+        let data_type_bool_float_map = Arc::new(CassDataType::Map {
+            key_type: Some(data_type_bool.clone()),
+            val_type: Some(data_type_float.clone()),
+            frozen: false,
+        });
+
         // TUPLES
         {
             let data_type_untyped_tuple = Arc::new(CassDataType::Tuple(vec![]));
@@ -618,6 +668,9 @@ mod tests {
                         data_type_int.clone(),
                         data_type_bool.clone(),
                         data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_int_set.clone(),
+                        data_type_bool_float_map.clone(),
                     ],
                 },
                 // Untyped tuple -> used created an untyped tuple data type, and then
@@ -638,6 +691,9 @@ mod tests {
                         data_type_int.clone(),
                         data_type_bool.clone(),
                         data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_int_set.clone(),
+                        data_type_bool_float_map.clone(),
                     ],
                 },
                 // Fully typed tuple.
@@ -658,6 +714,9 @@ mod tests {
                         data_type_nested_tuple.clone(),
                         data_type_nested_tuple.clone(),
                         data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_int_set.clone(),
+                        data_type_bool_float_map.clone(),
                     ],
                 },
                 // Nested tuple.
@@ -678,6 +737,9 @@ mod tests {
                         data_type_tuple.clone(),
                         data_type_small_tuple.clone(),
                         data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_int_set.clone(),
+                        data_type_bool_float_map.clone(),
                     ],
                 },
             ];
@@ -728,10 +790,237 @@ mod tests {
                     data_type_int.clone(),
                     data_type_bool.clone(),
                     data_type_tuple.clone(),
+                    data_type_int_list.clone(),
+                    data_type_int_set.clone(),
+                    data_type_bool_float_map.clone(),
                 ],
             }];
 
             run_test_cases(test_cases);
+        }
+
+        // COLLECTIONS
+        {
+            let data_type_untyped_list = Arc::new(CassDataType::List {
+                typ: None,
+                frozen: false,
+            });
+            let data_type_float_list = Arc::new(CassDataType::List {
+                typ: Some(data_type_float.clone()),
+                frozen: false,
+            });
+
+            let data_type_untyped_set = Arc::new(CassDataType::Set {
+                typ: None,
+                frozen: false,
+            });
+            let data_type_float_set = Arc::new(CassDataType::Set {
+                typ: Some(data_type_float.clone()),
+                frozen: false,
+            });
+
+            let data_type_untyped_map = Arc::new(CassDataType::Map {
+                key_type: None,
+                val_type: None,
+                frozen: false,
+            });
+            let data_type_typed_key_float_map = Arc::new(CassDataType::Map {
+                key_type: Some(data_type_float.clone()),
+                val_type: None,
+                frozen: false,
+            });
+            let data_type_float_int_map = Arc::new(CassDataType::Map {
+                key_type: Some(data_type_float.clone()),
+                val_type: Some(data_type_int.clone()),
+                frozen: false,
+            });
+
+            let test_cases = &[
+                // Untyped list -> user created it via `cass_collection_new`.
+                TestCase {
+                    value: CassCqlValue::List {
+                        data_type: None,
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_float_list.clone(),
+                        data_type_int_list.clone(),
+                        data_type_untyped_list.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                        data_type_untyped_map.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+                // Typed list.
+                TestCase {
+                    value: CassCqlValue::List {
+                        data_type: Some(data_type_float_list.clone()),
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_float_list.clone(),
+                        data_type_untyped_list.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                        data_type_untyped_map.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+                // Untyped set (via cass_collection_new).
+                TestCase {
+                    value: CassCqlValue::Set {
+                        data_type: None,
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_float_list.clone(),
+                        data_type_untyped_list.clone(),
+                        data_type_untyped_map.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+                // Typed set.
+                TestCase {
+                    value: CassCqlValue::Set {
+                        data_type: Some(data_type_float_set.clone()),
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_int_list.clone(),
+                        data_type_float_list.clone(),
+                        data_type_untyped_list.clone(),
+                        data_type_int_set.clone(),
+                        data_type_untyped_map.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+                // Untyped map (via cass_collection_new).
+                TestCase {
+                    value: CassCqlValue::Map {
+                        data_type: None,
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_untyped_map.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_float_list.clone(),
+                        data_type_int_list.clone(),
+                        data_type_untyped_list.clone(),
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                    ],
+                },
+                // Only key-typed map.
+                TestCase {
+                    value: CassCqlValue::Map {
+                        data_type: Some(data_type_typed_key_float_map.clone()),
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_typed_key_float_map.clone(),
+                        data_type_untyped_map.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_float_list.clone(),
+                        data_type_int_list.clone(),
+                        data_type_untyped_list.clone(),
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                        data_type_float_int_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+                // Fully typed map
+                TestCase {
+                    value: CassCqlValue::Map {
+                        data_type: Some(data_type_float_int_map.clone()),
+                        values: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_float_int_map.clone(),
+                        data_type_untyped_map.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_udt_simple.clone(),
+                        data_type_float_list.clone(),
+                        data_type_int_list.clone(),
+                        data_type_untyped_list.clone(),
+                        data_type_untyped_set.clone(),
+                        data_type_float_set.clone(),
+                        data_type_int_set.clone(),
+                        data_type_typed_key_float_map.clone(),
+                        data_type_bool_float_map.clone(),
+                    ],
+                },
+            ];
+
+            run_test_cases(test_cases)
         }
     }
 }

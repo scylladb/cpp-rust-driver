@@ -44,10 +44,12 @@ impl TryFrom<&CassCollection> for CassCqlValue {
     type Error = ();
     fn try_from(collection: &CassCollection) -> Result<Self, Self::Error> {
         // FIXME: validate that collection items are correct
+        let data_type = collection.data_type.clone();
         match collection.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => {
-                Ok(CassCqlValue::List(collection.items.clone()))
-            }
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => Ok(CassCqlValue::List {
+                data_type,
+                values: collection.items.clone(),
+            }),
             CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
                 let mut grouped_items = Vec::new();
                 // FIXME: validate even number of items
@@ -58,11 +60,15 @@ impl TryFrom<&CassCollection> for CassCqlValue {
                     grouped_items.push((key, value));
                 }
 
-                Ok(CassCqlValue::Map(grouped_items))
+                Ok(CassCqlValue::Map {
+                    data_type,
+                    values: grouped_items,
+                })
             }
-            CassCollectionType::CASS_COLLECTION_TYPE_SET => {
-                Ok(CassCqlValue::Set(collection.items.clone()))
-            }
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => Ok(CassCqlValue::Set {
+                data_type,
+                values: collection.items.clone(),
+            }),
             _ => Err(()),
         }
     }
