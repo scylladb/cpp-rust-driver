@@ -136,10 +136,12 @@ pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
     List {
+        // None stands for untyped list.
         typ: Option<Arc<CassDataType>>,
         frozen: bool,
     },
     Set {
+        // None stands for untyped set.
         typ: Option<Arc<CassDataType>>,
         frozen: bool,
     },
@@ -164,8 +166,21 @@ impl CassDataType {
                 CassDataType::UDT(other_udt) => udt.typecheck_equals(other_udt),
                 _ => false,
             },
-            CassDataType::List { .. } => todo!(),
-            CassDataType::Set { .. } => todo!(),
+            CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => match other {
+                CassDataType::List { typ: other_typ, .. }
+                | CassDataType::Set { typ: other_typ, .. } => {
+                    // If one of them is list, and the other is set, fail the typecheck.
+                    if self.get_value_type() != other.get_value_type() {
+                        return false;
+                    }
+                    match (typ, other_typ) {
+                        // One of them is untyped, skip the typecheck for subtype.
+                        (None, _) | (_, None) => true,
+                        (Some(typ), Some(other_typ)) => typ.typecheck_equals(other_typ),
+                    }
+                }
+                _ => false,
+            },
             CassDataType::Map { .. } => todo!(),
             CassDataType::Tuple(sub) => match other {
                 CassDataType::Tuple(other_sub) => {
