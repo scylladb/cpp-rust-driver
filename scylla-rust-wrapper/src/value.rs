@@ -17,7 +17,7 @@ use scylla::{
 };
 use uuid::Uuid;
 
-use crate::cass_types::CassDataType;
+use crate::cass_types::{CassDataType, CassValueType};
 
 /// A narrower version of rust driver's CqlValue.
 ///
@@ -70,8 +70,30 @@ pub fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> b
 }
 
 impl CassCqlValue {
-    pub fn is_type_compatible(&self, _typ: &CassDataType) -> bool {
-        true
+    pub fn is_type_compatible(&self, typ: &CassDataType) -> bool {
+        match self {
+            CassCqlValue::TinyInt(_) => {
+                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_TINY_INT
+            }
+            CassCqlValue::SmallInt(_) => todo!(),
+            CassCqlValue::Int(_) => todo!(),
+            CassCqlValue::BigInt(_) => todo!(),
+            CassCqlValue::Float(_) => todo!(),
+            CassCqlValue::Double(_) => todo!(),
+            CassCqlValue::Boolean(_) => todo!(),
+            CassCqlValue::Text(_) => todo!(),
+            CassCqlValue::Blob(_) => todo!(),
+            CassCqlValue::Uuid(_) => todo!(),
+            CassCqlValue::Date(_) => todo!(),
+            CassCqlValue::Inet(_) => todo!(),
+            CassCqlValue::Duration(_) => todo!(),
+            CassCqlValue::Decimal(_) => todo!(),
+            CassCqlValue::Tuple(_) => todo!(),
+            CassCqlValue::List(_) => todo!(),
+            CassCqlValue::Map(_) => todo!(),
+            CassCqlValue::Set(_) => todo!(),
+            CassCqlValue::UserDefinedType { .. } => todo!(),
+        }
     }
 }
 
@@ -340,6 +362,7 @@ mod tests {
 
     #[test]
     fn typecheck_simple_test() {
+        let from = |v_typ: CassValueType| CassDataType::Value(v_typ);
         struct TestCase {
             value: Option<CassCqlValue>,
             compatible_types: Vec<CassDataType>,
@@ -350,6 +373,11 @@ mod tests {
             TestCase {
                 value: None,
                 compatible_types: all_value_data_types().to_vec(),
+            },
+            // i8 -> tinyint
+            TestCase {
+                value: Some(CassCqlValue::TinyInt(Default::default())),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_TINY_INT)],
             },
         ];
         let all_simple_types = all_value_data_types();
