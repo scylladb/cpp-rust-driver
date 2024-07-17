@@ -165,7 +165,7 @@ pub unsafe extern "C" fn cass_batch_add_statement(
 
     match &statement.statement {
         Statement::Simple(q) => state.batch.append_statement(q.query.clone()),
-        Statement::Prepared(p) => state.batch.append_statement((**p).clone()),
+        Statement::Prepared(p) => state.batch.append_statement(p.statement.clone()),
     };
 
     state.bound_values.push(statement.bound_values.clone());
