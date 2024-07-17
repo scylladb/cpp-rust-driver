@@ -1,4 +1,3 @@
-use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::prepared::CassPrepared;
@@ -6,6 +5,7 @@ use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
@@ -45,12 +45,35 @@ pub struct CassStatement {
 
 impl CassStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
-        if index >= self.bound_values.len() {
-            CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
-        } else {
-            self.bound_values[index] = Set(value);
-            CassError::CASS_OK
+        let (bound_value, maybe_data_type) = match &self.statement {
+            Statement::Simple(_) => match self.bound_values.get_mut(index) {
+                Some(v) => (v, None),
+                None => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+            Statement::Prepared(p) => match (
+                self.bound_values.get_mut(index),
+                p.variable_col_data_types.get(index),
+            ) {
+                (Some(v), Some(dt)) => (v, Some(dt)),
+                (None, None) => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+                // This indicates a length mismatch between col specs table and self.bound_values.
+                //
+                // It can only occur when user provides bad `count` value in `cass_statement_reset_parameters`.
+                // Cpp-driver does not verify that both of these values are equal.
+                // I believe returning CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS is best we can do here.
+                _ => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+        };
+
+        // Perform the typecheck.
+        if let Some(dt) = maybe_data_type {
+            if !value::is_type_compatible(&value, dt) {
+                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+            }
         }
+
+        *bound_value = Set(value);
+        CassError::CASS_OK
     }
 
     fn bind_multiple_values_by_name(
