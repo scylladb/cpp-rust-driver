@@ -112,6 +112,7 @@ pub enum CassDataType {
         val_type: Option<Arc<CassDataType>>,
         frozen: bool,
     },
+    // Empty vector stands for untyped tuple.
     Tuple(Vec<Arc<CassDataType>>),
     Custom(String),
 }
@@ -127,7 +128,23 @@ impl CassDataType {
             CassDataType::List { .. } => todo!(),
             CassDataType::Set { .. } => todo!(),
             CassDataType::Map { .. } => todo!(),
-            CassDataType::Tuple(_) => todo!(),
+            CassDataType::Tuple(sub) => match other {
+                CassDataType::Tuple(other_sub) => {
+                    // If either of tuples is untyped, skip the typecheck for subtypes.
+                    if sub.is_empty() || other_sub.is_empty() {
+                        return true;
+                    }
+
+                    // If both are non-empty, check for subtypes equality.
+                    if sub.len() != other_sub.len() {
+                        return false;
+                    }
+                    sub.iter()
+                        .zip(other_sub.iter())
+                        .all(|(typ, other_typ)| typ.typecheck_equals(other_typ))
+                }
+                _ => false,
+            },
             CassDataType::Custom(_) => {
                 unimplemented!("Cpp-rust-driver does not support custom types!")
             }
