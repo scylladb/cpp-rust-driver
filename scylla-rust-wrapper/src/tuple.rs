@@ -1,8 +1,8 @@
 use crate::argconv::*;
-use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
+use crate::value;
 use crate::value::CassCqlValue;
 use std::sync::Arc;
 
@@ -37,7 +37,7 @@ impl CassTuple {
         }
 
         if let Some(inner_types) = self.get_types() {
-            if !binding::is_compatible_type(&inner_types[index], &v) {
+            if !value::is_type_compatible(&v, &inner_types[index]) {
                 return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
             }
         }
