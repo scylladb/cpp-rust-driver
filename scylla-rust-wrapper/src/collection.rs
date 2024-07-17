@@ -1,8 +1,8 @@
-use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
 use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -32,8 +32,52 @@ pub struct CassCollection {
 }
 
 impl CassCollection {
+    fn typecheck_on_append(&self, value: &Option<CassCqlValue>) -> CassError {
+        // See https://github.com/scylladb/cpp-driver/blob/master/src/collection.hpp#L100.
+        let index = self.items.len();
+
+        // Do validation only if it's a typed collection.
+        if let Some(data_type) = &self.data_type {
+            match data_type.as_ref() {
+                CassDataType::List { typ: subtype, .. }
+                | CassDataType::Set { typ: subtype, .. } => {
+                    if let Some(subtype) = subtype {
+                        if !value::is_type_compatible(value, subtype) {
+                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                        }
+                    }
+                }
+                CassDataType::Map {
+                    key_type: k_typ,
+                    val_type: v_typ,
+                    ..
+                } => {
+                    // Cpp-driver does the typecheck only if both map types are present...
+                    // However, we decided not to mimic this behaviour (which is probably a bug).
+                    // We will do the typecheck if just the key type is defined as well (half-typed maps).
+                    if let Some(k_typ) = k_typ {
+                        if index % 2 == 0 && !value::is_type_compatible(value, k_typ) {
+                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                        }
+                    }
+                    if let Some(v_typ) = v_typ {
+                        if index % 2 != 0 && !value::is_type_compatible(value, v_typ) {
+                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                        }
+                    }
+                }
+                _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+            }
+        }
+
+        CassError::CASS_OK
+    }
+
     pub fn append_cql_value(&mut self, value: Option<CassCqlValue>) -> CassError {
-        // FIXME: Bounds check, type check
+        let err = self.typecheck_on_append(&value);
+        if err != CassError::CASS_OK {
+            return err;
+        }
         // There is no API to append null, so unwrap is safe
         self.items.push(value.unwrap());
         CassError::CASS_OK
@@ -163,3 +207,284 @@ make_binders!(decimal, cass_collection_append_decimal);
 make_binders!(collection, cass_collection_append_collection);
 make_binders!(tuple, cass_collection_append_tuple);
 make_binders!(user_type, cass_collection_append_user_type);
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::{
+        cass_error::CassError,
+        cass_types::{CassDataType, CassValueType},
+        collection::{
+            cass_collection_append_double, cass_collection_append_float, cass_collection_free,
+        },
+        testing::assert_cass_error_eq,
+    };
+
+    use super::{
+        cass_bool_t, cass_collection_append_bool, cass_collection_append_int16,
+        cass_collection_new, cass_collection_new_from_data_type, CassCollectionType,
+    };
+
+    #[test]
+    fn test_typecheck_on_append_to_collection() {
+        unsafe {
+            // untyped map (via cass_collection_new, Collection's data type is None).
+            {
+                let untyped_map =
+                    cass_collection_new(CassCollectionType::CASS_COLLECTION_TYPE_MAP, 2);
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_map, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_map, 42),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_double(untyped_map, 42.42),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_float(untyped_map, 42.42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_map);
+            }
+
+            // untyped map (via cass_collection_new_from_data_type - collection's type is Some(untyped_map)).
+            {
+                let dt = Arc::new(CassDataType::Map {
+                    key_type: None,
+                    val_type: None,
+                    frozen: false,
+                });
+
+                let dt_ptr = Arc::into_raw(dt);
+                let untyped_map = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_map, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_map, 42),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_double(untyped_map, 42.42),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_float(untyped_map, 42.42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_map);
+            }
+
+            // half-typed map (key-only)
+            {
+                let dt = Arc::new(CassDataType::Map {
+                    key_type: Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+                    ))),
+                    val_type: None,
+                    frozen: false,
+                });
+
+                let dt_ptr = Arc::into_raw(dt);
+                let half_typed_map = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(half_typed_map, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(half_typed_map, 42),
+                    CassError::CASS_OK
+                );
+
+                // Second entry -> key typecheck failed.
+                assert_cass_error_eq!(
+                    cass_collection_append_double(half_typed_map, 42.42),
+                    CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+                );
+
+                // Second entry -> typecheck succesful.
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(half_typed_map, true as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_double(half_typed_map, 42.42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(half_typed_map);
+            }
+
+            // typed map
+            {
+                let dt = Arc::new(CassDataType::Map {
+                    key_type: Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+                    ))),
+                    val_type: Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+                    ))),
+                    frozen: false,
+                });
+                let dt_ptr = Arc::into_raw(dt);
+                let bool_to_i16_map = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                // First entry -> typecheck successful.
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(bool_to_i16_map, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(bool_to_i16_map, 42),
+                    CassError::CASS_OK
+                );
+
+                // Second entry -> key typecheck failed.
+                assert_cass_error_eq!(
+                    cass_collection_append_float(bool_to_i16_map, 42.42),
+                    CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+                );
+
+                // Third entry -> value typecheck failed.
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(bool_to_i16_map, true as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_float(bool_to_i16_map, 42.42),
+                    CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+                );
+
+                Arc::from_raw(dt_ptr);
+                cass_collection_free(bool_to_i16_map);
+            }
+
+            // untyped set (via cass_collection_new, collection's type is None)
+            {
+                let untyped_set =
+                    cass_collection_new(CassCollectionType::CASS_COLLECTION_TYPE_SET, 2);
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_set, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_set, 42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_set);
+            }
+
+            // untyped set (via cass_collection_new_from_data_type, collection's type is Some(untyped_set))
+            {
+                let dt = Arc::new(CassDataType::Set {
+                    typ: None,
+                    frozen: false,
+                });
+
+                let dt_ptr = Arc::into_raw(dt);
+                let untyped_set = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_set, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_set, 42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_set);
+            }
+
+            // typed set
+            {
+                let dt = Arc::new(CassDataType::Set {
+                    typ: Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+                    ))),
+                    frozen: false,
+                });
+                let dt_ptr = Arc::into_raw(dt);
+                let bool_set = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(bool_set, true as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_float(bool_set, 42.42),
+                    CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+                );
+
+                Arc::from_raw(dt_ptr);
+                cass_collection_free(bool_set);
+            }
+
+            // untyped list (via cass_collection_new, collection's type is None)
+            {
+                let untyped_list =
+                    cass_collection_new(CassCollectionType::CASS_COLLECTION_TYPE_LIST, 2);
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_list, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_list, 42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_list);
+            }
+
+            // untyped list (via cass_collection_new_from_data_type, collection's type is Some(untyped_list))
+            {
+                let dt = Arc::new(CassDataType::Set {
+                    typ: None,
+                    frozen: false,
+                });
+
+                let dt_ptr = Arc::into_raw(dt);
+                let untyped_list = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(untyped_list, false as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_int16(untyped_list, 42),
+                    CassError::CASS_OK
+                );
+                cass_collection_free(untyped_list);
+            }
+
+            // typed list
+            {
+                let dt = Arc::new(CassDataType::Set {
+                    typ: Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+                    ))),
+                    frozen: false,
+                });
+                let dt_ptr = Arc::into_raw(dt);
+                let bool_list = cass_collection_new_from_data_type(dt_ptr, 2);
+
+                assert_cass_error_eq!(
+                    cass_collection_append_bool(bool_list, true as cass_bool_t),
+                    CassError::CASS_OK
+                );
+                assert_cass_error_eq!(
+                    cass_collection_append_float(bool_list, 42.42),
+                    CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+                );
+
+                Arc::from_raw(dt_ptr);
+                cass_collection_free(bool_list);
+            }
+        }
+    }
+}
