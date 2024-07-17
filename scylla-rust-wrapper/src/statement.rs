@@ -1,4 +1,3 @@
-use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::prepared::CassPrepared;
@@ -6,6 +5,7 @@ use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
@@ -43,13 +43,30 @@ pub struct CassStatement {
 }
 
 impl CassStatement {
+    fn typecheck_on_bind(&self, index: usize, value: &Option<CassCqlValue>) -> CassError {
+        match &self.statement {
+            // Unprepared queries have no metadata, don't perform a typecheck.
+            Statement::Simple(_) => CassError::CASS_OK,
+            Statement::Prepared(p) => {
+                if !value::is_type_compatible(value, &p.variable_col_data_types[index]) {
+                    return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                }
+                CassError::CASS_OK
+            }
+        }
+    }
+
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.bound_values.len() {
-            CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
-        } else {
-            self.bound_values[index] = Set(value);
-            CassError::CASS_OK
+            return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
+        let err = self.typecheck_on_bind(index, &value);
+        if err != CassError::CASS_OK {
+            return err;
+        }
+
+        self.bound_values[index] = Set(value);
+        CassError::CASS_OK
     }
 
     fn bind_multiple_values_by_name(
