@@ -54,8 +54,7 @@ impl CassUserType {
 impl From<&CassUserType> for CassCqlValue {
     fn from(user_type: &CassUserType) -> Self {
         CassCqlValue::UserDefinedType {
-            keyspace: user_type.data_type.get_udt_type().keyspace.clone(),
-            type_name: user_type.data_type.get_udt_type().name.clone(),
+            data_type: user_type.data_type.clone(),
             fields: user_type
                 .field_values
                 .iter()

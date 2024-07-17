@@ -55,8 +55,7 @@ pub enum CassCqlValue {
     Map(Vec<(CassCqlValue, CassCqlValue)>),
     Set(Vec<CassCqlValue>),
     UserDefinedType {
-        keyspace: String,
-        type_name: String,
+        data_type: Arc<CassDataType>,
         /// Order of `fields` vector must match the order of fields as defined in the UDT. The
         /// driver does not check it by itself, so incorrect data will be written if the order is
         /// wrong.
@@ -134,7 +133,7 @@ impl CassCqlValue {
             CassCqlValue::List(_) => todo!(),
             CassCqlValue::Map(_) => todo!(),
             CassCqlValue::Set(_) => todo!(),
-            CassCqlValue::UserDefinedType { .. } => todo!(),
+            CassCqlValue::UserDefinedType { data_type, .. } => data_type.typecheck_equals(typ),
         }
     }
 }
@@ -369,7 +368,7 @@ mod tests {
     use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
-        cass_types::{CassDataType, CassValueType},
+        cass_types::{CassDataType, CassValueType, UDTDataType},
         value::{is_type_compatible, CassCqlValue},
     };
 
@@ -570,6 +569,22 @@ mod tests {
             data_type_bool.clone(),
         ]));
 
+        let simple_fields = vec![
+            ("foo".to_owned(), data_type_float.clone()),
+            ("bar".to_owned(), data_type_bool.clone()),
+            ("baz".to_owned(), data_type_int.clone()),
+        ];
+        let ks_keyspace_name = "ks".to_owned();
+        let user_udt_name = "user".to_owned();
+        let empty_str = "".to_owned();
+
+        let data_type_udt_simple = Arc::new(CassDataType::UDT(UDTDataType {
+            field_types: simple_fields.clone(),
+            keyspace: ks_keyspace_name.clone(),
+            name: user_udt_name.clone(),
+            frozen: false,
+        }));
+
         // TUPLES
         {
             let data_type_untyped_tuple = Arc::new(CassDataType::Tuple(vec![]));
@@ -602,6 +617,7 @@ mod tests {
                         data_type_float.clone(),
                         data_type_int.clone(),
                         data_type_bool.clone(),
+                        data_type_udt_simple.clone(),
                     ],
                 },
                 // Untyped tuple -> used created an untyped tuple data type, and then
@@ -621,6 +637,7 @@ mod tests {
                         data_type_float.clone(),
                         data_type_int.clone(),
                         data_type_bool.clone(),
+                        data_type_udt_simple.clone(),
                     ],
                 },
                 // Fully typed tuple.
@@ -640,6 +657,7 @@ mod tests {
                         data_type_small_tuple.clone(),
                         data_type_nested_tuple.clone(),
                         data_type_nested_tuple.clone(),
+                        data_type_udt_simple.clone(),
                     ],
                 },
                 // Nested tuple.
@@ -659,9 +677,59 @@ mod tests {
                         data_type_bool.clone(),
                         data_type_tuple.clone(),
                         data_type_small_tuple.clone(),
+                        data_type_udt_simple.clone(),
                     ],
                 },
             ];
+
+            run_test_cases(test_cases);
+        }
+
+        // UDT
+        {
+            let data_type_udt_simple_empty_keyspace = Arc::new(CassDataType::UDT(UDTDataType {
+                field_types: simple_fields.clone(),
+                keyspace: empty_str.to_owned(),
+                name: user_udt_name.clone(),
+                frozen: false,
+            }));
+            let data_type_udt_simple_empty_name = Arc::new(CassDataType::UDT(UDTDataType {
+                field_types: simple_fields.clone(),
+                keyspace: ks_keyspace_name.clone(),
+                name: empty_str.clone(),
+                frozen: false,
+            }));
+
+            // A prefix of simple_fields.
+            let small_fields = vec![
+                ("foo".to_owned(), data_type_float.clone()),
+                ("bar".to_owned(), data_type_bool.clone()),
+            ];
+            let data_type_udt_small = Arc::new(CassDataType::UDT(UDTDataType {
+                field_types: small_fields.clone(),
+                keyspace: ks_keyspace_name.clone(),
+                name: user_udt_name.clone(),
+                frozen: false,
+            }));
+
+            let test_cases = &[TestCase {
+                value: CassCqlValue::UserDefinedType {
+                    data_type: data_type_udt_simple.clone(),
+                    fields: vec![],
+                },
+                compatible_types: vec![
+                    data_type_udt_simple.clone(),
+                    data_type_udt_simple_empty_keyspace.clone(),
+                    data_type_udt_simple_empty_name.clone(),
+                    data_type_udt_small.clone(),
+                ],
+                incompatible_types: vec![
+                    data_type_float.clone(),
+                    data_type_int.clone(),
+                    data_type_bool.clone(),
+                    data_type_tuple.clone(),
+                ],
+            }];
 
             run_test_cases(test_cases);
         }
