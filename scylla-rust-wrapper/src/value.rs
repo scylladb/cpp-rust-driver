@@ -78,7 +78,7 @@ impl CassCqlValue {
             CassCqlValue::SmallInt(_) => {
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_SMALL_INT
             }
-            CassCqlValue::Int(_) => todo!(),
+            CassCqlValue::Int(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_INT,
             CassCqlValue::BigInt(_) => todo!(),
             CassCqlValue::Float(_) => todo!(),
             CassCqlValue::Double(_) => todo!(),
@@ -385,6 +385,11 @@ mod tests {
             TestCase {
                 value: Some(CassCqlValue::SmallInt(Default::default())),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_SMALL_INT)],
+            },
+            // i32 -> int
+            TestCase {
+                value: Some(CassCqlValue::Int(Default::default())),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_INT)],
             },
         ];
         let all_simple_types = all_value_data_types();
