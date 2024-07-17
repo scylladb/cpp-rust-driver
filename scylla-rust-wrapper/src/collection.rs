@@ -1,14 +1,32 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::cass_types::CassDataType;
 use crate::types::*;
 use crate::value::CassCqlValue;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
+
+// These constants help us to save an allocation in case user calls `cass_collection_new` (untyped collection).
+static UNTYPED_LIST_TYPE: CassDataType = CassDataType::List {
+    typ: None,
+    frozen: false,
+};
+static UNTYPED_SET_TYPE: CassDataType = CassDataType::Set {
+    typ: None,
+    frozen: false,
+};
+static UNTYPED_MAP_TYPE: CassDataType = CassDataType::Map {
+    key_type: None,
+    val_type: None,
+    frozen: false,
+};
 
 #[derive(Clone)]
 pub struct CassCollection {
     pub collection_type: CassCollectionType,
+    pub data_type: Option<Arc<CassDataType>>,
     pub capacity: usize,
     pub items: Vec<CassCqlValue>,
 }
@@ -57,16 +75,62 @@ pub unsafe extern "C" fn cass_collection_new(
 ) -> *mut CassCollection {
     let capacity = match collection_type {
         // Maps consist of a key and a value, so twice
-        // the number of CqlValue will be stored.
+        // the number of CassCqlValue will be stored.
         CassCollectionType::CASS_COLLECTION_TYPE_MAP => item_count * 2,
         _ => item_count,
     } as usize;
 
     Box::into_raw(Box::new(CassCollection {
         collection_type,
+        data_type: None,
         capacity,
         items: Vec::with_capacity(capacity),
     }))
+}
+
+#[no_mangle]
+unsafe extern "C" fn cass_collection_new_from_data_type(
+    data_type: *const CassDataType,
+    item_count: size_t,
+) -> *mut CassCollection {
+    let data_type = clone_arced(data_type);
+    let (capacity, collection_type) = match data_type.as_ref() {
+        CassDataType::List { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST),
+        CassDataType::Set { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_SET),
+        // Maps consist of a key and a value, so twice
+        // the number of CassCqlValue will be stored.
+        CassDataType::Map { .. } => (item_count * 2, CassCollectionType::CASS_COLLECTION_TYPE_MAP),
+        _ => return std::ptr::null_mut(),
+    };
+    let capacity = capacity as usize;
+
+    Box::into_raw(Box::new(CassCollection {
+        collection_type,
+        data_type: Some(data_type),
+        capacity,
+        items: Vec::with_capacity(capacity),
+    }))
+}
+
+#[no_mangle]
+unsafe extern "C" fn cass_collection_data_type(
+    collection: *const CassCollection,
+) -> *const CassDataType {
+    let collection_ref = ptr_to_ref(collection);
+
+    match &collection_ref.data_type {
+        Some(dt) => Arc::as_ptr(dt),
+        None => match collection_ref.collection_type {
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => &UNTYPED_LIST_TYPE,
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => &UNTYPED_SET_TYPE,
+            CassCollectionType::CASS_COLLECTION_TYPE_MAP => &UNTYPED_MAP_TYPE,
+            // CassCollectionType is a C enum. Panic, if it's out of range.
+            _ => panic!(
+                "CassCollectionType enum value out of range: {}",
+                collection_ref.collection_type.0
+            ),
+        },
+    }
 }
 
 #[no_mangle]

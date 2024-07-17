@@ -173,13 +173,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td colspan=2 align="center" style="font-weight:bold">Collection</td>
         </tr>
         <tr>
-            <td>cass_collection_new_from_data_type</td>
-            <td rowspan="2">Unimplemented</td>
-        </tr>
-        <tr>
-            <td>cass_collection_data_type</td>
-        </tr>
-        <tr>
             <td>cass_collection_append_custom[_n]</td>
             <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the appended value is compatible with the type of the collection items.</td>
         </tr>
