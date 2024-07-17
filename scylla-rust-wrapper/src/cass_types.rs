@@ -116,6 +116,26 @@ pub enum CassDataType {
     Custom(String),
 }
 
+impl CassDataType {
+    /// Checks for equality during typechecks.
+    ///
+    /// This takes into account the fact that tuples/collections may be untyped.
+    pub fn typecheck_equals(&self, other: &CassDataType) -> bool {
+        match self {
+            CassDataType::Value(t) => *t == other.get_value_type(),
+            CassDataType::UDT(_) => todo!(),
+            CassDataType::List { .. } => todo!(),
+            CassDataType::Set { .. } => todo!(),
+            CassDataType::Map { .. } => todo!(),
+            CassDataType::Tuple(_) => todo!(),
+            CassDataType::Custom(name) => match other {
+                CassDataType::Custom(other_name) => name == other_name,
+                _ => false,
+            },
+        }
+    }
+}
+
 impl From<NativeType> for CassValueType {
     fn from(native_type: NativeType) -> CassValueType {
         match native_type {
