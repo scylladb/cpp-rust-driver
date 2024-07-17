@@ -88,7 +88,7 @@ impl CassCqlValue {
                         | CassValueType::CASS_VALUE_TYPE_TIME
                 )
             }
-            CassCqlValue::Float(_) => todo!(),
+            CassCqlValue::Float(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_FLOAT,
             CassCqlValue::Double(_) => todo!(),
             CassCqlValue::Boolean(_) => todo!(),
             CassCqlValue::Text(_) => todo!(),
@@ -408,6 +408,11 @@ mod tests {
                     from(CassValueType::CASS_VALUE_TYPE_TIME),
                     from(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
                 ],
+            },
+            // f32 -> float
+            TestCase {
+                value: Some(CassCqlValue::Float(Default::default())),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_FLOAT)],
             },
         ];
         let all_simple_types = all_value_data_types();
