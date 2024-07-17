@@ -113,7 +113,7 @@ impl CassCqlValue {
                 typ.get_value_type(),
                 CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID
             ),
-            CassCqlValue::Date(_) => todo!(),
+            CassCqlValue::Date(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DATE,
             CassCqlValue::Inet(_) => todo!(),
             CassCqlValue::Duration(_) => todo!(),
             CassCqlValue::Decimal(_) => todo!(),
@@ -351,6 +351,8 @@ fn serialize_udt<'b>(
 
 #[cfg(test)]
 mod tests {
+    use scylla::frame::value::CqlDate;
+
     use crate::{
         cass_types::{CassDataType, CassValueType},
         value::{is_type_compatible, CassCqlValue},
@@ -468,6 +470,11 @@ mod tests {
                     from(CassValueType::CASS_VALUE_TYPE_UUID),
                     from(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
                 ],
+            },
+            // u32 -> date
+            TestCase {
+                value: Some(CassCqlValue::Date(CqlDate(Default::default()))),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DATE)],
             },
         ];
         let all_simple_types = all_value_data_types();
