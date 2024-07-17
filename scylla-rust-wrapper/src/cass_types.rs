@@ -146,6 +146,8 @@ pub enum CassDataType {
         frozen: bool,
     },
     Map {
+        // None, None stands for untyped map.
+        // Some, None stands for a map with an untyped value type.
         key_type: Option<Arc<CassDataType>>,
         val_type: Option<Arc<CassDataType>>,
         frozen: bool,
@@ -181,7 +183,33 @@ impl CassDataType {
                 }
                 _ => false,
             },
-            CassDataType::Map { .. } => todo!(),
+            CassDataType::Map {
+                key_type: k,
+                val_type: v,
+                ..
+            } => match other {
+                CassDataType::Map {
+                    key_type: k_other,
+                    val_type: v_other,
+                    ..
+                } => match ((k, v), (k_other, v_other)) {
+                    // See https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L218
+                    // In cpp-driver the types are held in a vector.
+                    // The logic is following:
+
+                    // If either of vectors is empty, skip the typecheck.
+                    ((None, None), _) => true,
+                    (_, (None, None)) => true,
+
+                    // Otherwise, the vectors should have equal length and we perform the typecheck for subtypes.
+                    ((Some(k), None), (Some(k_other), None)) => k.typecheck_equals(k_other),
+                    ((Some(k), Some(v)), (Some(k_other), Some(v_other))) => {
+                        k.typecheck_equals(k_other) && v.typecheck_equals(v_other)
+                    }
+                    _ => false,
+                },
+                _ => false,
+            },
             CassDataType::Tuple(sub) => match other {
                 CassDataType::Tuple(other_sub) => {
                     // If either of tuples is untyped, skip the typecheck for subtypes.
