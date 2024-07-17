@@ -89,7 +89,9 @@ impl CassCqlValue {
                 )
             }
             CassCqlValue::Float(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_FLOAT,
-            CassCqlValue::Double(_) => todo!(),
+            CassCqlValue::Double(_) => {
+                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DOUBLE
+            }
             CassCqlValue::Boolean(_) => todo!(),
             CassCqlValue::Text(_) => todo!(),
             CassCqlValue::Blob(_) => todo!(),
@@ -413,6 +415,11 @@ mod tests {
             TestCase {
                 value: Some(CassCqlValue::Float(Default::default())),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_FLOAT)],
+            },
+            // f64 -> double
+            TestCase {
+                value: Some(CassCqlValue::Double(Default::default())),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DOUBLE)],
             },
         ];
         let all_simple_types = all_value_data_types();
