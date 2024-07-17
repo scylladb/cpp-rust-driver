@@ -79,7 +79,15 @@ impl CassCqlValue {
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_SMALL_INT
             }
             CassCqlValue::Int(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_INT,
-            CassCqlValue::BigInt(_) => todo!(),
+            CassCqlValue::BigInt(_) => {
+                matches!(
+                    typ.get_value_type(),
+                    CassValueType::CASS_VALUE_TYPE_BIGINT
+                        | CassValueType::CASS_VALUE_TYPE_COUNTER
+                        | CassValueType::CASS_VALUE_TYPE_TIMESTAMP
+                        | CassValueType::CASS_VALUE_TYPE_TIME
+                )
+            }
             CassCqlValue::Float(_) => todo!(),
             CassCqlValue::Double(_) => todo!(),
             CassCqlValue::Boolean(_) => todo!(),
@@ -390,6 +398,16 @@ mod tests {
             TestCase {
                 value: Some(CassCqlValue::Int(Default::default())),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_INT)],
+            },
+            // i64 -> bigint/counter/time/timestamp
+            TestCase {
+                value: Some(CassCqlValue::BigInt(Default::default())),
+                compatible_types: vec![
+                    from(CassValueType::CASS_VALUE_TYPE_BIGINT),
+                    from(CassValueType::CASS_VALUE_TYPE_COUNTER),
+                    from(CassValueType::CASS_VALUE_TYPE_TIME),
+                    from(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
+                ],
             },
         ];
         let all_simple_types = all_value_data_types();
