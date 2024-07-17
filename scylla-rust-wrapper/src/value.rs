@@ -17,6 +17,8 @@ use scylla::{
 };
 use uuid::Uuid;
 
+use crate::cass_types::CassDataType;
+
 /// A narrower version of rust driver's CqlValue.
 ///
 /// cpp-driver's API allows to map single rust type to
@@ -58,6 +60,19 @@ pub enum CassCqlValue {
         fields: Vec<(String, Option<CassCqlValue>)>,
     },
     // TODO: custom (?), duration and decimal
+}
+
+pub fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> bool {
+    match value {
+        Some(v) => v.is_type_compatible(typ),
+        None => true,
+    }
+}
+
+impl CassCqlValue {
+    pub fn is_type_compatible(&self, _typ: &CassDataType) -> bool {
+        true
+    }
 }
 
 impl SerializeValue for CassCqlValue {
