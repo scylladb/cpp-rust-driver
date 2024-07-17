@@ -50,7 +50,10 @@ impl CassTuple {
 
 impl From<&CassTuple> for CassCqlValue {
     fn from(tuple: &CassTuple) -> Self {
-        CassCqlValue::Tuple(tuple.items.clone())
+        CassCqlValue::Tuple {
+            data_type: tuple.data_type.clone(),
+            fields: tuple.items.clone(),
+        }
     }
 }
 

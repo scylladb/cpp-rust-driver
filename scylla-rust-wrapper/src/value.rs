@@ -1,4 +1,4 @@
-use std::{convert::TryInto, net::IpAddr};
+use std::{convert::TryInto, net::IpAddr, sync::Arc};
 
 use scylla::{
     frame::{
@@ -47,7 +47,10 @@ pub enum CassCqlValue {
     Inet(IpAddr),
     Duration(CqlDuration),
     Decimal(CqlDecimal),
-    Tuple(Vec<Option<CassCqlValue>>),
+    Tuple {
+        data_type: Option<Arc<CassDataType>>,
+        fields: Vec<Option<CassCqlValue>>,
+    },
     List(Vec<CassCqlValue>),
     Map(Vec<(CassCqlValue, CassCqlValue)>),
     Set(Vec<CassCqlValue>),
@@ -121,7 +124,13 @@ impl CassCqlValue {
             CassCqlValue::Decimal(_) => {
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DECIMAL
             }
-            CassCqlValue::Tuple(_) => todo!(),
+            CassCqlValue::Tuple { data_type, .. } => {
+                if let Some(dt) = data_type {
+                    return dt.typecheck_equals(typ);
+                }
+                // Untyped tuple.
+                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_TUPLE
+            }
             CassCqlValue::List(_) => todo!(),
             CassCqlValue::Map(_) => todo!(),
             CassCqlValue::Set(_) => todo!(),
@@ -198,7 +207,7 @@ impl CassCqlValue {
             CassCqlValue::Decimal(v) => {
                 <CqlDecimal as SerializeCql>::serialize(v, &ColumnType::Decimal, writer)
             }
-            CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
+            CassCqlValue::Tuple { fields, .. } => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
             CassCqlValue::Map(m) => {
                 serialize_mapping(m.len(), m.iter().map(|p| (&p.0, &p.1)), writer)
@@ -355,7 +364,7 @@ fn serialize_udt<'b>(
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
+    use std::{net::Ipv4Addr, sync::Arc};
 
     use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
@@ -525,8 +534,8 @@ mod tests {
     fn typecheck_complex_test() {
         struct TestCase {
             pub value: CassCqlValue,
-            pub compatible_types: Vec<CassDataType>,
-            pub incompatible_types: Vec<CassDataType>,
+            pub compatible_types: Vec<Arc<CassDataType>>,
+            pub incompatible_types: Vec<Arc<CassDataType>>,
         }
 
         let run_test_cases = |test_cases: Vec<TestCase>| {
@@ -549,5 +558,110 @@ mod tests {
                 }
             }
         };
+
+        let data_type_float = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_FLOAT));
+        let data_type_int = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INT));
+        let data_type_bool = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN));
+
+        // TUPLES
+        {
+            let data_type_untyped_tuple = Arc::new(CassDataType::Tuple(vec![]));
+            let data_type_small_tuple = Arc::new(CassDataType::Tuple(vec![data_type_bool.clone()]));
+            let data_type_tuple = Arc::new(CassDataType::Tuple(vec![
+                data_type_float.clone(),
+                data_type_int.clone(),
+                data_type_bool.clone(),
+            ]));
+            let data_type_nested_tuple = Arc::new(CassDataType::Tuple(vec![
+                data_type_small_tuple.clone(),
+                data_type_int.clone(),
+                data_type_tuple.clone(),
+            ]));
+            let data_type_nested_untyped_tuple = Arc::new(CassDataType::Tuple(vec![
+                data_type_untyped_tuple.clone(),
+                data_type_int.clone(),
+                data_type_untyped_tuple.clone(),
+            ]));
+
+            let test_cases = vec![
+                // Untyped tuple -> created via `cass_tuple_new`
+                TestCase {
+                    value: CassCqlValue::Tuple {
+                        data_type: None,
+                        fields: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_untyped_tuple.clone(),
+                        data_type_small_tuple.clone(),
+                        data_type_tuple.clone(),
+                        data_type_nested_tuple.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                    ],
+                },
+                // Untyped tuple -> used created an untyped tuple data type, and then
+                // created a tuple value via `cass_tuple_new_from_data_type`.
+                TestCase {
+                    value: CassCqlValue::Tuple {
+                        data_type: Some(data_type_untyped_tuple.clone()),
+                        fields: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_untyped_tuple.clone(),
+                        data_type_small_tuple.clone(),
+                        data_type_tuple.clone(),
+                        data_type_nested_tuple.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                    ],
+                },
+                // Fully typed tuple.
+                TestCase {
+                    value: CassCqlValue::Tuple {
+                        data_type: Some(data_type_tuple.clone()),
+                        fields: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_tuple.clone(),
+                        data_type_untyped_tuple.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_small_tuple.clone(),
+                        data_type_nested_tuple.clone(),
+                        data_type_nested_tuple.clone(),
+                    ],
+                },
+                // Nested tuple.
+                TestCase {
+                    value: CassCqlValue::Tuple {
+                        data_type: Some(data_type_nested_tuple.clone()),
+                        fields: vec![],
+                    },
+                    compatible_types: vec![
+                        data_type_nested_tuple.clone(),
+                        data_type_untyped_tuple.clone(),
+                        data_type_nested_untyped_tuple.clone(),
+                    ],
+                    incompatible_types: vec![
+                        data_type_float.clone(),
+                        data_type_int.clone(),
+                        data_type_bool.clone(),
+                        data_type_tuple.clone(),
+                        data_type_small_tuple.clone(),
+                    ],
+                },
+            ];
+
+            run_test_cases(test_cases);
+        }
     }
 }
