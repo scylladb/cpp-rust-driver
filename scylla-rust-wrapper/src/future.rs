@@ -8,7 +8,6 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use crate::RUNTIME;
 use futures::future;
-use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
 use std::mem;
 use std::os::raw::c_void;
@@ -20,7 +19,7 @@ pub enum CassResultValue {
     Empty,
     QueryResult(Arc<CassResult>),
     QueryError(Arc<CassErrorResult>),
-    Prepared(Arc<PreparedStatement>),
+    Prepared(Arc<CassPrepared>),
 }
 
 type CassFutureError = (CassError, String);

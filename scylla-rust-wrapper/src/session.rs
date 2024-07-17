@@ -8,6 +8,7 @@ use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProf
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
+use crate::prepared::CassPrepared;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collection, Value};
 use crate::statement::CassStatement;
@@ -279,9 +280,9 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match &mut statement {
             Statement::Simple(query) => query.query.set_execution_profile_handle(handle),
-            Statement::Prepared(prepared) => {
-                Arc::make_mut(prepared).set_execution_profile_handle(handle)
-            }
+            Statement::Prepared(prepared) => Arc::make_mut(prepared)
+                .statement
+                .set_execution_profile_handle(handle),
         }
 
         let query_res: Result<(QueryResult, PagingStateResponse), QueryError> = match statement {
@@ -300,11 +301,11 @@ pub unsafe extern "C" fn cass_session_execute(
             Statement::Prepared(prepared) => {
                 if paging_enabled {
                     session
-                        .execute_single_page(&prepared, bound_values, paging_state)
+                        .execute_single_page(&prepared.statement, bound_values, paging_state)
                         .await
                 } else {
                     session
-                        .execute_unpaged(&prepared, bound_values)
+                        .execute_unpaged(&prepared.statement, bound_values)
                         .await
                         .map(|result| (result, PagingStateResponse::NoMorePages))
                 }
@@ -499,7 +500,9 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
-        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+        Ok(CassResultValue::Prepared(Arc::new(
+            CassPrepared::new_from_prepared_statement(prepared),
+        )))
     })
 }
 
@@ -542,7 +545,9 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // Set Cpp Driver default configuration for queries:
         prepared.set_consistency(Consistency::One);
 
-        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+        Ok(CassResultValue::Prepared(Arc::new(
+            CassPrepared::new_from_prepared_statement(prepared),
+        )))
     })
 }
 
