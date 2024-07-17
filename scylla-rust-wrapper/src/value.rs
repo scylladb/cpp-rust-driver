@@ -105,7 +105,10 @@ impl CassCqlValue {
                         | CassValueType::CASS_VALUE_TYPE_VARINT
                 )
             }
-            CassCqlValue::Blob(_) => todo!(),
+            CassCqlValue::Blob(_) => matches!(
+                typ.get_value_type(),
+                CassValueType::CASS_VALUE_TYPE_BLOB | CassValueType::CASS_VALUE_TYPE_VARINT
+            ),
             CassCqlValue::Uuid(_) => todo!(),
             CassCqlValue::Date(_) => todo!(),
             CassCqlValue::Inet(_) => todo!(),
@@ -443,6 +446,14 @@ mod tests {
                     from(CassValueType::CASS_VALUE_TYPE_TEXT),
                     from(CassValueType::CASS_VALUE_TYPE_VARCHAR),
                     from(CassValueType::CASS_VALUE_TYPE_ASCII),
+                    from(CassValueType::CASS_VALUE_TYPE_BLOB),
+                    from(CassValueType::CASS_VALUE_TYPE_VARINT),
+                ],
+            },
+            // Vec<u8> -> blob/varint
+            TestCase {
+                value: Some(CassCqlValue::Blob(Default::default())),
+                compatible_types: vec![
                     from(CassValueType::CASS_VALUE_TYPE_BLOB),
                     from(CassValueType::CASS_VALUE_TYPE_VARINT),
                 ],
