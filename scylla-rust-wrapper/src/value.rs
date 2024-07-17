@@ -92,7 +92,9 @@ impl CassCqlValue {
             CassCqlValue::Double(_) => {
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DOUBLE
             }
-            CassCqlValue::Boolean(_) => todo!(),
+            CassCqlValue::Boolean(_) => {
+                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_BOOLEAN
+            }
             CassCqlValue::Text(_) => todo!(),
             CassCqlValue::Blob(_) => todo!(),
             CassCqlValue::Uuid(_) => todo!(),
@@ -420,6 +422,11 @@ mod tests {
             TestCase {
                 value: Some(CassCqlValue::Double(Default::default())),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DOUBLE)],
+            },
+            // bool -> boolean
+            TestCase {
+                value: Some(CassCqlValue::Boolean(Default::default())),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_BOOLEAN)],
             },
         ];
         let all_simple_types = all_value_data_types();
