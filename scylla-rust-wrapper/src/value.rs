@@ -109,7 +109,10 @@ impl CassCqlValue {
                 typ.get_value_type(),
                 CassValueType::CASS_VALUE_TYPE_BLOB | CassValueType::CASS_VALUE_TYPE_VARINT
             ),
-            CassCqlValue::Uuid(_) => todo!(),
+            CassCqlValue::Uuid(_) => matches!(
+                typ.get_value_type(),
+                CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID
+            ),
             CassCqlValue::Date(_) => todo!(),
             CassCqlValue::Inet(_) => todo!(),
             CassCqlValue::Duration(_) => todo!(),
@@ -456,6 +459,14 @@ mod tests {
                 compatible_types: vec![
                     from(CassValueType::CASS_VALUE_TYPE_BLOB),
                     from(CassValueType::CASS_VALUE_TYPE_VARINT),
+                ],
+            },
+            // uuid -> uuid/timeuuid
+            TestCase {
+                value: Some(CassCqlValue::Uuid(Default::default())),
+                compatible_types: vec![
+                    from(CassValueType::CASS_VALUE_TYPE_UUID),
+                    from(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
                 ],
             },
         ];
