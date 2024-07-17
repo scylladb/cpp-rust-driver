@@ -87,6 +87,42 @@ impl UDTDataType {
     pub fn get_field_by_index(&self, index: usize) -> Option<&Arc<CassDataType>> {
         self.field_types.get(index).map(|(_, b)| b)
     }
+
+    fn typecheck_equals(&self, other: &UDTDataType) -> bool {
+        // See: https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L354-L386
+
+        if !any_string_empty_or_both_equal(&self.keyspace, &other.keyspace) {
+            return false;
+        }
+        if !any_string_empty_or_both_equal(&self.name, &other.name) {
+            return false;
+        }
+
+        // A comment from cpp-driver:
+        //// UDT's can be considered equal as long as the mutual first fields shared
+        //// between them are equal. UDT's are append only as far as fields go, so a
+        //// newer 'version' of the UDT data type after a schema change event should be
+        //// treated as equivalent in this scenario, by simply looking at the first N
+        //// mutual fields they should share.
+        //
+        // Iterator returned from zip() is perfect for checking the first mutual fields.
+        for (field, other_field) in self.field_types.iter().zip(other.field_types.iter()) {
+            // Compare field names.
+            if field.0 != other_field.0 {
+                return false;
+            }
+            // Compare field types.
+            if !field.1.typecheck_equals(&other_field.1) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+fn any_string_empty_or_both_equal(s1: &str, s2: &str) -> bool {
+    s1.is_empty() || s2.is_empty() || s1 == s2
 }
 
 impl Default for UDTDataType {
@@ -124,7 +160,10 @@ impl CassDataType {
     pub fn typecheck_equals(&self, other: &CassDataType) -> bool {
         match self {
             CassDataType::Value(t) => *t == other.get_value_type(),
-            CassDataType::UDT(_) => todo!(),
+            CassDataType::UDT(udt) => match other {
+                CassDataType::UDT(other_udt) => udt.typecheck_equals(other_udt),
+                _ => false,
+            },
             CassDataType::List { .. } => todo!(),
             CassDataType::Set { .. } => todo!(),
             CassDataType::Map { .. } => todo!(),
