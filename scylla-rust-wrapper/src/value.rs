@@ -114,7 +114,7 @@ impl CassCqlValue {
                 CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID
             ),
             CassCqlValue::Date(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DATE,
-            CassCqlValue::Inet(_) => todo!(),
+            CassCqlValue::Inet(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_INET,
             CassCqlValue::Duration(_) => todo!(),
             CassCqlValue::Decimal(_) => todo!(),
             CassCqlValue::Tuple(_) => todo!(),
@@ -351,6 +351,8 @@ fn serialize_udt<'b>(
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use scylla::frame::value::CqlDate;
 
     use crate::{
@@ -475,6 +477,13 @@ mod tests {
             TestCase {
                 value: Some(CassCqlValue::Date(CqlDate(Default::default()))),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DATE)],
+            },
+            // IpAddr -> inet
+            TestCase {
+                value: Some(CassCqlValue::Inet(std::net::IpAddr::V4(
+                    Ipv4Addr::LOCALHOST,
+                ))),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_INET)],
             },
         ];
         let all_simple_types = all_value_data_types();
