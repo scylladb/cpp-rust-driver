@@ -297,3 +297,73 @@ fn serialize_udt<'b>(
         .finish()
         .map_err(|_| mk_ser_err::<CassCqlValue>(BuiltinSerializationErrorKind::SizeOverflow))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        cass_types::{CassDataType, CassValueType},
+        value::{is_type_compatible, CassCqlValue},
+    };
+
+    fn all_value_data_types() -> [CassDataType; 26] {
+        let from = |v_typ: CassValueType| CassDataType::Value(v_typ);
+
+        [
+            from(CassValueType::CASS_VALUE_TYPE_TINY_INT),
+            from(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
+            from(CassValueType::CASS_VALUE_TYPE_INT),
+            from(CassValueType::CASS_VALUE_TYPE_BIGINT),
+            from(CassValueType::CASS_VALUE_TYPE_COUNTER),
+            from(CassValueType::CASS_VALUE_TYPE_TIME),
+            from(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
+            from(CassValueType::CASS_VALUE_TYPE_FLOAT),
+            from(CassValueType::CASS_VALUE_TYPE_DOUBLE),
+            from(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
+            from(CassValueType::CASS_VALUE_TYPE_TEXT),
+            from(CassValueType::CASS_VALUE_TYPE_VARCHAR),
+            from(CassValueType::CASS_VALUE_TYPE_ASCII),
+            from(CassValueType::CASS_VALUE_TYPE_BLOB),
+            from(CassValueType::CASS_VALUE_TYPE_UUID),
+            from(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
+            from(CassValueType::CASS_VALUE_TYPE_DATE),
+            from(CassValueType::CASS_VALUE_TYPE_INET),
+            from(CassValueType::CASS_VALUE_TYPE_DURATION),
+            from(CassValueType::CASS_VALUE_TYPE_DECIMAL),
+            from(CassValueType::CASS_VALUE_TYPE_VARINT),
+            from(CassValueType::CASS_VALUE_TYPE_TUPLE),
+            from(CassValueType::CASS_VALUE_TYPE_LIST),
+            from(CassValueType::CASS_VALUE_TYPE_SET),
+            from(CassValueType::CASS_VALUE_TYPE_MAP),
+            from(CassValueType::CASS_VALUE_TYPE_UDT),
+        ]
+    }
+
+    #[test]
+    fn typecheck_simple_test() {
+        struct TestCase {
+            value: Option<CassCqlValue>,
+            compatible_types: Vec<CassDataType>,
+        }
+
+        let test_cases = [
+            // Null -> all types
+            TestCase {
+                value: None,
+                compatible_types: all_value_data_types().to_vec(),
+            },
+        ];
+        let all_simple_types = all_value_data_types();
+
+        for case in test_cases {
+            for typ in all_simple_types.iter() {
+                let result = is_type_compatible(&case.value, typ);
+                let expected = case.compatible_types.iter().any(|t| t == typ);
+                assert_eq!(
+                    expected, result,
+                    "Typecheck test for value {:?} and type {:?} failed. Expected result for the typecheck: {}",
+                    case.value, typ, expected,
+                );
+            }
+        }
+    }
+}
