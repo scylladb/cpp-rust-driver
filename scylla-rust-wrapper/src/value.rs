@@ -355,7 +355,7 @@ fn serialize_udt<'b>(
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
+    use std::{net::Ipv4Addr, sync::Arc};
 
     use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
@@ -519,5 +519,35 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn typecheck_complex_test() {
+        struct TestCase {
+            value: CassCqlValue,
+            compatible_types: Vec<Arc<CassDataType>>,
+            incompatible_types: Vec<Arc<CassDataType>>,
+        }
+
+        let run_test_cases = |test_cases: &[TestCase]| {
+            for case in test_cases {
+                for typ in case.compatible_types.iter() {
+                    assert!(
+                        case.value.is_type_compatible(typ),
+                        "Typecheck failed, when it should pass. Value: {:?}, Type: {:?}",
+                        case.value,
+                        typ
+                    );
+                }
+                for typ in case.incompatible_types.iter() {
+                    assert!(
+                        !case.value.is_type_compatible(typ),
+                        "Typecheck passed, when it should fail. Value: {:?}, Type: {:?}",
+                        case.value,
+                        typ
+                    )
+                }
+            }
+        };
     }
 }
