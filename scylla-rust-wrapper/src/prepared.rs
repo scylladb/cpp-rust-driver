@@ -19,7 +19,7 @@ pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: *const CassPrepared,
 ) -> *mut CassStatement {
     let prepared: Arc<_> = clone_arced(prepared_raw);
-    let bound_values_size = prepared.get_prepared_metadata().col_count;
+    let bound_values_size = prepared.get_variable_col_specs().len();
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument

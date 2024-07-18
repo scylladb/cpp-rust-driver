@@ -3,8 +3,7 @@ use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
-use std::convert::TryFrom;
+use crate::value::CassCqlValue;
 use std::sync::Arc;
 
 static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
@@ -12,7 +11,7 @@ static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
 #[derive(Clone)]
 pub struct CassTuple {
     pub data_type: Option<Arc<CassDataType>>,
-    pub items: Vec<Option<CqlValue>>,
+    pub items: Vec<Option<CassCqlValue>>,
 }
 
 impl CassTuple {
@@ -32,7 +31,7 @@ impl CassTuple {
     // not bind items with too high index.
     // If it was created using `cass_tuple_new_from_data_type` we additionally check if
     // value has correct type.
-    fn bind_value(&mut self, index: usize, v: Option<CqlValue>) -> CassError {
+    fn bind_value(&mut self, index: usize, v: Option<CassCqlValue>) -> CassError {
         if index >= self.items.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
@@ -49,10 +48,9 @@ impl CassTuple {
     }
 }
 
-impl TryFrom<&CassTuple> for CqlValue {
-    type Error = CassError;
-    fn try_from(tuple: &CassTuple) -> Result<Self, Self::Error> {
-        Ok(CqlValue::Tuple(tuple.items.clone()))
+impl From<&CassTuple> for CassCqlValue {
+    fn from(tuple: &CassTuple) -> Self {
+        CassCqlValue::Tuple(tuple.items.clone())
     }
 }
 

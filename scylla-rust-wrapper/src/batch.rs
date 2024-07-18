@@ -6,8 +6,8 @@ use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{CassStatement, Statement};
 use crate::types::*;
+use crate::value::CassCqlValue;
 use scylla::batch::Batch;
-use scylla::frame::response::result::CqlValue;
 use scylla::frame::value::MaybeUnset;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub struct CassBatch {
 #[derive(Clone)]
 pub struct CassBatchState {
     pub batch: Batch,
-    pub bound_values: Vec<Vec<MaybeUnset<Option<CqlValue>>>>,
+    pub bound_values: Vec<Vec<MaybeUnset<Option<CassCqlValue>>>>,
 }
 
 #[no_mangle]

@@ -33,6 +33,7 @@ pub mod tuple;
 pub mod types;
 pub mod user_type;
 pub mod uuid;
+pub mod value;
 
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
