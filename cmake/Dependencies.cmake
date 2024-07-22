@@ -11,53 +11,55 @@ endif()
 # Libuv
 #------------------------
 
-# Setup the paths and hints for libuv
-if(NOT LIBUV_ROOT_DIR)
-  if(EXISTS "${PROJECT_SOURCE_DIR}/lib/libuv/")
-    set(LIBUV_ROOT_DIR "${PROJECT_SOURCE_DIR}/lib/libuv/")
-  elseif(EXISTS "${PROJECT_SOURCE_DIR}/build/libs/libuv/")
-    set(LIBUV_ROOT_DIR "${PROJECT_SOURCE_DIR}/build/libs/libuv/")
+if(CASS_USE_LIBUV)
+  # Setup the paths and hints for libuv
+  if(NOT LIBUV_ROOT_DIR)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/lib/libuv/")
+      set(LIBUV_ROOT_DIR "${PROJECT_SOURCE_DIR}/lib/libuv/")
+    elseif(EXISTS "${PROJECT_SOURCE_DIR}/build/libs/libuv/")
+      set(LIBUV_ROOT_DIR "${PROJECT_SOURCE_DIR}/build/libs/libuv/")
+    endif()
   endif()
-endif()
 
-# Ensure libuv was found
-find_package(Libuv "1.0.0")
-if(WIN32 AND NOT LIBUV_FOUND)
-  message(STATUS "Unable to Locate libuv: Third party build step will be performed")
-  include(ExternalProject-libuv)
-elseif(NOT LIBUV_FOUND)
-  message(FATAL_ERROR "Unable to Locate libuv: libuv v1.0.0+ is required")
-endif()
+  # Ensure libuv was found
+  find_package(Libuv "1.0.0")
+  if(WIN32 AND NOT LIBUV_FOUND)
+    message(STATUS "Unable to Locate libuv: Third party build step will be performed")
+    include(ExternalProject-libuv)
+  elseif(NOT LIBUV_FOUND)
+    message(FATAL_ERROR "Unable to Locate libuv: libuv v1.0.0+ is required")
+  endif()
 
-if(LIBUV_VERSION VERSION_LESS "1.0")
-  message(FATAL_ERROR "Libuv version ${LIBUV_VERSION} is not "
-    " supported. Please updgrade to libuv version 1.0 or greater in order to "
-    "utilize the driver.")
-endif()
+  if(LIBUV_VERSION VERSION_LESS "1.0")
+    message(FATAL_ERROR "Libuv version ${LIBUV_VERSION} is not "
+      " supported. Please updgrade to libuv version 1.0 or greater in order to "
+      "utilize the driver.")
+  endif()
 
-if(LIBUV_VERSION VERSION_LESS "1.6")
-  message(WARNING "Libuv version ${LIBUV_VERSION} does not support custom "
-    "memory allocators (version 1.6 or greater required)")
-endif()
+  if(LIBUV_VERSION VERSION_LESS "1.6")
+    message(WARNING "Libuv version ${LIBUV_VERSION} does not support custom "
+      "memory allocators (version 1.6 or greater required)")
+  endif()
 
-# Assign libuv include and libraries
-set(CASS_INCLUDES ${CASS_INCLUDES} ${LIBUV_INCLUDE_DIRS})
-set(CASS_LIBS ${CASS_LIBS} ${LIBUV_LIBRARIES})
+  # Assign libuv include and libraries
+  set(CASS_INCLUDES ${CASS_INCLUDES} ${LIBUV_INCLUDE_DIRS})
+  set(CASS_LIBS ${CASS_LIBS} ${LIBUV_LIBRARIES})
 
-# libuv and gtests require thread library
-if(NOT WIN32)
-  set(CMAKE_THREAD_PREFER_PTHREAD 1)
-  set(THREADS_PREFER_PTHREAD_FLAG 1)
-endif()
+  # libuv and gtests require thread library
+  if(NOT WIN32)
+    set(CMAKE_THREAD_PREFER_PTHREAD 1)
+    set(THREADS_PREFER_PTHREAD_FLAG 1)
+  endif()
 
-find_package(Threads REQUIRED)
+  find_package(Threads REQUIRED)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
-if(NOT WIN32 AND ${CMAKE_VERSION} VERSION_LESS "3.1.0")
-  # FindThreads in CMake versions < v3.1.0 do not have the THREADS_PREFER_PTHREAD_FLAG to prefer -pthread
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_THREAD_LIBS_INIT}")
+  if(NOT WIN32 AND ${CMAKE_VERSION} VERSION_LESS "3.1.0")
+    # FindThreads in CMake versions < v3.1.0 do not have the THREADS_PREFER_PTHREAD_FLAG to prefer -pthread
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+  endif()
 endif()
 
 #------------------------

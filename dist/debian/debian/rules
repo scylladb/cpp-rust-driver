@@ -6,48 +6,20 @@ export DH_VERBOSE=1
 include /usr/share/dpkg/architecture.mk
 include /usr/share/dpkg/buildflags.mk
 
-export CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
-export DEB_HOST_RUST_TYPE DEB_HOST_GNU_TYPE
+export CFLAGS CXXFLAGS CPPFLAGS LDFLAGS DEB_HOST_GNU_TYPE
 jobs := $(shell echo $$DEB_BUILD_OPTIONS | sed -r "s/.*parallel=([0-9]+).*/-j\1/")
-SCYLLA_VERSION := $(shell cat version | awk -F'-' '{print $1}' | sed 's/-/~/')
-
-VERSION_MAJOR := $(shell sed -n -e 's/^#define CASS_VERSION_MAJOR \(.*\)/\1/p' include/cassandra.h)
-RUSTFLAGS := --cap-lints warn -C linker=x86_64-linux-gnu-gcc -C link-arg=-Wl,-Bsymbolic-functions -C link-arg=-Wl,-z,relro -Clink-arg=-Wl,-soname=libscylla-cpp-driver.so.$(VERSION_MAJOR)
-export RUSTFLAGS
+CARGO_HOME := $(CURDIR)/scylla-rust-wrapper/.cargo
+RUSTUP_HOME := $(CURDIR)/scylla-rust-wrapper/.rustup
+export CARGO_HOME
+export RUSTUP_HOME
 
 %:
 	dh $@
 
 override_dh_auto_clean:
-	rm -rf scylla-rust-wrapper/target/packaging
 	rm -rf scylla-rust-wrapper/.cargo
-	rm -rf scylla-rust-wrapper/.rust
+	rm -rf scylla-rust-wrapper/.rustup
 
 override_dh_auto_configure:
-	/usr/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | CARGO_HOME=$(CURDIR)/scylla-rust-wrapper/.cargo RUSTUP_HOME=$(CURDIR)/scylla-rust-wrapper/.rust /bin/sh -s -- -v -y --no-modify-path
-
-override_dh_auto_build:
-	(cd scylla-rust-wrapper && PATH=$(CURDIR)/scylla-rust-wrapper/.cargo/bin:$$PATH CARGO_HOME=$(CURDIR)/scylla-rust-wrapper/.cargo RUSTUP_HOME=$(CURDIR)/scylla-rust-wrapper/.rust $(CURDIR)/scylla-rust-wrapper/.cargo/bin/cargo build $(jobs) --profile packaging --verbose)
-	(cd scylla-rust-wrapper && ./versioning.sh --profile packaging)
-	sed -e "s#@prefix@#/usr#g" \
-	-e "s#@exec_prefix@#/usr#g" \
-	-e "s#@libdir@#/usr/lib/$(DEB_HOST_MULTIARCH)#g" \
-	-e "s#@includedir@#/usr/include#g" \
-	-e "s#@version@#$(SCYLLA_VERSION)#g" \
-	dist/common/pkgconfig/scylla-cpp-driver.pc.in > debian/scylla-cpp-driver.pc
-	sed -e "s#@prefix@#/usr#g" \
-	-e "s#@exec_prefix@#/usr#g" \
-	-e "s#@libdir@#/usr/lib/$(DEB_HOST_MULTIARCH)#g" \
-	-e "s#@includedir@#/usr/include#g" \
-	-e "s#@version@#$(SCYLLA_VERSION)#g" \
-	dist/common/pkgconfig/scylla-cpp-driver_static.pc.in > debian/scylla-cpp-driver_static.pc
-
-override_dh_auto_install:
-	mkdir -p "$(CURDIR)"/debian/tmp/usr/lib/"$(DEB_HOST_GNU_TYPE)"
-	mkdir -p "$(CURDIR)"/debian/tmp/usr/lib/"$(DEB_HOST_GNU_TYPE)"/pkgconfig
-	mkdir -p "$(CURDIR)"/debian/tmp/usr/include
-	install -Dpm0644 "$(CURDIR)"/scylla-rust-wrapper/target/packaging/*.a "$(CURDIR)"/debian/tmp/usr/lib/"$(DEB_HOST_GNU_TYPE)"
-	# We need to avoid dereference symlink, so can't use install here
-	cp -a "$(CURDIR)"/scylla-rust-wrapper/target/packaging/*.so "$(CURDIR)"/scylla-rust-wrapper/target/packaging/*.so.* "$(CURDIR)"/debian/tmp/usr/lib/"$(DEB_HOST_GNU_TYPE)"/
-	install -Dpm0644 "$(CURDIR)"/debian/*.pc "$(CURDIR)"/debian/tmp/usr/lib/"$(DEB_HOST_GNU_TYPE)"/pkgconfig
-	install -Dpm0644 "$(CURDIR)"/include/*.h "$(CURDIR)"/debian/tmp/usr/include
+	/usr/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | /bin/sh -s -- -v -y --no-modify-path
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_RustFLAGS="--cap-lints warn -C linker=$(DEB_HOST_GNU_TYPE)-gcc -C link-arg=-Wl,-Bsymbolic-functions -C link-arg=-Wl,-z,relro"
