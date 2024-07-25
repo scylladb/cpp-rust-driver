@@ -1,7 +1,10 @@
 use std::{convert::TryInto, net::IpAddr};
 
 use scylla::{
-    frame::{response::result::ColumnType, value::CqlDate},
+    frame::{
+        response::result::ColumnType,
+        value::{CqlDate, CqlDuration},
+    },
     serialize::{
         value::{
             BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeCql,
@@ -40,6 +43,7 @@ pub enum CassCqlValue {
     Uuid(Uuid),
     Date(CqlDate),
     Inet(IpAddr),
+    Duration(CqlDuration),
     Tuple(Vec<Option<CassCqlValue>>),
     List(Vec<CassCqlValue>),
     Map(Vec<(CassCqlValue, CassCqlValue)>),
@@ -116,6 +120,9 @@ impl CassCqlValue {
             }
             CassCqlValue::Inet(v) => {
                 <IpAddr as SerializeCql>::serialize(v, &ColumnType::Inet, writer)
+            }
+            CassCqlValue::Duration(v) => {
+                <CqlDuration as SerializeCql>::serialize(v, &ColumnType::Duration, writer)
             }
             CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
