@@ -171,7 +171,7 @@ impl SerializeCql for CassCqlValue {
         _typ: &ColumnType,
         writer: CellWriter<'b>,
     ) -> Result<WrittenCellProof<'b>, SerializationError> {
-        // _typ is not used, since we do the typechecks during binding (this is still a TODO, high priority).
+        // _typ is not used, since we do the typechecks during binding.
         // This is the same approach as cpp-driver.
         self.do_serialize(writer)
     }
