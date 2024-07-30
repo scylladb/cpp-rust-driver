@@ -160,10 +160,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
         <tr>
             <td>cass_statement_bind_custom[by_name]</td>
-            <td rowspan="2">Binding is not implemented for custom types in the Rust driver. <br> Binding Decimal type requires encoding raw bytes into BigDecimal type in the Rust driver. <br> <b>Note</b>: The driver does not validate the types of the values passed to queries.</td>
-        </tr>
-        <tr>
-            <td>cass_statement_bind_decimal[by_name]</td>
+            <td>Binding is not implemented for custom types in the Rust driver.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Future</td>

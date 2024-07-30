@@ -338,22 +338,6 @@ cass_statement_bind_custom_by_name(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_custom_by_name\n");
 }
 CASS_EXPORT CassError
-cass_statement_bind_decimal(CassStatement* statement,
-                            size_t index,
-                            const cass_byte_t* varint,
-                            size_t varint_size,
-                            cass_int32_t scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_decimal\n");
-}
-CASS_EXPORT CassError
-cass_statement_bind_decimal_by_name(CassStatement* statement,
-                                    const char* name,
-                                    const cass_byte_t* varint,
-                                    size_t varint_size,
-                                    cass_int32_t scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_decimal_by_name\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,
                                   const CassCustomPayload* payload){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_custom_payload\n");
