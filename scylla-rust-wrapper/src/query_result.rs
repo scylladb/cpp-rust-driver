@@ -1170,6 +1170,11 @@ pub unsafe extern "C" fn cass_value_get_bytes(
             *output = bytes.as_ptr() as *const cass_byte_t;
             *output_size = bytes.len() as u64;
         }
+        Some(Value::RegularValue(CqlValue::Varint(varint))) => {
+            let bytes = varint.as_signed_bytes_be_slice();
+            std::ptr::write(output, bytes.as_ptr());
+            std::ptr::write(output_size, bytes.len() as size_t);
+        }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     }
