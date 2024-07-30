@@ -136,9 +136,8 @@ macro_rules! make_appender {
     }
 }
 
-// TODO: Types for which binding is not implemented yet:
+// Types for which binding is not implemented:
 // custom - Not implemented in Rust driver
-// decimal
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -289,6 +288,19 @@ macro_rules! invoke_binder_maker_macro_with_type {
                 })))
             },
             [m @ cass_int32_t, d @ cass_int32_t, n @ cass_int64_t]
+        );
+    };
+    (decimal, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |v, v_size, scale| {
+                use scylla::frame::value::CqlDecimal;
+                let varint = std::slice::from_raw_parts(v, v_size as usize);
+                Ok(Some(Decimal(CqlDecimal::from_signed_be_bytes_slice_and_exponent(varint, scale))))
+            },
+            [v @ *const cass_byte_t, v_size @ size_t, scale @ cass_int32_t]
         );
     };
     (collection, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
