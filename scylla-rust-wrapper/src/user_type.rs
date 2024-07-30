@@ -188,6 +188,12 @@ make_binders!(
     cass_user_type_set_duration_by_name_n
 );
 make_binders!(
+    decimal,
+    cass_user_type_set_decimal,
+    cass_user_type_set_decimal_by_name,
+    cass_user_type_set_decimal_by_name_n
+);
+make_binders!(
     collection,
     cass_user_type_set_collection,
     cass_user_type_set_collection_by_name,

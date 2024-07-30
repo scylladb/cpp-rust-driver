@@ -411,11 +411,3 @@ cass_user_type_set_custom_by_name(CassUserType* user_type,
                                   size_t value_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_custom_by_name\n");
 }
-CASS_EXPORT CassError
-cass_user_type_set_decimal_by_name(CassUserType* user_type,
-                                   const char* name,
-                                   const cass_byte_t* varint,
-                                   size_t varint_size,
-                                   int scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_decimal_by_name\n");
-}
