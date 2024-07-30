@@ -348,8 +348,8 @@ macro_rules! invoke_binder_maker_macro_with_type {
 ///         In the function, value will be consumed using `$consume_v_name`.
 ///  * `@name_n` - accepts type and function name, declares this function using `make_name_n_binder` macro.
 ///         In the function, value will be consumed using `$consume_v_name`.
-/// There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
-/// binding the same type by index, name and name_n):
+///         There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
+///         binding the same type by index, name and name_n):
 ///  * `make_binders!(type, fn_idx, fn_name, fn_name_n)` - is equivalent to:
 ///     ```
 ///     make_binders!(@index type, fn_idx);

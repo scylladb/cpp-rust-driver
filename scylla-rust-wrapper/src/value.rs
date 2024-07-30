@@ -23,6 +23,7 @@ use uuid::Uuid;
 /// - time
 /// - counter
 /// - timestamp
+///
 /// There is no such method as `cass_statement_bind_counter`, and so
 /// we need to serialize the counter value using `CassCqlValue::BigInt`.
 #[derive(Clone, Debug, PartialEq)]
