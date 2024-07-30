@@ -396,14 +396,6 @@ cass_tuple_set_custom(CassTuple* tuple,
 	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_custom\n");
 }
 CASS_EXPORT CassError
-cass_tuple_set_decimal(CassTuple* tuple,
-                       size_t index,
-                       const cass_byte_t* varint,
-                       size_t varint_size,
-                       cass_int32_t scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_decimal\n");
-}
-CASS_EXPORT CassError
 cass_user_type_set_custom(CassUserType* user_type,
                           size_t index,
                           const char* class_name,
