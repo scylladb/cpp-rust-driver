@@ -157,13 +157,6 @@ cass_collection_append_custom(CassCollection* collection,
                               size_t value_size){
 	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_custom\n");
 }
-CASS_EXPORT CassError
-cass_collection_append_decimal(CassCollection* collection,
-                               const cass_byte_t* varint,
-                               size_t varint_size,
-                               cass_int32_t scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_decimal\n");
-}
 CASS_EXPORT const CassValue*
 cass_column_meta_field_by_name(const CassColumnMeta* column_meta,
                                const char* name){
