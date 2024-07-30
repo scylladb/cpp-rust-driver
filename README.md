@@ -206,10 +206,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td colspan=2 align="center" style="font-weight:bold">Value</td>
         </tr>
         <tr>
-            <td>cass_value_get_decimal</td>
-            <td>Getting raw bytes of Decimal values requires lazy deserialization feature in the Rust driver.</td>
-        </tr>
-        <tr>
             <td>cass_value_get_bytes</td>
             <td>When the above requirement is satisfied, this should be implemented for all CQL types. Currently, it returns only bytes of a Blob object, otherwise returns CASS_ERROR_LIB_INVALID_VALUE_TYPE.</td>
         </tr>

@@ -450,10 +450,3 @@ cass_user_type_set_decimal_by_name(CassUserType* user_type,
                                    int scale){
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_decimal_by_name\n");
 }
-CASS_EXPORT CassError
-cass_value_get_decimal(const CassValue* value,
-                       const cass_byte_t** varint,
-                       size_t* varint_size,
-                       cass_int32_t* scale){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_get_decimal\n");
-}

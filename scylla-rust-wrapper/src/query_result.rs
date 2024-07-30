@@ -1087,6 +1087,28 @@ pub unsafe extern "C" fn cass_value_get_inet(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_get_decimal(
+    value: *const CassValue,
+    varint: *mut *const cass_byte_t,
+    varint_size: *mut size_t,
+    scale: *mut cass_int32_t,
+) -> CassError {
+    let val: &CassValue = ptr_to_ref(value);
+    let decimal = match &val.value {
+        Some(Value::RegularValue(CqlValue::Decimal(decimal))) => decimal,
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    };
+
+    let (varint_value, scale_value) = decimal.as_signed_be_bytes_slice_and_exponent();
+    std::ptr::write(varint_size, varint_value.len() as size_t);
+    std::ptr::write(varint, varint_value.as_ptr());
+    std::ptr::write(scale, scale_value);
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_get_string(
     value: *const CassValue,
     output: *mut *const c_char,
@@ -1529,14 +1551,6 @@ pub unsafe extern "C" fn cass_value_get_bytes(
     value: *const CassValue,
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
-) -> CassError {
-}
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_decimal(
-    value: *const CassValue,
-    varint: *mut *const cass_byte_t,
-    varint_size: *mut size_t,
-    scale: *mut cass_int32_t,
 ) -> CassError {
 }
 extern "C" {
