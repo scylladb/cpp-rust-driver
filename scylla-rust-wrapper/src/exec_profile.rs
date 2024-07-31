@@ -249,6 +249,17 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_policy(
+    profile: *mut CassExecProfile,
+) -> CassError {
+    let profile_builder = ptr_to_ref_mut(profile);
+
+    profile_builder.modify_in_place(|builder| builder.speculative_execution_policy(None));
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_execution_policy(
     profile: *mut CassExecProfile,
     constant_delay_ms: cass_int64_t,
