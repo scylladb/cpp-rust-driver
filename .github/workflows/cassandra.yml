@@ -57,7 +57,10 @@ jobs:
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :ExecutionProfileTest.InvalidName"
         run: valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite ./cassandra-integration-tests --version=4.0.7 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
-
+      - name: Run timeout sensitive integration tests on Cassandra 4.0.7 without valgrind
+        env:
+          Tests: "AsyncTests.Integration_Cassandra_Simple"
+        run: ./cassandra-integration-tests --version=4.0.7 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
       - name: Upload test logs
         uses: actions/upload-artifact@v3
         if: success() || failure()
