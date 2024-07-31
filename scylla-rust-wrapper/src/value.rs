@@ -73,18 +73,50 @@ impl CassCqlValue {
         writer: CellWriter<'b>,
     ) -> Result<WrittenCellProof<'b>, SerializationError> {
         match self {
-            CassCqlValue::TinyInt(v) => serialize_i8(v, writer),
-            CassCqlValue::SmallInt(v) => serialize_i16(v, writer),
-            CassCqlValue::Int(v) => serialize_i32(v, writer),
-            CassCqlValue::BigInt(v) => serialize_i64(v, writer),
-            CassCqlValue::Float(v) => serialize_f32(v, writer),
-            CassCqlValue::Double(v) => serialize_f64(v, writer),
-            CassCqlValue::Boolean(v) => serialize_bool(v, writer),
-            CassCqlValue::Text(v) => serialize_text(v, writer),
-            CassCqlValue::Blob(v) => serialize_blob(v, writer),
-            CassCqlValue::Uuid(v) => serialize_uuid(v, writer),
-            CassCqlValue::Date(v) => serialize_date(v, writer),
-            CassCqlValue::Inet(v) => serialize_inet(v, writer),
+            // Notice:
+            // We make use of builtin rust-driver serialization for simple types.
+            // Keep in mind, that rust's implementation includes typechecks.
+            //
+            // We don't want to perform the typechecks here, because we handle it
+            // earlier, during binding.
+            // This is why, we make use of a hack, and provide a valid (in rust-driver's ser implementation)
+            // ColumnType for each variant. This way, we can make sure that rust-driver's typecheck
+            // will never fail. Thanks to that, we do not have to reimplement low-level serialization
+            // for each type.
+            CassCqlValue::TinyInt(v) => {
+                <i8 as SerializeCql>::serialize(v, &ColumnType::TinyInt, writer)
+            }
+            CassCqlValue::SmallInt(v) => {
+                <i16 as SerializeCql>::serialize(v, &ColumnType::SmallInt, writer)
+            }
+            CassCqlValue::Int(v) => <i32 as SerializeCql>::serialize(v, &ColumnType::Int, writer),
+            CassCqlValue::BigInt(v) => {
+                <i64 as SerializeCql>::serialize(v, &ColumnType::BigInt, writer)
+            }
+            CassCqlValue::Float(v) => {
+                <f32 as SerializeCql>::serialize(v, &ColumnType::Float, writer)
+            }
+            CassCqlValue::Double(v) => {
+                <f64 as SerializeCql>::serialize(v, &ColumnType::Double, writer)
+            }
+            CassCqlValue::Boolean(v) => {
+                <bool as SerializeCql>::serialize(v, &ColumnType::Boolean, writer)
+            }
+            CassCqlValue::Text(v) => {
+                <String as SerializeCql>::serialize(v, &ColumnType::Text, writer)
+            }
+            CassCqlValue::Blob(v) => {
+                <Vec<u8> as SerializeCql>::serialize(v, &ColumnType::Blob, writer)
+            }
+            CassCqlValue::Uuid(v) => {
+                <Uuid as SerializeCql>::serialize(v, &ColumnType::Uuid, writer)
+            }
+            CassCqlValue::Date(v) => {
+                <CqlDate as SerializeCql>::serialize(v, &ColumnType::Date, writer)
+            }
+            CassCqlValue::Inet(v) => {
+                <IpAddr as SerializeCql>::serialize(v, &ColumnType::Inet, writer)
+            }
             CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
             CassCqlValue::Map(m) => {
@@ -131,67 +163,6 @@ fn mk_ser_err_named(
         kind: kind.into(),
     })
 }
-
-/// Generates a function that serializes a value of given type.
-macro_rules! fn_serialize_via_writer {
-    ($ser_fn:ident,
-     $rust_typ:tt$(<$($targ:tt),+>)?,
-     |$ser_me:ident, $writer:ident| $ser:expr) => {
-        fn $ser_fn<'b>(
-            v: &$rust_typ$(<$($targ),+>)?,
-            writer: CellWriter<'b>,
-        ) -> Result<WrittenCellProof<'b>, SerializationError> {
-            let $writer = writer;
-            let $ser_me = v;
-            let proof = $ser;
-            Ok(proof)
-        }
-    };
-}
-
-fn_serialize_via_writer!(serialize_i8, i8, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_i16, i16, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_i32, i32, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_i64, i64, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_f32, f32, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_f64, f64, |me, writer| {
-    writer.set_value(me.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_bool, bool, |me, writer| {
-    writer.set_value(&[*me as u8]).unwrap()
-});
-fn_serialize_via_writer!(serialize_text, String, |me, writer| {
-    writer
-        .set_value(me.as_bytes())
-        .map_err(|_| mk_ser_err::<String>(BuiltinSerializationErrorKind::SizeOverflow))?
-});
-fn_serialize_via_writer!(serialize_blob, Vec<u8>, |me, writer| {
-    writer
-        .set_value(me.as_ref())
-        .map_err(|_| mk_ser_err::<Vec<u8>>(BuiltinSerializationErrorKind::SizeOverflow))?
-});
-fn_serialize_via_writer!(serialize_uuid, Uuid, |me, writer| {
-    writer.set_value(me.as_bytes().as_ref()).unwrap()
-});
-fn_serialize_via_writer!(serialize_date, CqlDate, |me, writer| {
-    writer.set_value(me.0.to_be_bytes().as_slice()).unwrap()
-});
-fn_serialize_via_writer!(serialize_inet, IpAddr, |me, writer| {
-    match me {
-        IpAddr::V4(ip) => writer.set_value(&ip.octets()).unwrap(),
-        IpAddr::V6(ip) => writer.set_value(&ip.octets()).unwrap(),
-    }
-});
 
 fn serialize_tuple_like<'t, 'b>(
     field_values: impl Iterator<Item = &'t Option<CassCqlValue>>,
