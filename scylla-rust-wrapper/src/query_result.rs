@@ -1165,12 +1165,12 @@ pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_boo
 pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t {
     let val = ptr_to_ref(value);
 
-    match val.value {
-        Some(Value::CollectionValue(Collection::List(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Set(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Map(_))) => true as cass_bool_t,
-        _ => false as cass_bool_t,
-    }
+    matches!(
+        val.value_type.get_value_type(),
+        CassValueType::CASS_VALUE_TYPE_LIST
+            | CassValueType::CASS_VALUE_TYPE_SET
+            | CassValueType::CASS_VALUE_TYPE_MAP
+    ) as cass_bool_t
 }
 
 #[no_mangle]
@@ -1544,9 +1544,6 @@ extern "C" {
 }
 extern "C" {
     pub fn cass_value_type(value: *const CassValue) -> CassValueType;
-}
-extern "C" {
-    pub fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t;
 }
 extern "C" {
     pub fn cass_value_item_count(collection: *const CassValue) -> size_t;
