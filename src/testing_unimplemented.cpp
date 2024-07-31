@@ -246,11 +246,6 @@ CASS_EXPORT const CassNode*
 cass_future_coordinator(CassFuture* future){
 	throw std::runtime_error("UNIMPLEMENTED cass_future_coordinator\n");
 }
-CASS_EXPORT cass_bool_t
-cass_future_wait_timed(CassFuture* future,
-                       cass_duration_t timeout_us){
-	throw std::runtime_error("UNIMPLEMENTED cass_future_wait_timed\n");
-}
 CASS_EXPORT const CassValue*
 cass_index_meta_field_by_name(const CassIndexMeta* index_meta,
                                const char* name){
