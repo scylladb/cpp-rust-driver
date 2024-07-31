@@ -131,11 +131,6 @@ cass_cluster_set_prepare_on_up_or_add_host(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_up_or_add_host\n");
 }
 CASS_EXPORT void
-cass_cluster_set_request_timeout(CassCluster* cluster,
-                                 unsigned timeout_ms){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_request_timeout\n");
-}
-CASS_EXPORT void
 cass_cluster_set_retry_policy(CassCluster* cluster,
                               CassRetryPolicy* retry_policy){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_retry_policy\n");

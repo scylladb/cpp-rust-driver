@@ -225,6 +225,19 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_request_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        // 0 -> no timeout
+        builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
+    })
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_port(
     cluster_raw: *mut CassCluster,
     port: c_int,
