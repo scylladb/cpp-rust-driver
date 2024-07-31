@@ -51,6 +51,7 @@ jobs:
 :ByNameTests.*\
 :CompressionTests.*\
 :LoggingTests.*\
+:AsyncTests.Integration_Cassandra_Simple\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :*5.Integration_Cassandra_*\
