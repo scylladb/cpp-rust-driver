@@ -115,9 +115,12 @@ pub fn build_session_builder(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
-    // According to `cassandra.h` the default CPP driver's consistency for statements is LOCAL_ONE.
-    let default_execution_profile_builder =
-        ExecutionProfileBuilder::default().consistency(Consistency::LocalOne);
+    // According to `cassandra.h` the default CPP driver's
+    // - consistency for statements is LOCAL_ONE,
+    // - request client timeout is 12000 millis.
+    let default_execution_profile_builder = ExecutionProfileBuilder::default()
+        .consistency(Consistency::LocalOne)
+        .request_timeout(Some(Duration::from_millis(12000)));
 
     Box::into_raw(Box::new(CassCluster {
         session_builder: SessionBuilder::new(),
