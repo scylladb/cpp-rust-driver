@@ -13,6 +13,7 @@ use std::mem;
 use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
 use tokio::task::JoinHandle;
+use tokio::time::Duration;
 
 pub enum CassResultValue {
     Empty,
@@ -124,6 +125,42 @@ impl CassFuture {
         f(&mut guard)
     }
 
+    fn with_waited_result_timed<T>(
+        &self,
+        f: impl FnOnce(&mut CassFutureResult) -> T,
+        timeout_duration: Duration,
+    ) -> Result<T, ()> {
+        self.with_waited_state_timed(|s| f(s.value.as_mut().unwrap()), timeout_duration)
+    }
+
+    pub(self) fn with_waited_state_timed<T>(
+        &self,
+        f: impl FnOnce(&mut CassFutureState) -> T,
+        timeout_duration: Duration,
+    ) -> Result<T, ()> {
+        let mut guard = self.state.lock().unwrap();
+        let handle = guard.join_handle.take();
+        if let Some(handle) = handle {
+            mem::drop(guard);
+            // Need to wrap it with async{} block, so the timeout is lazily executed inside the runtime.
+            // See mention about panics: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html.
+            let timed = async { tokio::time::timeout(timeout_duration, handle).await };
+            RUNTIME.block_on(timed).map_err(|_| ())?.unwrap();
+            guard = self.state.lock().unwrap();
+        } else {
+            let (guard_result, timeout_result) = self
+                .wait_for_value
+                .wait_timeout_while(guard, timeout_duration, |state| state.value.is_none())
+                .unwrap();
+            if timeout_result.timed_out() {
+                return Err(());
+            }
+            guard = guard_result;
+        }
+
+        Ok(f(&mut guard))
+    }
+
     pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
         let mut lock = self.state.lock().unwrap();
         if lock.callback.is_some() {
@@ -165,6 +202,16 @@ pub unsafe extern "C" fn cass_future_set_callback(
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
     ptr_to_ref(future_raw).with_waited_result(|_| ());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_wait_timed(
+    future_raw: *const CassFuture,
+    timeout_us: cass_duration_t,
+) -> cass_bool_t {
+    ptr_to_ref(future_raw)
+        .with_waited_result_timed(|_| (), Duration::from_micros(timeout_us))
+        .is_ok() as cass_bool_t
 }
 
 #[no_mangle]
@@ -301,6 +348,37 @@ mod tests {
             assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
 
             handle.join().unwrap();
+            cass_future_free(cass_fut);
+        }
+    }
+
+    // This test makes sure that the future resolves even if timeout happens.
+    //
+    // Tokio's runtime documentation states that Runtime::spawn starts
+    // running a future immediately, even if the future was not await'ed before.
+    #[test]
+    #[ntest::timeout(200)]
+    fn cass_future_resolves_after_timeout() {
+        const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+        let fut = async move {
+            tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
+            Err((CassError::CASS_OK, ERROR_MSG.into()))
+        };
+        let cass_fut = CassFuture::make_raw(fut);
+
+        unsafe {
+            // This should timeout on tokio::time::timeout.
+            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            assert_eq!(0, timed_result);
+
+            // This should timeout on cond variable (previous call consumed JoinHandle).
+            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            assert_eq!(0, timed_result);
+
+            // Verify that future eventually resolves, even though timeouts occurred before.
+            assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+
             cass_future_free(cass_fut);
         }
     }

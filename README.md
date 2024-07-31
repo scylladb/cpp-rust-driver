@@ -172,11 +172,8 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td colspan=2 align="center" style="font-weight:bold">Future</td>
         </tr>
         <tr>
-            <td>cass_future_wait_timed</td>
-            <td rowspan="3">Unimplemented</td>
-        </tr>
-        <tr>
             <td>cass_future_coordinator</td>
+            <td>Unimplemented</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Collection</td>
