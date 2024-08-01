@@ -270,6 +270,8 @@ pub unsafe extern "C" fn cass_future_tracing_id(
 
 #[cfg(test)]
 mod tests {
+    use crate::testing::assert_cass_future_error_message_eq;
+
     use super::*;
     use std::{os::raw::c_char, thread, time::Duration};
 
@@ -293,16 +295,10 @@ mod tests {
         unsafe {
             let handle = thread::spawn(move || {
                 let PtrWrapper(cass_fut) = wrapped_cass_fut;
-                let mut message: *const c_char = std::ptr::null();
-                let mut msg_len: size_t = 0;
-                cass_future_error_message(cass_fut, &mut message, &mut msg_len);
-                assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
             });
 
-            let mut message: *const c_char = std::ptr::null();
-            let mut msg_len: size_t = 0;
-            cass_future_error_message(cass_fut, &mut message, &mut msg_len);
-            assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+            assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
 
             handle.join().unwrap();
             cass_future_free(cass_fut);
