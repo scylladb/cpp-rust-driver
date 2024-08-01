@@ -105,7 +105,7 @@ CASSANDRA_INTEGRATION_TEST_F(AsyncTests, Simple) {
 
   // Wait on all futures to complete and validate the results
   for (std::vector<Future>::iterator it = futures.begin(); it != futures.end(); ++it) {
-    it->wait_timed();
+    it->wait();
   }
   validate_async_inserts(keys);
 }
