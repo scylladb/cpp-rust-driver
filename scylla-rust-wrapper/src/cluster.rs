@@ -26,6 +26,12 @@ use std::time::Duration;
 
 include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 
+// According to `cassandra.h` the default CPP driver's
+// - consistency for statements is LOCAL_ONE,
+// - request client timeout is 12000 millis.
+const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
+const DEFAULT_REQUEST_TIMEOUT_MILLIS: u64 = 12000;
+
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
@@ -115,9 +121,9 @@ pub fn build_session_builder(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
-    // According to `cassandra.h` the default CPP driver's consistency for statements is LOCAL_ONE.
-    let default_execution_profile_builder =
-        ExecutionProfileBuilder::default().consistency(Consistency::LocalOne);
+    let default_execution_profile_builder = ExecutionProfileBuilder::default()
+        .consistency(DEFAULT_CONSISTENCY)
+        .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
 
     Box::into_raw(Box::new(CassCluster {
         session_builder: SessionBuilder::new(),
@@ -222,6 +228,19 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_request_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        // 0 -> no timeout
+        builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
+    })
 }
 
 #[no_mangle]
