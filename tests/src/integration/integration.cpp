@@ -368,6 +368,7 @@ void Integration::connect() {
 test::driver::Cluster Integration::default_cluster(bool is_with_default_contact_points /*= true*/) {
   // Create the default cluster object
   Cluster cluster = Cluster::build()
+                        .with_request_timeout(0)
                         .with_randomized_contact_points(is_randomized_contact_points_)
                         .with_schema_metadata(is_schema_metadata_);
   if (is_with_default_contact_points) {
