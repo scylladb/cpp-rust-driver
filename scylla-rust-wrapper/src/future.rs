@@ -108,7 +108,7 @@ impl CassFuture {
         self.with_waited_state(|s| f(s.value.as_mut().unwrap()))
     }
 
-    pub(self) fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
+    fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
         let mut guard = self.state.lock().unwrap();
         let handle = guard.join_handle.take();
         if let Some(handle) = handle {
