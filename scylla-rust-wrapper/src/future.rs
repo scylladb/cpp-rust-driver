@@ -317,10 +317,14 @@ pub unsafe extern "C" fn cass_future_tracing_id(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::assert_cass_future_error_message_eq;
+    use crate::testing::{assert_cass_error_eq, assert_cass_future_error_message_eq};
 
     use super::*;
-    use std::{os::raw::c_char, thread, time::Duration};
+    use std::{
+        os::raw::c_char,
+        thread::{self},
+        time::Duration,
+    };
 
     // This is not a particularly smart test, but if some thread is granted access the value
     // before it is truly computed, then weird things should happen, even a segfault.
@@ -380,6 +384,79 @@ mod tests {
             assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
 
             cass_future_free(cass_fut);
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(500)]
+    fn test_cass_future_callback() {
+        unsafe {
+            const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+            const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+
+            let create_future_and_flag = || {
+                unsafe extern "C" fn mark_flag_cb(_fut: *const CassFuture, data: *mut c_void) {
+                    let flag = data as *mut bool;
+                    *flag = true;
+                }
+
+                const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+                let fut = async move {
+                    tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
+                    Err((CassError::CASS_OK, ERROR_MSG.into()))
+                };
+                let cass_fut = CassFuture::make_raw(fut);
+                let flag = Box::new(false);
+                let flag_ptr = Box::into_raw(flag);
+
+                assert_cass_error_eq!(
+                    cass_future_set_callback(cass_fut, Some(mark_flag_cb), flag_ptr as *mut c_void),
+                    CassError::CASS_OK
+                );
+
+                (cass_fut, flag_ptr)
+            };
+
+            // Callback executed after awaiting.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+                cass_future_wait(cass_fut);
+
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
+
+            // Callback executed after timeouts.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+
+                // This should timeout on tokio::time::timeout.
+                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                assert_eq!(0, timed_result);
+                // This should timeout on cond variable (previous call consumed JoinHandle).
+                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                assert_eq!(0, timed_result);
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
+
+            // Don't await the future. Just sleep.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+
+                std::thread::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS + 10 * 1000));
+
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
         }
     }
 }
