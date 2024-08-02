@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, get_column_type, CassDataType, CassValueType};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -22,7 +22,28 @@ pub struct CassResult {
 pub struct CassResultData {
     pub paging_state: Option<Bytes>,
     pub col_specs: Vec<ColumnSpec>,
+    pub col_data_types: Vec<Arc<CassDataType>>,
     pub tracing_id: Option<Uuid>,
+}
+
+impl CassResultData {
+    pub fn from_result_payload(
+        paging_state: Option<Bytes>,
+        col_specs: Vec<ColumnSpec>,
+        tracing_id: Option<Uuid>,
+    ) -> CassResultData {
+        let col_data_types = col_specs
+            .iter()
+            .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+            .collect();
+
+        CassResultData {
+            paging_state,
+            col_specs,
+            col_data_types,
+            tracing_id,
+        }
+    }
 }
 
 /// The lifetime of CassRow is bound to CassResult.
@@ -902,6 +923,38 @@ pub unsafe extern "C" fn cass_result_column_name(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_result_column_type(
+    result: *const CassResult,
+    index: size_t,
+) -> CassValueType {
+    let result_from_raw: &CassResult = ptr_to_ref(result);
+    let index_usize: usize = index.try_into().unwrap();
+
+    result_from_raw
+        .metadata
+        .col_data_types
+        .get(index_usize)
+        .map(|arc_data_type| cass_data_type_type(Arc::as_ptr(arc_data_type)))
+        .unwrap_or(CassValueType::CASS_VALUE_TYPE_UNKNOWN)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_result_column_data_type(
+    result: *const CassResult,
+    index: size_t,
+) -> *const CassDataType {
+    let result_from_raw: &CassResult = ptr_to_ref(result);
+    let index_usize: usize = index.try_into().unwrap();
+
+    result_from_raw
+        .metadata
+        .col_data_types
+        .get(index_usize)
+        .map(Arc::as_ptr)
+        .unwrap_or(std::ptr::null())
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_type(value: *const CassValue) -> CassValueType {
     let value_from_raw = ptr_to_ref(value);
 
@@ -1218,11 +1271,12 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult)
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.is_some() || result.rows.as_ref().unwrap().is_empty() {
-        return result.rows.as_ref().unwrap().first().unwrap();
-    }
-
-    std::ptr::null()
+    result
+        .rows
+        .as_ref()
+        .and_then(|rows| rows.first())
+        .map(|row| row as *const CassRow)
+        .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
@@ -1249,6 +1303,188 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
     }
 
     CassError::CASS_OK
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
+
+    use scylla::frame::response::result::{ColumnSpec, ColumnType, CqlValue, Row, TableSpec};
+
+    use crate::{
+        cass_error::CassError,
+        cass_types::{CassDataType, CassValueType},
+        query_result::{
+            cass_result_column_data_type, cass_result_column_name, cass_result_first_row,
+            ptr_to_cstr_n, ptr_to_ref, size_t,
+        },
+        session::create_cass_rows_from_rows,
+    };
+
+    use super::{cass_result_column_count, cass_result_column_type, CassResult, CassResultData};
+
+    fn col_spec(name: &str, typ: ColumnType) -> ColumnSpec {
+        ColumnSpec {
+            table_spec: TableSpec {
+                ks_name: "ks".to_string(),
+                table_name: "tbl".to_string(),
+            },
+            name: name.to_string(),
+            typ,
+        }
+    }
+
+    const FIRST_COLUMN_NAME: &str = "bigint_col";
+    const SECOND_COLUMN_NAME: &str = "varint_col";
+    const THIRD_COLUMN_NAME: &str = "list_double_col";
+    fn create_cass_rows_result() -> CassResult {
+        let metadata = Arc::new(CassResultData::from_result_payload(
+            None,
+            vec![
+                col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
+                col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
+                col_spec(
+                    THIRD_COLUMN_NAME,
+                    ColumnType::List(Box::new(ColumnType::Double)),
+                ),
+            ],
+            None,
+        ));
+
+        let rows = create_cass_rows_from_rows(
+            Some(vec![Row {
+                columns: vec![
+                    Some(CqlValue::BigInt(42)),
+                    None,
+                    Some(CqlValue::List(vec![
+                        CqlValue::Float(0.5),
+                        CqlValue::Float(42.42),
+                        CqlValue::Float(9999.9999),
+                    ])),
+                ],
+            }]),
+            &metadata,
+        );
+
+        CassResult { rows, metadata }
+    }
+
+    unsafe fn cass_result_column_name_rust_str(
+        result_ptr: *const CassResult,
+        column_index: u64,
+    ) -> Option<&'static str> {
+        let mut name_ptr: *const c_char = std::ptr::null();
+        let mut name_length: size_t = 0;
+        let cass_err = cass_result_column_name(
+            result_ptr,
+            column_index,
+            addr_of_mut!(name_ptr),
+            addr_of_mut!(name_length),
+        );
+        assert_eq!(CassError::CASS_OK, cass_err);
+        ptr_to_cstr_n(name_ptr, name_length)
+    }
+
+    #[test]
+    fn rows_cass_result_api_test() {
+        let result = create_cass_rows_result();
+
+        unsafe {
+            let result_ptr = std::ptr::addr_of!(result);
+
+            // cass_result_column_count test
+            {
+                let column_count = cass_result_column_count(result_ptr);
+                assert_eq!(3, column_count);
+            }
+
+            // cass_result_column_name test
+            {
+                let first_column_name = cass_result_column_name_rust_str(result_ptr, 0).unwrap();
+                assert_eq!(FIRST_COLUMN_NAME, first_column_name);
+                let second_column_name = cass_result_column_name_rust_str(result_ptr, 1).unwrap();
+                assert_eq!(SECOND_COLUMN_NAME, second_column_name);
+                let third_column_name = cass_result_column_name_rust_str(result_ptr, 2).unwrap();
+                assert_eq!(THIRD_COLUMN_NAME, third_column_name);
+            }
+
+            // cass_result_column_type test
+            {
+                let first_col_type = cass_result_column_type(result_ptr, 0);
+                assert_eq!(CassValueType::CASS_VALUE_TYPE_BIGINT, first_col_type);
+                let second_col_type = cass_result_column_type(result_ptr, 1);
+                assert_eq!(CassValueType::CASS_VALUE_TYPE_VARINT, second_col_type);
+                let third_col_type = cass_result_column_type(result_ptr, 2);
+                assert_eq!(CassValueType::CASS_VALUE_TYPE_LIST, third_col_type);
+                let out_of_bound_col_type = cass_result_column_type(result_ptr, 555);
+                assert_eq!(
+                    CassValueType::CASS_VALUE_TYPE_UNKNOWN,
+                    out_of_bound_col_type
+                );
+            }
+
+            // cass_result_column_data_type test
+            {
+                let first_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 0));
+                assert_eq!(
+                    &CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BIGINT),
+                    first_col_data_type
+                );
+                let second_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 1));
+                assert_eq!(
+                    &CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
+                    second_col_data_type
+                );
+                let third_col_data_type = ptr_to_ref(cass_result_column_data_type(result_ptr, 2));
+                assert_eq!(
+                    &CassDataType::List(Some(Arc::new(CassDataType::Value(
+                        CassValueType::CASS_VALUE_TYPE_DOUBLE
+                    )))),
+                    third_col_data_type
+                );
+                let out_of_bound_col_data_type = cass_result_column_data_type(result_ptr, 555);
+                assert!(out_of_bound_col_data_type.is_null());
+            }
+        }
+    }
+
+    fn create_non_rows_cass_result() -> CassResult {
+        let metadata = Arc::new(CassResultData::from_result_payload(None, vec![], None));
+        CassResult {
+            rows: None,
+            metadata,
+        }
+    }
+
+    #[test]
+    fn non_rows_cass_result_api_test() {
+        let result = create_non_rows_cass_result();
+
+        // Check that API functions do not panic when rows are empty - e.g. for INSERT queries.
+        unsafe {
+            let result_ptr = std::ptr::addr_of!(result);
+
+            assert_eq!(0, cass_result_column_count(result_ptr));
+            assert_eq!(
+                CassValueType::CASS_VALUE_TYPE_UNKNOWN,
+                cass_result_column_type(result_ptr, 0)
+            );
+            assert!(cass_result_column_data_type(result_ptr, 0).is_null());
+            assert!(cass_result_first_row(result_ptr).is_null());
+
+            {
+                let mut name_ptr: *const c_char = std::ptr::null();
+                let mut name_length: size_t = 0;
+                let cass_err = cass_result_column_name(
+                    result_ptr,
+                    0,
+                    addr_of_mut!(name_ptr),
+                    addr_of_mut!(name_length),
+                );
+                assert_eq!(CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS, cass_err);
+            }
+        }
+    }
 }
 
 // CassResult functions:
