@@ -105,6 +105,7 @@ make_binders!(string_n, cass_tuple_set_string_n);
 make_binders!(bytes, cass_tuple_set_bytes);
 make_binders!(uuid, cass_tuple_set_uuid);
 make_binders!(inet, cass_tuple_set_inet);
+make_binders!(duration, cass_tuple_set_duration);
 make_binders!(collection, cass_tuple_set_collection);
 make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);

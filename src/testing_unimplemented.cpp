@@ -164,13 +164,6 @@ cass_collection_append_decimal(CassCollection* collection,
                                cass_int32_t scale){
 	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_decimal\n");
 }
-CASS_EXPORT CassError
-cass_collection_append_duration(CassCollection* collection,
-                                cass_int32_t months,
-                                cass_int32_t days,
-                                cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_collection_append_duration\n");
-}
 CASS_EXPORT const CassValue*
 cass_column_meta_field_by_name(const CassColumnMeta* column_meta,
                                const char* name){
@@ -368,22 +361,6 @@ cass_statement_bind_decimal_by_name(CassStatement* statement,
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_decimal_by_name\n");
 }
 CASS_EXPORT CassError
-cass_statement_bind_duration(CassStatement* statement,
-                             size_t index,
-                             cass_int32_t months,
-                             cass_int32_t days,
-                             cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_duration\n");
-}
-CASS_EXPORT CassError
-cass_statement_bind_duration_by_name(CassStatement* statement,
-                                     const char* name,
-                                     cass_int32_t months,
-                                     cass_int32_t days,
-                                     cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_statement_bind_duration_by_name\n");
-}
-CASS_EXPORT CassError
 cass_statement_set_custom_payload(CassStatement* statement,
                                   const CassCustomPayload* payload){
 	throw std::runtime_error("UNIMPLEMENTED cass_statement_set_custom_payload\n");
@@ -450,14 +427,6 @@ cass_tuple_set_decimal(CassTuple* tuple,
 	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_decimal\n");
 }
 CASS_EXPORT CassError
-cass_tuple_set_duration(CassTuple* tuple,
-                        size_t index,
-                        cass_int32_t months,
-                        cass_int32_t days,
-                        cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_tuple_set_duration\n");
-}
-CASS_EXPORT CassError
 cass_user_type_set_custom(CassUserType* user_type,
                           size_t index,
                           const char* class_name,
@@ -482,24 +451,9 @@ cass_user_type_set_decimal_by_name(CassUserType* user_type,
 	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_decimal_by_name\n");
 }
 CASS_EXPORT CassError
-cass_user_type_set_duration_by_name(CassUserType* user_type,
-                                    const char* name,
-                                    cass_int32_t months,
-                                    cass_int32_t days,
-                                    cass_int64_t nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_user_type_set_duration_by_name\n");
-}
-CASS_EXPORT CassError
 cass_value_get_decimal(const CassValue* value,
                        const cass_byte_t** varint,
                        size_t* varint_size,
                        cass_int32_t* scale){
 	throw std::runtime_error("UNIMPLEMENTED cass_value_get_decimal\n");
-}
-CASS_EXPORT CassError
-cass_value_get_duration(const CassValue* value,
-                        cass_int32_t* months,
-                        cass_int32_t* days,
-                        cass_int64_t* nanos){
-	throw std::runtime_error("UNIMPLEMENTED cass_value_get_duration\n");
 }

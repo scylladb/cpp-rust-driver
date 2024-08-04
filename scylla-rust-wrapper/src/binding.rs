@@ -137,9 +137,8 @@ macro_rules! make_appender {
 }
 
 // TODO: Types for which binding is not implemented yet:
-// custom - Not implemented in Rust driver?
+// custom - Not implemented in Rust driver
 // decimal
-// duration - DURATION not implemented in Rust Driver
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -275,6 +274,21 @@ macro_rules! invoke_binder_maker_macro_with_type {
                 }
             },
             [v @ crate::inet::CassInet]
+        );
+    };
+    (duration, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |m, d, n| {
+                Ok(Some(Duration(scylla::frame::value::CqlDuration {
+                    months: m,
+                    days: d,
+                    nanoseconds: n
+                })))
+            },
+            [m @ cass_int32_t, d @ cass_int32_t, n @ cass_int64_t]
         );
     };
     (collection, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {

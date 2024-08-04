@@ -463,6 +463,12 @@ make_binders!(
     cass_statement_bind_inet_by_name_n
 );
 make_binders!(
+    duration,
+    cass_statement_bind_duration,
+    cass_statement_bind_duration_by_name,
+    cass_statement_bind_duration_by_name_n
+);
+make_binders!(
     collection,
     cass_statement_bind_collection,
     cass_statement_bind_collection_by_name,

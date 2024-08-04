@@ -88,6 +88,7 @@ make_binders!(string_n, cass_collection_append_string_n);
 make_binders!(bytes, cass_collection_append_bytes);
 make_binders!(uuid, cass_collection_append_uuid);
 make_binders!(inet, cass_collection_append_inet);
+make_binders!(duration, cass_collection_append_duration);
 make_binders!(collection, cass_collection_append_collection);
 make_binders!(tuple, cass_collection_append_tuple);
 make_binders!(user_type, cass_collection_append_user_type);

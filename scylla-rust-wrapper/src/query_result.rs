@@ -915,12 +915,21 @@ pub unsafe extern "C" fn cass_value_data_type(value: *const CassValue) -> *const
     Arc::as_ptr(&value_from_raw.value_type)
 }
 
+macro_rules! val_ptr_to_ref_ensure_non_null {
+    ($ptr:ident) => {{
+        if $ptr.is_null() {
+            return CassError::CASS_ERROR_LIB_NULL_VALUE;
+        }
+        ptr_to_ref($ptr)
+    }};
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_float(
     value: *const CassValue,
     output: *mut cass_float_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Float(f))) => std::ptr::write(output, f),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -935,7 +944,7 @@ pub unsafe extern "C" fn cass_value_get_double(
     value: *const CassValue,
     output: *mut cass_double_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Double(d))) => std::ptr::write(output, d),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -950,7 +959,7 @@ pub unsafe extern "C" fn cass_value_get_bool(
     value: *const CassValue,
     output: *mut cass_bool_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Boolean(b))) => {
             std::ptr::write(output, b as cass_bool_t)
@@ -967,7 +976,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
     value: *const CassValue,
     output: *mut cass_int8_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::TinyInt(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -982,7 +991,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
     value: *const CassValue,
     output: *mut cass_int16_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::SmallInt(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -997,7 +1006,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     value: *const CassValue,
     output: *mut cass_uint32_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u.0), // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -1012,7 +1021,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
     value: *const CassValue,
     output: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Int(i))) => std::ptr::write(output, i),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -1027,7 +1036,7 @@ pub unsafe extern "C" fn cass_value_get_int64(
     value: *const CassValue,
     output: *mut cass_int64_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::BigInt(i))) => std::ptr::write(output, i),
         Some(Value::RegularValue(CqlValue::Counter(i))) => {
@@ -1049,7 +1058,7 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     value: *const CassValue,
     output: *mut CassUuid,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Uuid(uuid))) => std::ptr::write(output, uuid.into()),
         Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => {
@@ -1067,7 +1076,7 @@ pub unsafe extern "C" fn cass_value_get_inet(
     value: *const CassValue,
     output: *mut CassInet,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Inet(inet))) => std::ptr::write(output, inet.into()),
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -1083,7 +1092,7 @@ pub unsafe extern "C" fn cass_value_get_string(
     output: *mut *const c_char,
     output_size: *mut size_t,
 ) -> CassError {
-    let val: &CassValue = ptr_to_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match &val.value {
         // It seems that cpp driver doesn't check the type - you can call _get_string
         // on any type and get internal represenation. I don't see how to do it easily in
@@ -1103,16 +1112,34 @@ pub unsafe extern "C" fn cass_value_get_string(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_value_get_duration(
+    value: *const CassValue,
+    months: *mut cass_int32_t,
+    days: *mut cass_int32_t,
+    nanos: *mut cass_int64_t,
+) -> CassError {
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+
+    match &val.value {
+        Some(Value::RegularValue(CqlValue::Duration(duration))) => {
+            std::ptr::write(months, duration.months);
+            std::ptr::write(days, duration.days);
+            std::ptr::write(nanos, duration.nanoseconds);
+        }
+        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    }
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
     value: *const CassValue,
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
 ) -> CassError {
-    if value.is_null() {
-        return CassError::CASS_ERROR_LIB_NULL_VALUE;
-    }
-
-    let value_from_raw: &CassValue = ptr_to_ref(value);
+    let value_from_raw: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
 
     // FIXME: This should be implemented for all CQL types
     // Note: currently rust driver does not allow to get raw bytes of the CQL value.
@@ -1138,12 +1165,19 @@ pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_boo
 pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t {
     let val = ptr_to_ref(value);
 
-    match val.value {
-        Some(Value::CollectionValue(Collection::List(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Set(_))) => true as cass_bool_t,
-        Some(Value::CollectionValue(Collection::Map(_))) => true as cass_bool_t,
-        _ => false as cass_bool_t,
-    }
+    matches!(
+        val.value_type.get_value_type(),
+        CassValueType::CASS_VALUE_TYPE_LIST
+            | CassValueType::CASS_VALUE_TYPE_SET
+            | CassValueType::CASS_VALUE_TYPE_MAP
+    ) as cass_bool_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t {
+    let val = ptr_to_ref(value);
+
+    (val.value_type.get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
 }
 
 #[no_mangle]
@@ -1505,25 +1539,11 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     scale: *mut cass_int32_t,
 ) -> CassError {
 }
-#[no_mangle]
-pub unsafe extern "C" fn cass_value_get_duration(
-    value: *const CassValue,
-    months: *mut cass_int32_t,
-    days: *mut cass_int32_t,
-    nanos: *mut cass_int64_t,
-) -> CassError {
-}
 extern "C" {
     pub fn cass_value_data_type(value: *const CassValue) -> *const CassDataType;
 }
 extern "C" {
     pub fn cass_value_type(value: *const CassValue) -> CassValueType;
-}
-extern "C" {
-    pub fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t;
-}
-extern "C" {
-    pub fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t;
 }
 extern "C" {
     pub fn cass_value_item_count(collection: *const CassValue) -> size_t;
