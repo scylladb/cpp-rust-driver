@@ -849,19 +849,31 @@ CassVersion CCM::Bridge::get_cassandra_version() {
   // Get the version string from CCM
   std::vector<std::string> active_cluster_version_command;
   active_cluster_version_command.push_back(generate_node_name(1));
-  active_cluster_version_command.push_back("version");
+  if (is_scylla_) {
+    // For scylla, we need to use versionfrombuild. version always returns 3.0.8.
+    active_cluster_version_command.push_back("versionfrombuild");
+  }
+  else {
+    active_cluster_version_command.push_back("version");
+  }
+  
   std::string ccm_output = execute_ccm_command(active_cluster_version_command);
 
-  // Ensure the version release information exists and return the version
-  size_t version_index = ccm_output.find("ReleaseVersion:");
-  if (version_index != std::string::npos) {
-    ccm_output.replace(0, version_index + 15, "");
-    return CassVersion(trim(ccm_output));
+  if (!is_scylla_) {
+      // Ensure the version release information exists and return the version
+      size_t version_index = ccm_output.find("ReleaseVersion:");
+      if (version_index != std::string::npos) {
+        ccm_output.replace(0, version_index + 15, "");
+        return CassVersion(trim(ccm_output));
+      }
+
+        // Unable to determine version information from active cluster
+        throw BridgeException("Unable to determine version information from active Cassandra cluster \"" +
+                        get_active_cluster() + "\""); 
   }
 
-  // Unable to determine version information from active cluster
-  throw BridgeException("Unable to determine version information from active Cassandra cluster \"" +
-                        get_active_cluster() + "\"");
+  // versionfrombuild returns a version directly
+  return CassVersion(ccm_output);
 }
 
 DseVersion CCM::Bridge::get_dse_version() {
