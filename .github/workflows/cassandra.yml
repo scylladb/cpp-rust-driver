@@ -53,8 +53,6 @@ jobs:
 :LoggingTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
-:*5.Integration_Cassandra_*\
-:*19.Integration_Cassandra_*\
 :*7.Integration_Cassandra_*\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :ExecutionProfileTest.InvalidName"

@@ -160,10 +160,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
         <tr>
             <td>cass_statement_bind_custom[by_name]</td>
-            <td rowspan="2">Binding is not implemented for custom types in the Rust driver. <br> Binding Decimal type requires encoding raw bytes into BigDecimal type in the Rust driver. <br> <b>Note</b>: The driver does not validate the types of the values passed to queries.</td>
-        </tr>
-        <tr>
-            <td>cass_statement_bind_decimal[by_name]</td>
+            <td>Binding is not implemented for custom types in the Rust driver.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Future</td>
@@ -187,27 +184,17 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
         <tr>
             <td>cass_collection_append_custom[_n]</td>
-            <td rowspan="2">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the appended value is compatible with the type of the collection items.</td>
-        </tr>
-        <tr>
-            <td>cass_collection_append_decimal</td>
+            <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the appended value is compatible with the type of the collection items.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">User Defined Type</td>
         </tr>
         <tr>
             <td>cass_user_type_set_custom[by_name]</td>
-            <td rowspan="2">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
-        </tr>
-        <tr>
-            <td>cass_user_type_set_decimal[by_name]</td>
+            <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Value</td>
-        </tr>
-        <tr>
-            <td>cass_value_get_decimal</td>
-            <td>Getting raw bytes of Decimal values requires lazy deserialization feature in the Rust driver.</td>
         </tr>
         <tr>
             <td>cass_value_get_bytes</td>
