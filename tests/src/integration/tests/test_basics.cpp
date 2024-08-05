@@ -343,7 +343,7 @@ CASSANDRA_INTEGRATION_TEST_F(BasicsTests, NoCompactEnabledConnection) {
     }
     cass_version = static_cast<CCM::DseVersion>(cass_version).get_cass_version();
   }
-  if (cass_version >= "4.0.0") {
+  if (!Options::is_scylla() && cass_version >= "4.0.0") {
     SKIP_TEST("Unsupported for Apache Cassandra Version "
               << cass_version.to_string()
               << ": Server version must be less than v4.0.0 and either 3.0.16+"
