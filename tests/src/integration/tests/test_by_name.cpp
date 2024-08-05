@@ -261,7 +261,7 @@ CASSANDRA_INTEGRATION_TEST_F(ByNameTests, PreparedCaseSensitive) {
  */
 CASSANDRA_INTEGRATION_TEST_F(ByNameTests, SimpleCaseSensitive) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   // Prepare, create, insert and validate
   Statement statement(format_string(INSERT_CASE_SENSITIVE_FORMAT, table_name_.c_str()), 4);
@@ -391,7 +391,7 @@ CASSANDRA_INTEGRATION_TEST_F(ByNameTests, NullPrepared) {
  */
 CASSANDRA_INTEGRATION_TEST_F(ByNameTests, NullSimple) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   // Prepare, create, insert and validate
   Statement statement(format_string(INSERT_ALL_FORMAT, table_name_.c_str()), 7);

@@ -111,7 +111,7 @@ class CassandraTypesDurationTests : public CassandraTypesTests<Duration> {};
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Basic) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup();
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -168,7 +168,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Basic) {
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, ByName) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup();
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -225,8 +225,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, ByName) {
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NamedParameters) {
-  CHECK_VERSION(2.1.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup(true);
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -281,7 +281,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NamedParameters) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullValues) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -324,7 +324,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullValues) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullList) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -368,7 +368,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullList) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullMap) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -412,7 +412,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullMap) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullSet) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -457,7 +457,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullSet) {
  *                  validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Initialize the table and assign the values for the list
   List<TypeParam> list(CassandraTypesTests<TypeParam>::values_);
@@ -529,7 +529,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
  *                  via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
   if (CassandraTypesTests<TypeParam>::values_[0].cql_type().compare("duration") == 0) {
     SKIP_TEST("Unsupported CQL Type Duration: Set does not support duration");
   }
@@ -604,7 +604,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
  *                  via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // TODO(fero): Move this into its own parameterized method or keep this branching?
   if (this->is_key_allowed_) {
@@ -714,8 +714,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
  *                  validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
-  CHECK_VERSION(2.1.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Initialize the table and assign the values for the tuple
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -792,8 +792,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
  *                  then validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, UDT) {
-  CHECK_VERSION(2.2.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Build the UDT type name e.g. udt_pointtype, udt_line_string, etc.
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -905,7 +905,7 @@ REGISTER_TYPED_TEST_CASE_P(CassandraTypesTests, Integration_Cassandra_Basic,
  */
 CASSANDRA_INTEGRATION_TEST_F(CassandraTypesDurationTests, MixedValues) {
   CHECK_FAILURE;
-  CHECK_VALUE_TYPE_VERSION(Duration);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(Duration);
 
   this->default_setup();
 

@@ -58,7 +58,7 @@ public:
 class SchemaNullStringApiArgsTest : public NullStringApiArgsTest {
 public:
   void SetUp() {
-    CHECK_VERSION(2.2.0);
+    SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
     NullStringApiArgsTest::SetUp();
     populateSchema();
     schema_meta_ = session_.schema();
@@ -221,7 +221,7 @@ CASSANDRA_INTEGRATION_TEST_F(NullStringApiArgsTest, PrepareNullQuery) {
  * @expected_result Null for each lookup, since no object has a null name.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, KeyspaceMetaFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   const CassTableMeta* table_meta = cass_keyspace_meta_table_by_name(keyspace_meta_.get(), NULL);
   EXPECT_EQ(NULL, table_meta);
 
@@ -261,7 +261,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, KeyspaceMetaFunctions)
  * @expected_result Null for each lookup, since no object has a null name.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, TableMetaFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   const CassColumnMeta* column_meta = cass_table_meta_column_by_name(table_meta_.get(), NULL);
   EXPECT_EQ(NULL, column_meta);
 
@@ -296,7 +296,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, TableMetaFunctions) {
  * @expected_result Null for each lookup, since no object has a null name.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, MaterializedViewMetaFunctions) {
-  CHECK_VERSION(3.0.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.0.0);
 
   const CassMaterializedViewMeta* view_meta =
       cass_table_meta_materialized_view_by_name(table_meta_.get(), VIEW_NAME);
@@ -318,7 +318,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, MaterializedViewMetaFu
  * @expected_result Null for each lookup, since no object has a null name.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, FunctionAndAggregateMetaFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   // C* 3.x annotate collection columns as frozen.
   const CassFunctionMeta* function_meta =
       (schema_meta_.version().major_version == 3)
@@ -349,7 +349,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, FunctionAndAggregateMe
  * @expected_result Error out appropriately for invalid queries, succeed otherwise.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, StatementFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Statement statement(NULL);
 
   statement = cass_statement_new(NULL, 0);
@@ -485,7 +485,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, StatementFunctions) {
  * @expected_result Null because no parameter in the statement has a null name.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, PreparedFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Prepared prepared = session_.prepare(format_string("INSERT INTO %s (key, value) "
                                                      "VALUES ('42', :v)",
                                                      table_name_.c_str()));
@@ -504,7 +504,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, PreparedFunctions) {
  *   null).
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, DataTypeFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   CassDataType* udt = cass_data_type_new(CASS_VALUE_TYPE_UDT);
   EXPECT_EQ(CASS_OK, cass_data_type_set_type_name(udt, NULL));
   EXPECT_EQ(NULL, cass_data_type_sub_data_type_by_name(udt, NULL));
@@ -527,7 +527,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, DataTypeFunctions) {
  * @expected_result Success; null strings are added/encoded in collections fine.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, CollectionFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   CassCollection* collection = cass_collection_new(CASS_COLLECTION_TYPE_SET, 2);
   EXPECT_EQ(CASS_OK, cass_collection_append_string(collection, NULL));
   EXPECT_EQ(CASS_OK, cass_collection_append_custom(collection, NULL,
@@ -550,7 +550,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, CollectionFunctions) {
  *   However, succeed in storing a null value in a udt field.
  */
 CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, UserTypeFunctions) {
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   const CassDataType* udt_address =
       cass_keyspace_meta_user_type_by_name(keyspace_meta_.get(), "address");
   ASSERT_NE(static_cast<CassDataType*>(NULL), udt_address);
@@ -646,7 +646,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, UserTypeFunctions) {
  *   though it will certainly fail when processing on a node.
  */
 // CASSANDRA_INTEGRATION_TEST_F(SchemaNullStringApiArgsTest, MiscellaneousFunctions) {
-//   CHECK_VERSION(2.2.0);
+//   SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
 //   ResultResponse response;
 //   datastax::internal::core::Row r(&response);
 //   CassRow* row = CassRow::to(&r);

@@ -25,7 +25,7 @@ class PrepareOn : public Integration {
 public:
   void SetUp() {
     Integration::SetUp();
-    CHECK_VERSION(3.10);
+    SKIP_IF_CASSANDRA_VERSION_LT(3.10);
     sessions_.reserve(number_dc1_nodes_ + 1);
     for (size_t node = 1; node <= number_dc1_nodes_; ++node) {
       truncate_prepared_statements(node);
@@ -186,7 +186,7 @@ private:
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnAllTests, SingleNodeWhenDisabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
 
   // Prepare on all hosts disabled
   Session session = cluster().with_prepare_on_all_hosts(false).connect();
@@ -203,7 +203,7 @@ CASSANDRA_INTEGRATION_TEST_F(PrepareOnAllTests, SingleNodeWhenDisabled) {
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnAllTests, AllNodesWhenEnabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
 
   // Prepare on all hosts enabled
   Session session = cluster().with_prepare_on_all_hosts(true).connect();
@@ -223,7 +223,7 @@ CASSANDRA_INTEGRATION_TEST_F(PrepareOnAllTests, AllNodesWhenEnabled) {
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnAllTests, NodeOutage) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
 
   // Ensure there are no existing prepared statements
   prepared_statements_is_empty_on_all_nodes();
@@ -346,7 +346,7 @@ private:
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, NotPreparedOnUpWhenDisabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
 
   // Disable the prepare on up/add setting
   Session session = cluster().with_prepare_on_up_or_add_host(false).connect();
@@ -381,7 +381,7 @@ CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, NotPreparedOnUpWhenDisabled
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, PreparedOnUpWhenEnabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
 
   // Enable the prepare on up/add setting
   Session session = cluster().with_prepare_on_up_or_add_host(true).connect();
@@ -416,7 +416,7 @@ CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, PreparedOnUpWhenEnabled) {
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, NotPreparedOnAddWhenDisabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
   is_test_chaotic_ = true;
 
   // Disable the prepare on up/add setting
@@ -447,7 +447,7 @@ CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, NotPreparedOnAddWhenDisable
  */
 CASSANDRA_INTEGRATION_TEST_F(PrepareOnUpAndAddTests, PreparedOnAddWhenEnabled) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.10);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.10);
   is_test_chaotic_ = true;
 
   // Enable the prepare on up/add setting

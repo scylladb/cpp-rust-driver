@@ -331,8 +331,8 @@ CASSANDRA_INTEGRATION_TEST_F(BasicsTests, BindBlobAsString) {
  */
 CASSANDRA_INTEGRATION_TEST_F(BasicsTests, NoCompactEnabledConnection) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.0.16);
-  CHECK_VERSION(3.11.2);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.0.16);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.11.2);
   CCM::CassVersion cass_version = server_version_;
   if (!Options::is_cassandra()) {
     if (server_version_ >= "6.0.0") {

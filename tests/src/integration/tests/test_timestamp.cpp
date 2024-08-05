@@ -110,7 +110,7 @@ private:
  */
 CASSANDRA_INTEGRATION_TEST_F(TimestampTests, Statement) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Text key(generate_key());
   Statement insert_statement(create_insert_statement(key));
@@ -129,7 +129,7 @@ CASSANDRA_INTEGRATION_TEST_F(TimestampTests, Statement) {
  */
 CASSANDRA_INTEGRATION_TEST_F(TimestampTests, BatchStatement) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Batch batch_statement;
   std::vector<Text> keys;
@@ -155,7 +155,7 @@ CASSANDRA_INTEGRATION_TEST_F(TimestampTests, BatchStatement) {
  */
 CASSANDRA_INTEGRATION_TEST_F(TimestampTests, ServerSideTimestampGeneratorStatement) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
   ServerSideTimestampGenerator generator;
   connect(default_cluster().with_timestamp_generator(generator));
 
@@ -178,7 +178,7 @@ CASSANDRA_INTEGRATION_TEST_F(TimestampTests, ServerSideTimestampGeneratorStateme
  */
 CASSANDRA_INTEGRATION_TEST_F(TimestampTests, ServerSideTimestampGeneratorBatchStatement) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
   ServerSideTimestampGenerator generator;
   connect(default_cluster().with_timestamp_generator(generator));
 
@@ -215,7 +215,7 @@ CASSANDRA_INTEGRATION_TEST_F(TimestampTests, ServerSideTimestampGeneratorBatchSt
  */
 CASSANDRA_INTEGRATION_TEST_F(TimestampTests, MonotonicTimestampGenerator) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
   connect(default_cluster().with_timestamp_generator(timestamp_generator()));
 
   BigInteger last_timestamp;
