@@ -194,15 +194,17 @@ protected:
       } else {
         FAIL() << "Invalid CassValueType: Value type is not a valid collection";
       }
+  
+      // Check if collection is empty (null).
+      // Scylla does not distinguish between an empty collection and NULL value.
+      // See: https://opensource.docs.scylladb.com/stable/cql/types.html#sets
+      size_t collection_size = cass_value_item_count(value);
+      if (collection_size > 0) {
+        is_null_ = false;
+      }
 
       // Initialize the iterator
       iterator_ = cass_iterator_from_collection(value);
-
-      // Determine if the collection is empty (null)
-      const CassValue* check_value = cass_iterator_get_value(iterator_.get());
-      if (check_value) {
-        is_null_ = false;
-      }
     }
   }
 };
