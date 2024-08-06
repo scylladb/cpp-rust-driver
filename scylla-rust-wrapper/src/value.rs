@@ -118,7 +118,9 @@ impl CassCqlValue {
             CassCqlValue::Duration(_) => {
                 typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION
             }
-            CassCqlValue::Decimal(_) => todo!(),
+            CassCqlValue::Decimal(_) => {
+                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DECIMAL
+            }
             CassCqlValue::Tuple(_) => todo!(),
             CassCqlValue::List(_) => todo!(),
             CassCqlValue::Map(_) => todo!(),
@@ -355,7 +357,7 @@ fn serialize_udt<'b>(
 mod tests {
     use std::net::Ipv4Addr;
 
-    use scylla::frame::value::{CqlDate, CqlDuration};
+    use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
         cass_types::{CassDataType, CassValueType},
@@ -495,6 +497,13 @@ mod tests {
                     nanoseconds: 0,
                 })),
                 compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DURATION)],
+            },
+            // CqlDecimal -> decimal
+            TestCase {
+                value: Some(CassCqlValue::Decimal(
+                    CqlDecimal::from_signed_be_bytes_slice_and_exponent(&[], 0),
+                )),
+                compatible_types: vec![from(CassValueType::CASS_VALUE_TYPE_DECIMAL)],
             },
         ];
         let all_simple_types = all_value_data_types();
