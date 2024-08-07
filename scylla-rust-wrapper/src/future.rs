@@ -7,6 +7,7 @@ use crate::query_result::CassResult;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use crate::RUNTIME;
+use futures::future;
 use scylla::prepared_statement::PreparedStatement;
 use std::future::Future;
 use std::mem;
@@ -62,7 +63,12 @@ pub struct CassFuture {
 /// An error that can appear during `cass_future_wait_timed`.
 enum FutureError {
     TimeoutError,
+    InvalidDuration,
 }
+
+/// The timeout appeared when we tried to await `JoinHandle`.
+/// This errors contains the original handle, so it can be awaited later again.
+struct JoinHandleTimeout(JoinHandle<()>);
 
 impl CassFuture {
     pub fn make_raw(
@@ -114,22 +120,46 @@ impl CassFuture {
         self.with_waited_state(|s| f(s.value.as_mut().unwrap()))
     }
 
+    /// Awaits the future until completion.
+    ///
+    /// There are two possible cases:
+    /// - noone is currently working on the future -> we take the ownership
+    ///   of JoinHandle (future) and we poll it until completion.
+    /// - some other thread is working on the future -> we wait on the condition
+    ///   variable to get an access to the future's state. Once we are notified,
+    ///   there are two cases:
+    ///     - JoinHandle is consumed -> some other thread already resolved the future.
+    ///       We can return.
+    ///     - JoinHandle is Some -> some other thread was working on the future, but
+    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       take the ownership of the handle, and complete the work.
     fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
         let mut guard = self.state.lock().unwrap();
-        let handle = guard.join_handle.take();
-        if let Some(handle) = handle {
-            mem::drop(guard);
-            // unwrap: JoinError appears only when future either panic'ed or canceled.
-            RUNTIME.block_on(handle).unwrap();
-            guard = self.state.lock().unwrap();
-        } else {
-            guard = self
-                .wait_for_value
-                .wait_while(guard, |state| state.value.is_none())
-                // unwrap: Error appears only when mutex is poisoned.
-                .unwrap();
+        loop {
+            let handle = guard.join_handle.take();
+            if let Some(handle) = handle {
+                mem::drop(guard);
+                // unwrap: JoinError appears only when future either panic'ed or canceled.
+                RUNTIME.block_on(handle).unwrap();
+                guard = self.state.lock().unwrap();
+            } else {
+                guard = self
+                    .wait_for_value
+                    .wait_while(guard, |state| {
+                        state.value.is_none() && state.join_handle.is_none()
+                    })
+                    // unwrap: Error appears only when mutex is poisoned.
+                    .unwrap();
+                if guard.join_handle.is_some() {
+                    // join_handle was none, and now it isn't - some other thread must
+                    // have timed out and returned the handle. We need to take over
+                    // the work of completing the future. To do that, we go into
+                    // another iteration so that we land in the branch with block_on.
+                    continue;
+                }
+            }
+            return f(&mut guard);
         }
-        f(&mut guard)
     }
 
     fn with_waited_result_timed<T>(
@@ -140,37 +170,90 @@ impl CassFuture {
         self.with_waited_state_timed(|s| f(s.value.as_mut().unwrap()), timeout_duration)
     }
 
+    /// Tries to await the future with a given timeout.
+    ///
+    /// There are two possible cases:
+    /// - noone is currently working on the future -> we take the ownership
+    ///   of JoinHandle (future) and we try to poll it with given timeout.
+    ///   If we timed out, we need to return the unfinished JoinHandle, so
+    ///   some other thread can complete the future later.
+    /// - some other thread is working on the future -> we wait on the condition
+    ///   variable to get an access to the future's state.
+    ///   Once we are notified (before the timeout), there are two cases.
+    ///     - JoinHandle is consumed -> some other thread already resolved the future.
+    ///       We can return.
+    ///     - JoinHandle is Some -> some other thread was working on the future, but
+    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       take the ownership of the handle, and continue the work.
     fn with_waited_state_timed<T>(
         &self,
         f: impl FnOnce(&mut CassFutureState) -> T,
         timeout_duration: Duration,
     ) -> Result<T, FutureError> {
         let mut guard = self.state.lock().unwrap();
-        let handle = guard.join_handle.take();
-        if let Some(handle) = handle {
-            mem::drop(guard);
-            // Need to wrap it with async{} block, so the timeout is lazily executed inside the runtime.
-            // See mention about panics: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html.
-            let timed = async { tokio::time::timeout(timeout_duration, handle).await };
-            // unwrap: JoinError appears only when future either panic'ed or canceled.
-            RUNTIME
-                .block_on(timed)
-                .map_err(|_| FutureError::TimeoutError)?
-                .unwrap();
-            guard = self.state.lock().unwrap();
-        } else {
-            let (guard_result, timeout_result) = self
-                .wait_for_value
-                .wait_timeout_while(guard, timeout_duration, |state| state.value.is_none())
-                // unwrap: Error appears only when mutex is poisoned.
-                .unwrap();
-            if timeout_result.timed_out() {
-                return Err(FutureError::TimeoutError);
-            }
-            guard = guard_result;
-        }
+        let deadline = tokio::time::Instant::now()
+            .checked_add(timeout_duration)
+            .ok_or(FutureError::InvalidDuration)?;
 
-        Ok(f(&mut guard))
+        loop {
+            let handle = guard.join_handle.take();
+            if let Some(handle) = handle {
+                mem::drop(guard);
+                // Need to wrap it with async{} block, so the timeout is lazily executed inside the runtime.
+                // See mention about panics: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html.
+                let timed = async {
+                    let sleep_future = tokio::time::sleep_until(deadline);
+                    tokio::pin!(sleep_future);
+                    let value = future::select(handle, sleep_future).await;
+                    match value {
+                        future::Either::Left((result, _)) => Ok(result),
+                        future::Either::Right((_, handle)) => Err(JoinHandleTimeout(handle)),
+                    }
+                };
+                match RUNTIME.block_on(timed) {
+                    Err(JoinHandleTimeout(returned_handle)) => {
+                        // We timed out. so we can't finish waiting for the future.
+                        // The problem is that if current thread executor is used,
+                        // then no one will run this future - other threads will
+                        // go into the branch with condvar and wait there.
+                        // To fix that:
+                        //  - Return the join handle, so that next thread can take it
+                        //  - Signal one thread, so that if all other consumers are
+                        //    already waiting on condvar, one of them wakes up and
+                        //    picks up the work.
+                        guard = self.state.lock().unwrap();
+                        guard.join_handle = Some(returned_handle);
+                        self.wait_for_value.notify_one();
+                        return Err(FutureError::TimeoutError);
+                    }
+                    // unwrap: JoinError appears only when future either panic'ed or canceled.
+                    Ok(result) => result.unwrap(),
+                };
+                guard = self.state.lock().unwrap();
+            } else {
+                let remaining_timeout = deadline.duration_since(tokio::time::Instant::now());
+                let (guard_result, timeout_result) = self
+                    .wait_for_value
+                    .wait_timeout_while(guard, remaining_timeout, |state| {
+                        state.value.is_none() && state.join_handle.is_none()
+                    })
+                    // unwrap: Error appears only when mutex is poisoned.
+                    .unwrap();
+                if timeout_result.timed_out() {
+                    return Err(FutureError::TimeoutError);
+                }
+                guard = guard_result;
+                if guard.join_handle.is_some() {
+                    // join_handle was none, and now it isn't - some other thread must
+                    // have timed out and returned the handle. We need to take over
+                    // the work of completing the future. To do that, we go into
+                    // another iteration so that we land in the branch with block_on.
+                    continue;
+                }
+            }
+
+            return Ok(f(&mut guard));
+        }
     }
 
     pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
