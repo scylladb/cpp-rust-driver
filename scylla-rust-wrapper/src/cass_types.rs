@@ -15,7 +15,7 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UDTDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, Arc<CassDataType>)>,
@@ -87,6 +87,42 @@ impl UDTDataType {
     pub fn get_field_by_index(&self, index: usize) -> Option<&Arc<CassDataType>> {
         self.field_types.get(index).map(|(_, b)| b)
     }
+
+    fn typecheck_equals(&self, other: &UDTDataType) -> bool {
+        // See: https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L354-L386
+
+        if !equals_both_non_empty_strings(&self.keyspace, &other.keyspace) {
+            return false;
+        }
+        if !equals_both_non_empty_strings(&self.name, &other.name) {
+            return false;
+        }
+
+        // A comment from cpp-driver:
+        //// UDT's can be considered equal as long as the mutual first fields shared
+        //// between them are equal. UDT's are append only as far as fields go, so a
+        //// newer 'version' of the UDT data type after a schema change event should be
+        //// treated as equivalent in this scenario, by simply looking at the first N
+        //// mutual fields they should share.
+        //
+        // Iterator returned from zip() is perfect for checking the first mutual fields.
+        for (field, other_field) in self.field_types.iter().zip(other.field_types.iter()) {
+            // Compare field names.
+            if field.0 != other_field.0 {
+                return false;
+            }
+            // Compare field types.
+            if !field.1.typecheck_equals(&other_field.1) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+fn equals_both_non_empty_strings(s1: &str, s2: &str) -> bool {
+    s1.is_empty() || s2.is_empty() || s1 == s2
 }
 
 impl Default for UDTDataType {
@@ -95,25 +131,108 @@ impl Default for UDTDataType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
     List {
+        // None stands for untyped list.
         typ: Option<Arc<CassDataType>>,
         frozen: bool,
     },
     Set {
+        // None stands for untyped set.
         typ: Option<Arc<CassDataType>>,
         frozen: bool,
     },
     Map {
+        // None, None stands for untyped map.
+        // Some, None stands for a map with an untyped value type.
         key_type: Option<Arc<CassDataType>>,
         val_type: Option<Arc<CassDataType>>,
         frozen: bool,
     },
+    // Empty vector stands for untyped tuple.
     Tuple(Vec<Arc<CassDataType>>),
     Custom(String),
+}
+
+impl CassDataType {
+    /// Checks for equality during typechecks.
+    ///
+    /// This takes into account the fact that tuples/collections may be untyped.
+    pub fn typecheck_equals(&self, other: &CassDataType) -> bool {
+        match self {
+            CassDataType::Value(t) => *t == other.get_value_type(),
+            CassDataType::UDT(udt) => match other {
+                CassDataType::UDT(other_udt) => udt.typecheck_equals(other_udt),
+                _ => false,
+            },
+            CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => match other {
+                CassDataType::List { typ: other_typ, .. }
+                | CassDataType::Set { typ: other_typ, .. } => {
+                    // If one of them is list, and the other is set, fail the typecheck.
+                    if self.get_value_type() != other.get_value_type() {
+                        return false;
+                    }
+                    match (typ, other_typ) {
+                        // One of them is untyped, skip the typecheck for subtype.
+                        (None, _) | (_, None) => true,
+                        (Some(typ), Some(other_typ)) => typ.typecheck_equals(other_typ),
+                    }
+                }
+                _ => false,
+            },
+            CassDataType::Map {
+                key_type: k,
+                val_type: v,
+                ..
+            } => match other {
+                CassDataType::Map {
+                    key_type: k_other,
+                    val_type: v_other,
+                    ..
+                } => match ((k, v), (k_other, v_other)) {
+                    // See https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L218
+                    // In cpp-driver the types are held in a vector.
+                    // The logic is following:
+
+                    // If either of vectors is empty, skip the typecheck.
+                    ((None, None), _) => true,
+                    (_, (None, None)) => true,
+
+                    // Otherwise, the vectors should have equal length and we perform the typecheck for subtypes.
+                    ((Some(k), None), (Some(k_other), None)) => k.typecheck_equals(k_other),
+                    ((Some(k), Some(v)), (Some(k_other), Some(v_other))) => {
+                        k.typecheck_equals(k_other) && v.typecheck_equals(v_other)
+                    }
+                    _ => false,
+                },
+                _ => false,
+            },
+            CassDataType::Tuple(sub) => match other {
+                CassDataType::Tuple(other_sub) => {
+                    // If either of tuples is untyped, skip the typecheck for subtypes.
+                    if sub.is_empty() || other_sub.is_empty() {
+                        return true;
+                    }
+
+                    // If both are non-empty, check for subtypes equality.
+                    if sub.len() != other_sub.len() {
+                        return false;
+                    }
+                    sub.iter()
+                        .zip(other_sub.iter())
+                        .all(|(typ, other_typ)| typ.typecheck_equals(other_typ))
+                }
+                _ => false,
+            },
+            CassDataType::Custom(name) => match other {
+                CassDataType::Custom(other_name) => name == other_name,
+                _ => false,
+            },
+        }
+    }
 }
 
 impl From<NativeType> for CassValueType {

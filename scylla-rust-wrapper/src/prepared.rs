@@ -3,11 +3,32 @@ use std::sync::Arc;
 
 use crate::{
     argconv::*,
+    cass_types::{get_column_type, CassDataType},
     statement::{CassStatement, Statement},
 };
 use scylla::prepared_statement::PreparedStatement;
 
-pub type CassPrepared = PreparedStatement;
+#[derive(Debug, Clone)]
+pub struct CassPrepared {
+    // Data types of columns from PreparedMetadata.
+    pub variable_col_data_types: Vec<Arc<CassDataType>>,
+    pub statement: PreparedStatement,
+}
+
+impl CassPrepared {
+    pub fn new_from_prepared_statement(statement: PreparedStatement) -> Self {
+        let variable_col_data_types = statement
+            .get_variable_col_specs()
+            .iter()
+            .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+            .collect();
+
+        Self {
+            variable_col_data_types,
+            statement,
+        }
+    }
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_free(prepared_raw: *const CassPrepared) {
@@ -19,7 +40,7 @@ pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: *const CassPrepared,
 ) -> *mut CassStatement {
     let prepared: Arc<_> = clone_arced(prepared_raw);
-    let bound_values_size = prepared.get_variable_col_specs().len();
+    let bound_values_size = prepared.statement.get_variable_col_specs().len();
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument

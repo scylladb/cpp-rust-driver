@@ -1,12 +1,12 @@
 use crate::argconv::*;
-use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
+use crate::value;
 use crate::value::CassCqlValue;
 use std::sync::Arc;
 
-static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
+static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
 
 #[derive(Clone)]
 pub struct CassTuple {
@@ -37,7 +37,7 @@ impl CassTuple {
         }
 
         if let Some(inner_types) = self.get_types() {
-            if !binding::is_compatible_type(&inner_types[index], &v) {
+            if !value::is_type_compatible(&v, &inner_types[index]) {
                 return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
             }
         }
@@ -50,7 +50,10 @@ impl CassTuple {
 
 impl From<&CassTuple> for CassCqlValue {
     fn from(tuple: &CassTuple) -> Self {
-        CassCqlValue::Tuple(tuple.items.clone())
+        CassCqlValue::Tuple {
+            data_type: tuple.data_type.clone(),
+            fields: tuple.items.clone(),
+        }
     }
 }
 
@@ -86,7 +89,7 @@ unsafe extern "C" fn cass_tuple_free(tuple: *mut CassTuple) {
 unsafe extern "C" fn cass_tuple_data_type(tuple: *const CassTuple) -> *const CassDataType {
     match &ptr_to_ref(tuple).data_type {
         Some(t) => Arc::as_ptr(t),
-        None => &EMPTY_TUPLE_TYPE,
+        None => &UNTYPED_TUPLE_TYPE,
     }
 }
 
