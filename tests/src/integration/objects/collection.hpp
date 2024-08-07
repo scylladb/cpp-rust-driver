@@ -198,11 +198,8 @@ protected:
       // Initialize the iterator
       iterator_ = cass_iterator_from_collection(value);
 
-      // Determine if the collection is empty (null)
-      const CassValue* check_value = cass_iterator_get_value(iterator_.get());
-      if (check_value) {
-        is_null_ = false;
-      }
+      // We already checked that collection is not null.
+      is_null_ = false;
     }
   }
 };

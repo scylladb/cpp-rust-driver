@@ -299,6 +299,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ColumnType::Text => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
         ColumnType::Timestamp => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
         ColumnType::Inet => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INET),
+        ColumnType::Duration => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DURATION),
         ColumnType::List(boxed_type) => CassDataType::List {
             typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
             frozen: false,
@@ -336,7 +337,6 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ),
         ColumnType::Uuid => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UUID),
         ColumnType::Varint => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
-        _ => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
     }
 }
 

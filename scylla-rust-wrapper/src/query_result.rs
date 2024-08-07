@@ -281,7 +281,7 @@ pub unsafe extern "C" fn cass_iterator_get_value(
 ) -> *const CassValue {
     let iter = ptr_to_ref(iterator);
 
-    // Defined only for collections(list and set) or tuple iterator, for other types should return null
+    // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
     if let CassIterator::CassCollectionIterator(collection_iterator) = iter {
         let iter_position = match collection_iterator.position {
             Some(pos) => pos,
@@ -293,6 +293,11 @@ pub unsafe extern "C" fn cass_iterator_get_value(
             Some(Value::CollectionValue(Collection::Set(set))) => set.get(iter_position),
             Some(Value::CollectionValue(Collection::Tuple(tuple))) => {
                 tuple.get(iter_position).and_then(|x| x.as_ref())
+            }
+            Some(Value::CollectionValue(Collection::Map(map))) => {
+                let map_entry_index = iter_position / 2;
+                map.get(map_entry_index)
+                    .map(|(key, value)| if iter_position % 2 == 0 { key } else { value })
             }
             _ => return std::ptr::null(),
         };
@@ -625,13 +630,12 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
         return std::ptr::null_mut();
     }
 
-    let map_iterator = cass_iterator_from_map(value);
-    if !map_iterator.is_null() {
-        return map_iterator;
-    }
-
     let val = ptr_to_ref(value);
     let item_count = cass_value_item_count(value);
+    let item_count = match cass_value_type(value) {
+        CassValueType::CASS_VALUE_TYPE_MAP => item_count * 2,
+        _ => item_count,
+    };
 
     let iterator = CassCollectionIterator {
         value: val,

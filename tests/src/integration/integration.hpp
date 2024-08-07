@@ -83,28 +83,28 @@
   SKIP_TEST("Unsupported for Apache Cassandra Version "          \
             << server_version_string << ": Server version " << version_string << "+ is required")
 
-#define CHECK_VERSION(version)                                                      \
+#define CHECK_CASSANDRA_VERSION(version)                                                      \
   do {                                                                              \
     CCM::CassVersion cass_version = this->server_version_;                          \
     if (!Options::is_cassandra()) {                                                 \
       cass_version = static_cast<CCM::DseVersion>(cass_version).get_cass_version(); \
     }                                                                               \
-    if (cass_version < #version) {                                                  \
+    if (!Options::is_scylla() && cass_version < #version) {                                                  \
       SKIP_TEST_VERSION(cass_version.to_string(), #version)                         \
     }                                                                               \
   } while (0)
 
-#define CHECK_OPTIONS_VERSION(version)                                 \
-  if (Options::server_version() < #version) {                          \
+#define CHECK_OPTIONS_CASSANDRA_VERSION(version)                                 \
+  if (!Options::is_scylla() && Options::server_version() < #version) {                          \
     SKIP_TEST_VERSION(Options::server_version().to_string(), #version) \
   }
 
-#define CHECK_VALUE_TYPE_VERSION(type)                                            \
+#define CHECK_VALUE_TYPE_CASSANDRA_VERSION(type)                                            \
   CCM::CassVersion cass_version = this->server_version_;                          \
   if (!Options::is_cassandra()) {                                                 \
     cass_version = static_cast<CCM::DseVersion>(cass_version).get_cass_version(); \
   }                                                                               \
-  if (cass_version < type::supported_server_version()) {                          \
+  if (!Options::is_scylla() && cass_version < type::supported_server_version()) {                          \
     SKIP_TEST_VERSION(cass_version.to_string(), type::supported_server_version()) \
   }
 

@@ -52,7 +52,7 @@ public:
  */
 CASSANDRA_INTEGRATION_TEST_F(CustomPayloadTests, Simple) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  CHECK_CASSANDRA_VERSION(2.2.0);
 
   // Create the custom payload to be associated with the statement
   CustomPayload custom_payload;
