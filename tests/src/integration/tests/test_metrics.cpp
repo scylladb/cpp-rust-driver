@@ -149,7 +149,7 @@ CASSANDRA_INTEGRATION_TEST_F(MetricsTests, Requests) {
  */
 CASSANDRA_INTEGRATION_TEST_F(MetricsTests, SpeculativeExecutionRequests) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
 
   Session session = default_cluster().with_constant_speculative_execution_policy(100, 10).connect();
 

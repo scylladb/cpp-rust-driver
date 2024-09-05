@@ -36,7 +36,7 @@ class StartupOptionsTests : public Integration {};
  */
 CASSANDRA_INTEGRATION_TEST_F(StartupOptionsTests, DriverOptions) {
   CHECK_FAILURE;
-  CHECK_VERSION(4.0.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(4.0.0);
   if (!Options::is_cassandra()) {
     SKIP_TEST("Unsupported for DataStax Enterprise Version "
               << server_version_.to_string() << ": 'system_views.clients' is unavailable");

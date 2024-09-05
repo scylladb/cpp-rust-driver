@@ -341,7 +341,7 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, Consistency) {
  * @expected_result Execution profile will fail (invalid serial consistency)
  */
 CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, SerialConsistency) {
-  CHECK_VERSION(2.0.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.0.0);
   CHECK_FAILURE;
 
   // Execute a batched query with assigned profile (should fail
@@ -658,7 +658,7 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
  */
 CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, SpeculativeExecutionPolicy) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
 
   // Create the UDF timeout
   session_.execute("CREATE OR REPLACE FUNCTION timeout(arg int) "

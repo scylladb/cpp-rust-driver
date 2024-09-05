@@ -32,7 +32,7 @@ public:
   SpeculativeExecutionTests() { number_dc1_nodes_ = 3; }
 
   void SetUp() {
-    CHECK_VERSION(2.2.0);
+    SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
     Integration::SetUp();
 
     session_.execute(
@@ -71,7 +71,7 @@ public:
  */
 CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, AttemptOnAllNodes) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Session session =
       default_cluster().with_constant_speculative_execution_policy(100, 2).connect(keyspace_name_);
 
@@ -97,7 +97,7 @@ CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, AttemptOnAllNodes) {
  */
 CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, LimitToTwoNodes) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Session session =
       default_cluster().with_constant_speculative_execution_policy(100, 1).connect(keyspace_name_);
 
@@ -123,7 +123,7 @@ CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, LimitToTwoNodes) {
  */
 CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, DelayIsNotReached) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Session session =
       default_cluster().with_constant_speculative_execution_policy(5000, 2).connect(keyspace_name_);
 
@@ -144,7 +144,7 @@ CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, DelayIsNotReached) {
  */
 CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, DisabledByDefault) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Session session =
       default_cluster().with_constant_speculative_execution_policy(100, 2).connect(keyspace_name_);
 
@@ -170,7 +170,7 @@ CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, DisabledByDefault) {
  */
 CASSANDRA_INTEGRATION_TEST_F(SpeculativeExecutionTests, Timeout) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
   Session session =
       default_cluster().with_constant_speculative_execution_policy(100, 2).connect(keyspace_name_);
 

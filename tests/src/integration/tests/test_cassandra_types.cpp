@@ -111,7 +111,7 @@ class CassandraTypesDurationTests : public CassandraTypesTests<Duration> {};
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Basic) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup();
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -168,7 +168,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Basic) {
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, ByName) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup();
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -225,8 +225,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, ByName) {
  * @expected_result Cassandra values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NamedParameters) {
-  CHECK_VERSION(2.1.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->default_setup(true);
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -281,7 +281,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NamedParameters) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullValues) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -324,7 +324,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullValues) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullList) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -368,7 +368,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullList) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullMap) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -412,7 +412,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullMap) {
  * @expected_result Cassandra NULL values are inserted and validated
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullSet) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   this->is_key_allowed_ = false; // Ensure the TypeParam is not allowed as a key
   this->default_setup();
@@ -457,7 +457,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, NullSet) {
  *                  validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Initialize the table and assign the values for the list
   List<TypeParam> list(CassandraTypesTests<TypeParam>::values_);
@@ -488,29 +488,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-//    List<TypeParam> result_list(result.first_row().next().as<List<TypeParam> >());
-//    ASSERT_EQ(list.value(), result_list.value());
-    const CassValue *result_list(result.first_row().next().get_value());
-
-    bool is_collection = cass_value_is_collection(result_list);
-    EXPECT_TRUE(is_collection);
-
-    size_t collection_size = cass_value_item_count(result_list);
-    ASSERT_EQ(list.size(), collection_size);
-
-    CassIterator* collection_iterator = cass_iterator_from_collection(result_list);
-    std::vector<TypeParam> list_vector = list.value();
-
-    for (size_t j = 0; j < collection_size; ++j) {
-      if (cass_iterator_next(collection_iterator)) {
-        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
-        ASSERT_EQ(value, list_vector[j]);
-      } else {
-        throw Exception("No more values available");
-      }
-    }
-
-    cass_iterator_free(collection_iterator);
+    List<TypeParam> result_list(result.first_row().next().as<List<TypeParam> >());
+    ASSERT_EQ(list.value(), result_list.value());
   }
 }
 
@@ -529,7 +508,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, List) {
  *                  via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
   if (CassandraTypesTests<TypeParam>::values_[0].cql_type().compare("duration") == 0) {
     SKIP_TEST("Unsupported CQL Type Duration: Set does not support duration");
   }
@@ -563,29 +542,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-//    Set<TypeParam> result_set = result.first_row().next().as<Set<TypeParam> >();
-//    ASSERT_EQ(set.value(), result_set.value());
-    const CassValue *result_set(result.first_row().next().get_value());
-
-    bool is_collection = cass_value_is_collection(result_set);
-    EXPECT_TRUE(is_collection);
-
-    size_t collection_size = cass_value_item_count(result_set);
-    ASSERT_EQ(set.size(), collection_size);
-
-    CassIterator* collection_iterator = cass_iterator_from_collection(result_set);
-    std::set<TypeParam> set_elems = set.value();
-
-    for (size_t j = 0; j < collection_size; ++j) {
-      if (cass_iterator_next(collection_iterator)) {
-        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
-        EXPECT_TRUE(set_elems.find(value) != set_elems.end());
-      } else {
-        throw Exception("No more values available");
-      }
-    }
-
-    cass_iterator_free(collection_iterator);
+    Set<TypeParam> result_set = result.first_row().next().as<Set<TypeParam> >();
+    ASSERT_EQ(set.value(), result_set.value());
   }
 }
 
@@ -604,7 +562,7 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Set) {
  *                  via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // TODO(fero): Move this into its own parameterized method or keep this branching?
   if (this->is_key_allowed_) {
@@ -636,30 +594,9 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
       select_statement.bind<Map<TypeParam, TypeParam> >(0, map);
       Result result = this->session_.execute(select_statement);
       ASSERT_EQ(1u, result.row_count());
-//    Map<TypeParam, TypeParam> result_map(column.as<Map<TypeParam, TypeParam> >());
-//    ASSERT_EQ(map_values, result_map.value());
-      const CassValue *result_map = result.first_row().next().get_value();
-
-      bool is_collection = cass_value_is_collection(result_map);
-      EXPECT_TRUE(is_collection);
-
-      size_t collection_size = cass_value_item_count(result_map);
-      ASSERT_EQ(map.size(), collection_size);
-
-      CassIterator* collection_iterator = cass_iterator_from_collection(result_map);
-      std::map<TypeParam, TypeParam> map_entries = map.value();
-
-      for (size_t j = 0; j < collection_size; ++j) {
-        if (cass_iterator_next(collection_iterator)) {
-          TypeParam key = TypeParam(cass_iterator_get_map_key(collection_iterator));
-          TypeParam value = TypeParam(cass_iterator_get_map_value(collection_iterator));
-          ASSERT_EQ(value, map_entries[key]);
-        } else {
-          throw Exception("No more values available");
-        }
-      }
-
-      cass_iterator_free(collection_iterator);
+      Column column = result.first_row().next();
+      Map<TypeParam, TypeParam> result_map(column.as<Map<TypeParam, TypeParam> >());
+      ASSERT_EQ(map_values, result_map.value());
     }
   } else {
     // Initialize the table and assign the values for the map
@@ -714,8 +651,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Map) {
  *                  validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
-  CHECK_VERSION(2.1.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Initialize the table and assign the values for the tuple
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -754,25 +691,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
     }
     Result result = this->session_.execute(select_statement);
     ASSERT_EQ(1u, result.row_count());
-//    Tuple result_tuple(result.first_row().next().as<Tuple>());
-//    ASSERT_EQ(values, result_tuple.values<TypeParam>());
-    const CassValue *result_tuple(result.first_row().next().get_value());
-
-    size_t collection_size = cass_value_item_count(result_tuple);
-    ASSERT_EQ(tuple.size(), collection_size);
-
-    CassIterator* collection_iterator = cass_iterator_from_tuple(result_tuple);
-
-    for (size_t j = 0; j < collection_size; ++j) {
-      if (cass_iterator_next(collection_iterator)) {
-        TypeParam value = TypeParam(cass_iterator_get_value(collection_iterator));
-        ASSERT_EQ(value, values[j]);
-      } else {
-        throw Exception("No more values available");
-      }
-    }
-
-    cass_iterator_free(collection_iterator);
+    Tuple result_tuple(result.first_row().next().as<Tuple>());
+    ASSERT_EQ(values, result_tuple.values<TypeParam>());
   }
 }
 
@@ -792,8 +712,8 @@ CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, Tuple) {
  *                  then validated via simple and prepared statement operations
  */
 CASSANDRA_INTEGRATION_TYPED_TEST_P(CassandraTypesTests, UDT) {
-  CHECK_VERSION(2.2.0);
-  CHECK_VALUE_TYPE_VERSION(TypeParam);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(TypeParam);
 
   // Build the UDT type name e.g. udt_pointtype, udt_line_string, etc.
   const std::vector<TypeParam>& values = CassandraTypesTests<TypeParam>::values_;
@@ -905,7 +825,7 @@ REGISTER_TYPED_TEST_CASE_P(CassandraTypesTests, Integration_Cassandra_Basic,
  */
 CASSANDRA_INTEGRATION_TEST_F(CassandraTypesDurationTests, MixedValues) {
   CHECK_FAILURE;
-  CHECK_VALUE_TYPE_VERSION(Duration);
+  CHECK_VALUE_TYPE_CASSANDRA_VERSION(Duration);
 
   this->default_setup();
 

@@ -87,7 +87,7 @@ CASSANDRA_INTEGRATION_TEST_F(PreparedMetadataTests, AlterDoesntUpdateColumnCount
  */
 CASSANDRA_INTEGRATION_TEST_F(PreparedMetadataTests, AlterProperlyUpdatesColumnCount) {
   CHECK_FAILURE;
-  CHECK_VERSION(4.0.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(4.0.0);
 
   // Ensure protocol v5 or greater
   Session session = default_cluster().with_beta_protocol(true).connect(keyspace_name_);
