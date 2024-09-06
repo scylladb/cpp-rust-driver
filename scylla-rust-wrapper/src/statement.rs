@@ -11,7 +11,7 @@ use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
 use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::statement::SerialConsistency;
-use scylla::{BufMut, Bytes, BytesMut};
+use scylla::transport::{PagingState, PagingStateResponse};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
@@ -36,7 +36,8 @@ pub struct SimpleQuery {
 pub struct CassStatement {
     pub statement: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
-    pub paging_state: Option<Bytes>,
+    pub paging_state: PagingState,
+    pub paging_enabled: bool,
     pub request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
@@ -145,10 +146,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         None => return std::ptr::null_mut(),
     };
 
-    let mut query = Query::new(query_str.to_string());
-
-    // Set Cpp Driver default configuration for queries:
-    query.disable_paging();
+    let query = Query::new(query_str.to_string());
 
     let simple_query = SimpleQuery {
         query,
@@ -158,7 +156,9 @@ pub unsafe extern "C" fn cass_statement_new_n(
     Box::into_raw(Box::new(CassStatement {
         statement: Statement::Simple(simple_query),
         bound_values: vec![Unset; parameter_count as usize],
-        paging_state: None,
+        paging_state: PagingState::start(),
+        // Cpp driver disables paging by default.
+        paging_enabled: false,
         request_timeout_ms: None,
         exec_profile: None,
     }))
@@ -191,21 +191,15 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     statement_raw: *mut CassStatement,
     page_size: c_int,
 ) -> CassError {
-    // TODO: validate page_size
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => {
-            if page_size == -1 {
-                inner.query.disable_paging()
-            } else {
-                inner.query.set_page_size(page_size)
-            }
-        }
-        Statement::Prepared(inner) => {
-            if page_size == -1 {
-                Arc::make_mut(inner).disable_paging()
-            } else {
-                Arc::make_mut(inner).set_page_size(page_size)
-            }
+    let statement = ptr_to_ref_mut(statement_raw);
+    if page_size <= 0 {
+        // Cpp driver sets the page size flag only for positive page size provided by user.
+        statement.paging_enabled = false;
+    } else {
+        statement.paging_enabled = true;
+        match &mut statement.statement {
+            Statement::Simple(inner) => inner.query.set_page_size(page_size),
+            Statement::Prepared(inner) => Arc::make_mut(inner).set_page_size(page_size),
         }
     }
 
@@ -220,9 +214,10 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement
-        .paging_state
-        .clone_from(&result.metadata.paging_state);
+    match &result.metadata.paging_state_response {
+        PagingStateResponse::HasMorePages { state } => statement.paging_state.clone_from(state),
+        PagingStateResponse::NoMorePages => statement.paging_state = PagingState::start(),
+    }
     CassError::CASS_OK
 }
 
@@ -235,18 +230,13 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     let statement_from_raw = ptr_to_ref_mut(statement);
 
     if paging_state.is_null() {
-        statement_from_raw.paging_state = None;
+        statement_from_raw.paging_state = PagingState::start();
         return CassError::CASS_ERROR_LIB_NULL_VALUE;
     }
 
     let paging_state_usize: usize = paging_state_size.try_into().unwrap();
-    let mut b = BytesMut::with_capacity(paging_state_usize);
-    let paging_state_bytes = slice::from_raw_parts(paging_state, paging_state_usize);
-    for byte in paging_state_bytes {
-        b.put_i8(*byte);
-    }
-    statement_from_raw.paging_state = Some(b.freeze());
-
+    let paging_state_bytes = slice::from_raw_parts(paging_state as *const u8, paging_state_usize);
+    statement_from_raw.paging_state = PagingState::new_from_raw_bytes(paging_state_bytes);
     CassError::CASS_OK
 }
 

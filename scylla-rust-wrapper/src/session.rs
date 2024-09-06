@@ -18,6 +18,7 @@ use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
+use scylla::transport::PagingStateResponse;
 use scylla::{QueryResult, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::future::Future;
@@ -205,7 +206,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
                 metadata: Arc::new(CassResultData {
-                    paging_state: None,
+                    paging_state_response: PagingStateResponse::NoMorePages,
                     col_specs: vec![],
                     tracing_id: None,
                 }),
@@ -244,6 +245,7 @@ pub unsafe extern "C" fn cass_session_execute(
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = ptr_to_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
+    let paging_enabled = statement_opt.paging_enabled;
     let bound_values = statement_opt.bound_values.clone();
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
@@ -274,24 +276,38 @@ pub unsafe extern "C" fn cass_session_execute(
             }
         }
 
-        let query_res: Result<QueryResult, QueryError> = match statement {
+        let query_res: Result<(QueryResult, PagingStateResponse), QueryError> = match statement {
             Statement::Simple(query) => {
-                session
-                    .query_paged(query.query, bound_values, paging_state)
-                    .await
+                if paging_enabled {
+                    session
+                        .query_single_page(query.query, bound_values, paging_state)
+                        .await
+                } else {
+                    session
+                        .query_unpaged(query.query, bound_values)
+                        .await
+                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                }
             }
             Statement::Prepared(prepared) => {
-                session
-                    .execute_paged(&prepared, bound_values, paging_state)
-                    .await
+                if paging_enabled {
+                    session
+                        .execute_single_page(&prepared, bound_values, paging_state)
+                        .await
+                } else {
+                    session
+                        .execute_unpaged(&prepared, bound_values)
+                        .await
+                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                }
             }
         };
 
         match query_res {
-            Ok(result) => {
+            Ok((result, paging_state_response)) => {
                 let metadata = Arc::new(CassResultData {
-                    paging_state: result.paging_state,
-                    col_specs: result.col_specs,
+                    paging_state_response,
+                    col_specs: result.col_specs().to_vec(),
                     tracing_id: result.tracing_id,
                 });
                 let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
@@ -516,7 +532,6 @@ pub unsafe extern "C" fn cass_session_prepare_n(
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
         // Set Cpp Driver default configuration for queries:
-        prepared.disable_paging();
         prepared.set_consistency(Consistency::One);
 
         Ok(CassResultValue::Prepared(Arc::new(prepared)))

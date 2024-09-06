@@ -7,7 +7,7 @@ use scylla::{
     },
     serialize::{
         value::{
-            BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeCql,
+            BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeValue,
             SetOrListSerializationErrorKind, TupleSerializationErrorKind,
             UdtSerializationErrorKind,
         },
@@ -60,7 +60,7 @@ pub enum CassCqlValue {
     // TODO: custom (?), duration and decimal
 }
 
-impl SerializeCql for CassCqlValue {
+impl SerializeValue for CassCqlValue {
     fn serialize<'b>(
         &self,
         _typ: &ColumnType,
@@ -89,44 +89,44 @@ impl CassCqlValue {
             // will never fail. Thanks to that, we do not have to reimplement low-level serialization
             // for each type.
             CassCqlValue::TinyInt(v) => {
-                <i8 as SerializeCql>::serialize(v, &ColumnType::TinyInt, writer)
+                <i8 as SerializeValue>::serialize(v, &ColumnType::TinyInt, writer)
             }
             CassCqlValue::SmallInt(v) => {
-                <i16 as SerializeCql>::serialize(v, &ColumnType::SmallInt, writer)
+                <i16 as SerializeValue>::serialize(v, &ColumnType::SmallInt, writer)
             }
-            CassCqlValue::Int(v) => <i32 as SerializeCql>::serialize(v, &ColumnType::Int, writer),
+            CassCqlValue::Int(v) => <i32 as SerializeValue>::serialize(v, &ColumnType::Int, writer),
             CassCqlValue::BigInt(v) => {
-                <i64 as SerializeCql>::serialize(v, &ColumnType::BigInt, writer)
+                <i64 as SerializeValue>::serialize(v, &ColumnType::BigInt, writer)
             }
             CassCqlValue::Float(v) => {
-                <f32 as SerializeCql>::serialize(v, &ColumnType::Float, writer)
+                <f32 as SerializeValue>::serialize(v, &ColumnType::Float, writer)
             }
             CassCqlValue::Double(v) => {
-                <f64 as SerializeCql>::serialize(v, &ColumnType::Double, writer)
+                <f64 as SerializeValue>::serialize(v, &ColumnType::Double, writer)
             }
             CassCqlValue::Boolean(v) => {
-                <bool as SerializeCql>::serialize(v, &ColumnType::Boolean, writer)
+                <bool as SerializeValue>::serialize(v, &ColumnType::Boolean, writer)
             }
             CassCqlValue::Text(v) => {
-                <String as SerializeCql>::serialize(v, &ColumnType::Text, writer)
+                <String as SerializeValue>::serialize(v, &ColumnType::Text, writer)
             }
             CassCqlValue::Blob(v) => {
-                <Vec<u8> as SerializeCql>::serialize(v, &ColumnType::Blob, writer)
+                <Vec<u8> as SerializeValue>::serialize(v, &ColumnType::Blob, writer)
             }
             CassCqlValue::Uuid(v) => {
-                <Uuid as SerializeCql>::serialize(v, &ColumnType::Uuid, writer)
+                <Uuid as SerializeValue>::serialize(v, &ColumnType::Uuid, writer)
             }
             CassCqlValue::Date(v) => {
-                <CqlDate as SerializeCql>::serialize(v, &ColumnType::Date, writer)
+                <CqlDate as SerializeValue>::serialize(v, &ColumnType::Date, writer)
             }
             CassCqlValue::Inet(v) => {
-                <IpAddr as SerializeCql>::serialize(v, &ColumnType::Inet, writer)
+                <IpAddr as SerializeValue>::serialize(v, &ColumnType::Inet, writer)
             }
             CassCqlValue::Duration(v) => {
-                <CqlDuration as SerializeCql>::serialize(v, &ColumnType::Duration, writer)
+                <CqlDuration as SerializeValue>::serialize(v, &ColumnType::Duration, writer)
             }
             CassCqlValue::Decimal(v) => {
-                <CqlDecimal as SerializeCql>::serialize(v, &ColumnType::Decimal, writer)
+                <CqlDecimal as SerializeValue>::serialize(v, &ColumnType::Decimal, writer)
             }
             CassCqlValue::Tuple(fields) => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List(l) => serialize_sequence(l.len(), l.iter(), writer),
