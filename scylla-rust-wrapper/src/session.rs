@@ -245,6 +245,7 @@ pub unsafe extern "C" fn cass_session_execute(
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = ptr_to_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
+    let paging_enabled = statement_opt.paging_enabled;
     let bound_values = statement_opt.bound_values.clone();
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
@@ -277,14 +278,28 @@ pub unsafe extern "C" fn cass_session_execute(
 
         let query_res: Result<(QueryResult, PagingStateResponse), QueryError> = match statement {
             Statement::Simple(query) => {
-                session
-                    .query_single_page(query.query, bound_values, paging_state)
-                    .await
+                if paging_enabled {
+                    session
+                        .query_single_page(query.query, bound_values, paging_state)
+                        .await
+                } else {
+                    session
+                        .query_unpaged(query.query, bound_values)
+                        .await
+                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                }
             }
             Statement::Prepared(prepared) => {
-                session
-                    .execute_single_page(&prepared, bound_values, paging_state)
-                    .await
+                if paging_enabled {
+                    session
+                        .execute_single_page(&prepared, bound_values, paging_state)
+                        .await
+                } else {
+                    session
+                        .execute_unpaged(&prepared, bound_values)
+                        .await
+                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                }
             }
         };
 
@@ -517,8 +532,6 @@ pub unsafe extern "C" fn cass_session_prepare_n(
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
         // Set Cpp Driver default configuration for queries:
-        // FIXME: DISABLE PAGING
-        // prepared.disable_paging();
         prepared.set_consistency(Consistency::One);
 
         Ok(CassResultValue::Prepared(Arc::new(prepared)))

@@ -37,6 +37,7 @@ pub struct CassStatement {
     pub statement: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
     pub paging_state: PagingState,
+    pub paging_enabled: bool,
     pub request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
@@ -147,10 +148,6 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     let query = Query::new(query_str.to_string());
 
-    // Set Cpp Driver default configuration for queries:
-    // FIXME: DISABLE PAGING
-    // query.disable_paging();
-
     let simple_query = SimpleQuery {
         query,
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
@@ -160,6 +157,8 @@ pub unsafe extern "C" fn cass_statement_new_n(
         statement: Statement::Simple(simple_query),
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: PagingState::start(),
+        // Cpp driver disables paging by default.
+        paging_enabled: false,
         request_timeout_ms: None,
         exec_profile: None,
     }))
@@ -193,22 +192,14 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     page_size: c_int,
 ) -> CassError {
     // TODO: validate page_size
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => {
-            if page_size == -1 {
-                // FIXME: DISABLE PAGING
-                // query.disable_paging();
-            } else {
-                inner.query.set_page_size(page_size)
-            }
-        }
-        Statement::Prepared(inner) => {
-            if page_size == -1 {
-                // FIXME: DISABLE PAGING
-                // Arc::make_mut(inner).disable_paging()
-            } else {
-                Arc::make_mut(inner).set_page_size(page_size)
-            }
+    let statement = ptr_to_ref_mut(statement_raw);
+    if page_size == -1 {
+        statement.paging_enabled = false;
+    } else {
+        statement.paging_enabled = true;
+        match &mut statement.statement {
+            Statement::Simple(inner) => inner.query.set_page_size(page_size),
+            Statement::Prepared(inner) => Arc::make_mut(inner).set_page_size(page_size),
         }
     }
 

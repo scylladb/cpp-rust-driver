@@ -29,6 +29,8 @@ pub unsafe extern "C" fn cass_prepared_bind(
         statement,
         bound_values: vec![Unset; bound_values_size],
         paging_state: PagingState::start(),
+        // Cpp driver disables paging by default.
+        paging_enabled: false,
         request_timeout_ms: None,
         exec_profile: None,
     }))
