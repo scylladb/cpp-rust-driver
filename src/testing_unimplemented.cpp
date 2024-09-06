@@ -131,11 +131,6 @@ cass_cluster_set_prepare_on_up_or_add_host(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_up_or_add_host\n");
 }
 CASS_EXPORT void
-cass_cluster_set_retry_policy(CassCluster* cluster,
-                              CassRetryPolicy* retry_policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_retry_policy\n");
-}
-CASS_EXPORT void
 cass_cluster_set_timestamp_gen(CassCluster* cluster,
                                CassTimestampGen* timestamp_gen){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_timestamp_gen\n");
@@ -299,12 +294,6 @@ cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy){
 CASS_EXPORT CassVersion
 cass_schema_meta_version(const CassSchemaMeta* schema_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
-}
-CASS_EXPORT CassFuture*
-cass_session_connect_keyspace(CassSession* session,
-                              const CassCluster* cluster,
-                              const char* keyspace){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_connect_keyspace\n");
 }
 CASS_EXPORT void
 cass_session_get_metrics(const CassSession* session,
