@@ -191,9 +191,9 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     statement_raw: *mut CassStatement,
     page_size: c_int,
 ) -> CassError {
-    // TODO: validate page_size
     let statement = ptr_to_ref_mut(statement_raw);
-    if page_size == -1 {
+    if page_size <= 0 {
+        // Cpp driver sets the page size flag only for positive page size provided by user.
         statement.paging_enabled = false;
     } else {
         statement.paging_enabled = true;
