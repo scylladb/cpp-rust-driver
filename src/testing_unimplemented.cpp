@@ -295,12 +295,6 @@ CASS_EXPORT CassVersion
 cass_schema_meta_version(const CassSchemaMeta* schema_meta){
 	throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
 }
-CASS_EXPORT CassFuture*
-cass_session_connect_keyspace(CassSession* session,
-                              const CassCluster* cluster,
-                              const char* keyspace){
-	throw std::runtime_error("UNIMPLEMENTED cass_session_connect_keyspace\n");
-}
 CASS_EXPORT void
 cass_session_get_metrics(const CassSession* session,
                          CassMetrics* output){

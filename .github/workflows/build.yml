@@ -50,9 +50,13 @@ jobs:
 :ByNameTests.*\
 :CompressionTests.*\
 :LoggingTests.*\
+:PreparedMetadataTests.*\
+:UseKeyspaceCaseSensitiveTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :ExecutionProfileTest.InvalidName\
-:*NoCompactEnabledConnection"
+:*NoCompactEnabledConnection\
+:PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
+:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace"
       run: valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite ./cassandra-integration-tests --scylla --version=release:6.0.0 --category=CASSANDRA --verbose=ccm --gtest_filter="$Tests"
 
     - name: Upload test logs
