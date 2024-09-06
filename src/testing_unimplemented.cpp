@@ -131,11 +131,6 @@ cass_cluster_set_prepare_on_up_or_add_host(CassCluster* cluster,
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_up_or_add_host\n");
 }
 CASS_EXPORT void
-cass_cluster_set_retry_policy(CassCluster* cluster,
-                              CassRetryPolicy* retry_policy){
-	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_retry_policy\n");
-}
-CASS_EXPORT void
 cass_cluster_set_timestamp_gen(CassCluster* cluster,
                                CassTimestampGen* timestamp_gen){
 	throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_timestamp_gen\n");
