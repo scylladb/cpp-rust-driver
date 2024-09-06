@@ -8,7 +8,7 @@ use crate::metadata::{
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue};
-use scylla::Bytes;
+use scylla::transport::PagingStateResponse;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub struct CassResult {
 }
 
 pub struct CassResultData {
-    pub paging_state: Option<Bytes>,
+    pub paging_state_response: PagingStateResponse,
     pub col_specs: Vec<ColumnSpec>,
     pub tracing_id: Option<Uuid>,
 }
@@ -815,7 +815,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    result.metadata.paging_state.is_some() as cass_bool_t
+    (!result.metadata.paging_state_response.finished()) as cass_bool_t
 }
 
 #[no_mangle]
@@ -1298,12 +1298,18 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
     let result_from_raw = ptr_to_ref(result);
 
-    match &result_from_raw.metadata.paging_state {
-        Some(result_paging_state) => {
-            *paging_state_size = result_paging_state.len() as u64;
-            *paging_state = result_paging_state.as_ptr() as *const c_char;
-        }
-        None => {
+    match &result_from_raw.metadata.paging_state_response {
+        PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
+            Some(result_paging_state) => {
+                *paging_state_size = result_paging_state.len() as u64;
+                *paging_state = result_paging_state.as_ptr() as *const c_char;
+            }
+            None => {
+                *paging_state_size = 0;
+                *paging_state = std::ptr::null();
+            }
+        },
+        PagingStateResponse::NoMorePages => {
             *paging_state_size = 0;
             *paging_state = std::ptr::null();
         }

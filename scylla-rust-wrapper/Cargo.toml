@@ -10,7 +10,9 @@ categories = ["database"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-scylla = { version = "0.13.1", features = ["ssl"] }
+scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v0.14.0", features = [
+    "ssl",
+] }
 tokio = { version = "1.27.0", features = ["full"] }
 lazy_static = "1.4.0"
 uuid = "1.1.2"
@@ -29,11 +31,11 @@ bindgen = "0.65"
 chrono = "0.4.20"
 
 [dev-dependencies]
+scylla-proxy = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v0.14.0" }
+
 assert_matches = "1.5.0"
 ntest = "0.9.3"
 rusty-fork = "0.3.0"
-scylla-proxy = { version = "0.0.4" }
-
 [lib]
 name = "scylla_cpp_driver"
 crate-type = ["cdylib", "staticlib"]

@@ -1,4 +1,4 @@
-use scylla::frame::value::MaybeUnset::Unset;
+use scylla::{frame::value::MaybeUnset::Unset, transport::PagingState};
 use std::sync::Arc;
 
 use crate::{
@@ -28,7 +28,7 @@ pub unsafe extern "C" fn cass_prepared_bind(
     Box::into_raw(Box::new(CassStatement {
         statement,
         bound_values: vec![Unset; bound_values_size],
-        paging_state: None,
+        paging_state: PagingState::start(),
         request_timeout_ms: None,
         exec_profile: None,
     }))

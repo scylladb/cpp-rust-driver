@@ -15,6 +15,7 @@ impl From<&QueryError> for CassError {
             QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
             QueryError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
+            QueryError::CqlResponseParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
         }
     }
 }
@@ -83,6 +84,9 @@ impl From<&NewSessionError> for CassError {
             NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
             NewSessionError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
+            NewSessionError::CqlResponseParseError(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
         }
     }
 }
