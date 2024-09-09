@@ -16,7 +16,7 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::SessionBuilder;
+use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -90,6 +90,21 @@ pub struct CassCluster {
 impl CassCluster {
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
         &self.execution_profile_map
+    }
+
+    #[inline]
+    pub(crate) fn get_session_config(&self) -> &SessionConfig {
+        &self.session_builder.config
+    }
+
+    #[inline]
+    pub(crate) fn get_port(&self) -> u16 {
+        self.port
+    }
+
+    #[inline]
+    pub(crate) fn get_contact_points(&self) -> &[String] {
+        &self.contact_points
     }
 }
 
@@ -174,9 +189,10 @@ unsafe fn cluster_set_contact_points(
     let mut contact_points = ptr_to_cstr_n(contact_points_raw, contact_points_length)
         .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
         .split(',')
+        .filter(|s| !s.is_empty()) // Extra commas should be ignored.
         .peekable();
 
-    if contact_points.peek().is_none() {
+    if contact_points.peek().is_none() || contact_points.peek().unwrap().is_empty() {
         // If cass_cluster_set_contact_points() is called with empty
         // set of contact points, the contact points should be cleared.
         cluster.contact_points.clear();
