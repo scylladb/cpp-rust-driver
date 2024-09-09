@@ -42,6 +42,7 @@ jobs:
           #        Ignored tests are added in the end, after the "-" sign.
           Tests: "ClusterTests.*\
 :BasicsTests.*\
+:ConfigTests.*\
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ErrorTests.*\
