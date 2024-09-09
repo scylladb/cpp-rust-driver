@@ -18,6 +18,7 @@ pub mod exec_profile;
 mod external;
 pub mod future;
 pub mod inet;
+pub mod integration_testing;
 mod logging;
 pub mod metadata;
 pub mod prepared;

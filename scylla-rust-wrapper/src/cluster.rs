@@ -16,7 +16,7 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::SessionBuilder;
+use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -90,6 +90,21 @@ pub struct CassCluster {
 impl CassCluster {
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
         &self.execution_profile_map
+    }
+
+    #[inline]
+    pub(crate) fn get_session_config(&self) -> &SessionConfig {
+        &self.session_builder.config
+    }
+
+    #[inline]
+    pub(crate) fn get_port(&self) -> u16 {
+        self.port
+    }
+
+    #[inline]
+    pub(crate) fn get_contact_points(&self) -> &[String] {
+        &self.contact_points
     }
 }
 
