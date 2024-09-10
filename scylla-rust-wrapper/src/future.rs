@@ -292,7 +292,8 @@ mod tests {
         let wrapped_cass_fut = PtrWrapper(cass_fut);
         unsafe {
             let handle = thread::spawn(move || {
-                let PtrWrapper(cass_fut) = wrapped_cass_fut;
+                let wrapper = wrapped_cass_fut;
+                let cass_fut = wrapper.0;
                 let mut message: *const c_char = std::ptr::null();
                 let mut msg_len: size_t = 0;
                 cass_future_error_message(cass_fut, &mut message, &mut msg_len);
