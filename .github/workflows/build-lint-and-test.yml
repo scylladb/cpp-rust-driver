@@ -1,0 +1,228 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Should include `INTEGRATION_TEST_BIN` from the `Makefile`
+  # TODO: Remove `build/libscylla-cpp-driver.*` after https://github.com/scylladb/cpp-rust-driver/issues/164 is fixed.
+  INTEGRATION_TEST_BIN: |
+    build/cassandra-integration-tests 
+    build/libscylla-cpp-driver.*
+  INTEGRATION_TEST_BIN_CACHE_KEY: integration-test-bin-${{ github.sha }}
+  # Goes to `Makefile` to let it pickup cached binary
+  DONT_REBUILD_INTEGRATION_BIN: true
+  CCM_LOGS_PATTERN: /tmp/ccm*/ccm*/node*/logs/*
+
+jobs:
+  build-lint-and-unit-test:
+    name: Build, lint and run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: make install-build-dependencies
+
+      - name: Check
+        run: make check
+
+      - name: Run unit and proxy tests
+        run: make run-test-unit
+
+      - name: Build integration test binary
+        id: build-integration-test-bin
+        run: make build-integration-test-bin
+
+      - name: Save integration test binary
+        uses: actions/cache/save@v4
+        id: save-integration-test-bin
+        with:
+          path: ${{ env.INTEGRATION_TEST_BIN }}
+          key: ${{ env.INTEGRATION_TEST_BIN_CACHE_KEY }}
+
+  scylla-integration-tests:
+    name: Scylla ITs
+    runs-on: ubuntu-latest
+    needs: [build-lint-and-unit-test]
+    timeout-minutes: 90
+
+    strategy:
+      matrix:
+        scylla-version: [ENTERPRISE-RELEASE, ENTERPRISE-PRIOR-RELEASE, OSS-RELEASE, OSS-PRIOR-RELEASE]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CCM
+        run: |
+          make install-ccm-if-missing
+
+      - name: Get scylla version
+        id: scylla-version
+        run: |
+          if [[ "${{ matrix.scylla-version }}" == "ENTERPRISE-RELEASE" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 scylla-enterprise-stable:1 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.scylla-version }}" == "ENTERPRISE-PRIOR-RELEASE" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 2 scylla-enterprise-stable:2 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.scylla-version }}" == "ENTERPRISE-RC" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 scylla-enterprise-rc | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.scylla-version }}" == "OSS-RELEASE" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 scylla-oss-stable:1 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.scylla-version }}" == "OSS-PRIOR-RELEASE" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 2 scylla-oss-stable:2 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.scylla-version }}" == "OSS-RC" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 scylla-oss-rc | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          else
+            echo "Unknown scylla version name `${{ matrix.scylla-version }}`"
+            exit 1
+          fi
+
+      - name: Pull CCM image from the cache
+        uses: actions/cache/restore@v4
+        id: pull-image
+        with:
+          path: ~/.ccm/scylla-repository
+          key: image-scylla-${{ runner.os }}-${{ steps.scylla-version.outputs.value }}
+
+      - name: Download Scylla (${{ steps.scylla-version.outputs.value }}) image
+        if: steps.pull-image.outputs.cache-hit != 'true'
+        run: SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make download-ccm-scylla-image
+
+      - name: Save CCM image cache
+        uses: actions/cache/save@v4
+        if: steps.pull-image.outputs.cache-hit != 'true'
+        with:
+          path: ~/.ccm/scylla-repository
+          key: image-scylla-${{ runner.os }}-${{ steps.scylla-version.outputs.value }}
+
+      - name: Pull integration test binary
+        uses: actions/cache/restore@v4
+        id: restore-integration-test-bin
+        with:
+          path: ${{ env.INTEGRATION_TEST_BIN }}
+          key: ${{ env.INTEGRATION_TEST_BIN_CACHE_KEY }}
+
+      - name: Install valgrind
+        run: make install-valgrind-if-missing
+
+      - name: Install binary dependencies
+        run: make install-bin-dependencies
+
+      - name: Run integration tests on Scylla ${{ steps.scylla-version.outputs.value }}
+        id: run-integration-tests
+        run: SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make run-test-integration-scylla
+
+      - name: Upload test logs
+        uses: actions/upload-artifact@v4
+        if: steps.run-integration-tests.outcome == 'failure'
+        with:
+          name: test-logs-scylla-${{ matrix.scylla-version }}
+          path: ./log/*
+
+      - name: Upload CCM logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ccm-log-scylla-${{ matrix.scylla-version }}
+          path: ${{ env.CCM_LOGS_PATTERN }}
+
+  cassandra-integration-tests:
+    runs-on: ubuntu-latest
+    needs: [build-lint-and-unit-test]
+
+    strategy:
+      matrix:
+        cassandra-version: [RELEASE-3.X]
+        java-version: [8]
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'adopt'
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CCM
+        run: make install-ccm-if-missing
+
+      - name: Get cassandra version
+        id: cassandra-version
+        run: |
+          if [[ "${{ matrix.cassandra-version }}" == "RELEASE-3.X" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 cassandra3-stable:1 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif [[ "${{ matrix.cassandra-version }}" == "RELEASE-4.X" ]]; then
+            echo "value=$(python3 ci/version_fetch.py --version-index 1 cassandra4-stable:1 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          else
+            echo "Unknown cassandra version name `${{ matrix.cassandra-version }}`"
+          fi
+
+      - name: Pull CCM image from the cache
+        uses: actions/cache/restore@v4
+        id: pull-image
+        with:
+          path: ~/.ccm/repository
+          key: image-cassandra-${{ runner.os }}-${{ steps.cassandra-version.outputs.value }}
+
+      - name: Download Cassandra (${{ steps.cassandra-version.outputs.value }}) image
+        if: steps.pull-image.outputs.cache-hit != 'true'
+        run: CASSANDRA_VERSION="${{ steps.cassandra-version.outputs.value }}" make download-ccm-cassandra-image
+
+      - name: Save CCM image cache
+        uses: actions/cache/save@v4
+        if: steps.pull-image.outputs.cache-hit != 'true'
+        with:
+          path: ~/.ccm/repository
+          key: image-cassandra-${{ runner.os }}-${{ steps.cassandra-version.outputs.value }}
+
+      - name: Pull integration test binary
+        uses: actions/cache/restore@v4
+        id: restore-integration-test-bin
+        with:
+          path: ${{ env.INTEGRATION_TEST_BIN }}
+          key: ${{ env.INTEGRATION_TEST_BIN_CACHE_KEY }}
+
+      - name: Install valgrind
+        run: make install-valgrind-if-missing
+
+      - name: Install binary dependencies
+        run: make install-bin-dependencies
+
+      - name: Run integration tests on Cassandra ${{ steps.cassandra-version.outputs.value }}
+        id: run-integration-tests
+        run: CASSANDRA_VERSION="${{ steps.cassandra-version.outputs.value }}" make run-test-integration-cassandra
+
+      - name: Upload test logs
+        uses: actions/upload-artifact@v4
+        if: steps.run-integration-tests.outcome == 'failure'
+        with:
+          name: test-logs-cassandra-${{ matrix.cassandra-version }}
+          path: ./log/*
+
+      - name: Upload CCM logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ccm-log-cassandra-${{ matrix.java-version }}-${{ matrix.cassandra-version }}
+          path: ${{ env.CCM_LOGS_PATTERN }}
