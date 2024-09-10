@@ -21,6 +21,7 @@ pub mod inet;
 pub mod integration_testing;
 mod logging;
 pub mod metadata;
+pub mod misc;
 pub mod prepared;
 pub mod query_error;
 pub mod query_result;
