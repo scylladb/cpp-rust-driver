@@ -54,7 +54,7 @@ jobs:
 
     strategy:
       matrix:
-        scylla-version: [ENTERPRISE-RELEASE, ENTERPRISE-PRIOR-RELEASE, OSS-RELEASE, OSS-PRIOR-RELEASE]
+        scylla-version: [ENTERPRISE-RELEASE, ENTERPRISE-PRIOR-RELEASE, OSS-RELEASE, OSS-PRIOR-RELEASE, 5.4.8]
       fail-fast: false
 
     steps:
@@ -85,6 +85,8 @@ jobs:
             echo "value=$(python3 ci/version_fetch.py --version-index 2 scylla-oss-stable:2 | tr -d '\"')" | tee -a $GITHUB_OUTPUT
           elif [[ "${{ matrix.scylla-version }}" == "OSS-RC" ]]; then
             echo "value=$(python3 ci/version_fetch.py --version-index 1 scylla-oss-rc | tr -d '\"')" | tee -a $GITHUB_OUTPUT
+          elif echo "${{ matrix.scylla-version }}" | grep -P '^[0-9\.]+'; then # If you want to run specific version do just that
+            echo "value=${{ matrix.scylla-version }}" | tee -a $GITHUB_OUTPUT
           else
             echo "Unknown scylla version name `${{ matrix.scylla-version }}`"
             exit 1
