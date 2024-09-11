@@ -7,6 +7,7 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::types::*;
+use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::execution_profile::ExecutionProfileBuilder;
@@ -276,6 +277,23 @@ pub unsafe extern "C" fn cass_cluster_set_application_version_n(
         .config
         .identity
         .set_application_version(app_version);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_client_id(
+    cluster_raw: *mut CassCluster,
+    client_id: CassUuid,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let client_uuid: uuid::Uuid = client_id.into();
+    let client_uuid_str = client_uuid.to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_client_id(client_uuid_str)
 }
 
 #[no_mangle]
