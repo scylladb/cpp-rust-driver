@@ -13,6 +13,7 @@ use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collec
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
+use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
@@ -31,6 +32,7 @@ use tokio::sync::RwLock;
 pub struct CassSessionInner {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
+    client_id: uuid::Uuid,
 }
 
 impl CassSessionInner {
@@ -82,6 +84,10 @@ impl CassSessionInner {
             session_opt,
             session_builder,
             exec_profile_map,
+            cluster
+                .get_client_id()
+                // If user did not set a client id, generate a random uuid v4.
+                .unwrap_or_else(uuid::Uuid::new_v4),
             keyspace,
         ))
     }
@@ -90,6 +96,7 @@ impl CassSessionInner {
         session_opt: &RwLock<Option<CassSessionInner>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
+        client_id: uuid::Uuid,
         keyspace: Option<String>,
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
@@ -119,6 +126,7 @@ impl CassSessionInner {
         *session_guard = Some(CassSessionInner {
             session,
             exec_profile_map,
+            client_id,
         });
         Ok(CassResultValue::Empty)
     }
@@ -560,6 +568,14 @@ pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const
 
         Ok(CassResultValue::Empty)
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_session_get_client_id(session: *const CassSession) -> CassUuid {
+    let cass_session = ptr_to_ref(session);
+
+    let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
+    client_id.into()
 }
 
 #[no_mangle]

@@ -90,6 +90,8 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+
+    client_id: Option<uuid::Uuid>,
 }
 
 impl CassCluster {
@@ -110,6 +112,11 @@ impl CassCluster {
     #[inline]
     pub(crate) fn get_contact_points(&self) -> &[String] {
         &self.contact_points
+    }
+
+    #[inline]
+    pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
+        self.client_id
     }
 }
 
@@ -162,6 +169,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         default_execution_profile_builder,
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
+        client_id: None,
     }))
 }
 
@@ -289,6 +297,7 @@ pub unsafe extern "C" fn cass_cluster_set_client_id(
     let client_uuid: uuid::Uuid = client_id.into();
     let client_uuid_str = client_uuid.to_string();
 
+    cluster.client_id = Some(client_uuid);
     cluster
         .session_builder
         .config
