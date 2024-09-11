@@ -7,6 +7,7 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::types::*;
+use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::execution_profile::ExecutionProfileBuilder;
@@ -16,6 +17,7 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
+use scylla::transport::SelfIdentity;
 use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -31,6 +33,9 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 // - request client timeout is 12000 millis.
 const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
 const DEFAULT_REQUEST_TIMEOUT_MILLIS: u64 = 12000;
+
+const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
+const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
@@ -85,6 +90,8 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+
+    client_id: Option<uuid::Uuid>,
 }
 
 impl CassCluster {
@@ -105,6 +112,11 @@ impl CassCluster {
     #[inline]
     pub(crate) fn get_contact_points(&self) -> &[String] {
         &self.contact_points
+    }
+
+    #[inline]
+    pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
+        self.client_id
     }
 }
 
@@ -140,8 +152,13 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         .consistency(DEFAULT_CONSISTENCY)
         .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
 
+    // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
+    let custom_identity = SelfIdentity::new()
+        .with_custom_driver_name(DRIVER_NAME)
+        .with_custom_driver_version(DRIVER_VERSION);
+
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new(),
+        session_builder: SessionBuilder::new().custom_identity(custom_identity),
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
@@ -152,6 +169,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         default_execution_profile_builder,
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
+        client_id: None,
     }))
 }
 
@@ -217,6 +235,74 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
     // FIXME: should set `use_randomized_contact_points` flag in cluster config
 
     CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+) {
+    cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name_n(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+    app_name_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_name = ptr_to_cstr_n(app_name, app_name_len).unwrap().to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_name(app_name)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+) {
+    cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version_n(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+    app_version_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_version = ptr_to_cstr_n(app_version, app_version_len)
+        .unwrap()
+        .to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_version(app_version);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_client_id(
+    cluster_raw: *mut CassCluster,
+    client_id: CassUuid,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let client_uuid: uuid::Uuid = client_id.into();
+    let client_uuid_str = client_uuid.to_string();
+
+    cluster.client_id = Some(client_uuid);
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_client_id(client_uuid_str)
 }
 
 #[no_mangle]
