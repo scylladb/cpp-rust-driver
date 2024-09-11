@@ -229,6 +229,30 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+) {
+    cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name_n(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+    app_name_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_name = ptr_to_cstr_n(app_name, app_name_len).unwrap().to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_name(app_name)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster_raw: *mut CassCluster,
     enabled: cass_bool_t,
