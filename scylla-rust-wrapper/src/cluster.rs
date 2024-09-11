@@ -253,6 +253,32 @@ pub unsafe extern "C" fn cass_cluster_set_application_name_n(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+) {
+    cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version_n(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+    app_version_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_version = ptr_to_cstr_n(app_version, app_version_len)
+        .unwrap()
+        .to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_version(app_version);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster_raw: *mut CassCluster,
     enabled: cass_bool_t,
