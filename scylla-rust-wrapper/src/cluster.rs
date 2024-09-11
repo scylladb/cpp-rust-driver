@@ -16,6 +16,7 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
+use scylla::transport::SelfIdentity;
 use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -31,6 +32,9 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
 // - request client timeout is 12000 millis.
 const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
 const DEFAULT_REQUEST_TIMEOUT_MILLIS: u64 = 12000;
+
+const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
+const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
@@ -140,8 +144,13 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         .consistency(DEFAULT_CONSISTENCY)
         .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
 
+    // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
+    let custom_identity = SelfIdentity::new()
+        .with_custom_driver_name(DRIVER_NAME)
+        .with_custom_driver_version(DRIVER_VERSION);
+
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new(),
+        session_builder: SessionBuilder::new().custom_identity(custom_identity),
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
