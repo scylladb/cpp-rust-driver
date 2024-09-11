@@ -27,3 +27,24 @@ impl CassConsistency {
 pub unsafe extern "C" fn cass_consistency_string(consistency: CassConsistency) -> *const c_char {
     consistency.as_cstr().as_ptr() as *const c_char
 }
+
+impl CassWriteType {
+    pub(crate) fn as_cstr(&self) -> &'static CStr {
+        match *self {
+            Self::CASS_WRITE_TYPE_SIMPLE => c"SIMPLE",
+            Self::CASS_WRITE_TYPE_BATCH => c"BATCH",
+            Self::CASS_WRITE_TYPE_UNLOGGED_BATCH => c"UNLOGGED_BATCH",
+            Self::CASS_WRITE_TYPE_COUNTER => c"COUNTER",
+            Self::CASS_WRITE_TYPE_BATCH_LOG => c"BATCH_LOG",
+            Self::CASS_WRITE_TYPE_CAS => c"CAS",
+            Self::CASS_WRITE_TYPE_VIEW => c"VIEW",
+            Self::CASS_WRITE_TYPE_CDC => c"CDC",
+            _ => c"",
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_write_type_string(write_type: CassWriteType) -> *const c_char {
+    write_type.as_cstr().as_ptr() as *const c_char
+}
