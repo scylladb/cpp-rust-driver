@@ -324,6 +324,19 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+    delay_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let enabled = enabled != 0;
+    let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
+
+    cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
     cluster_raw: *mut CassCluster,
     timeout_ms: c_uint,
