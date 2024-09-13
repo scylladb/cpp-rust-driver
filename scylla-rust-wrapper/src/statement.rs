@@ -125,6 +125,12 @@ impl CassStatement {
 
         CassError::CASS_OK
     }
+
+    fn reset_bound_values(&mut self, count: usize) {
+        // Clear bound values and resize the vector - all values should be unset.
+        self.bound_values.clear();
+        self.bound_values.resize(count, Unset);
+    }
 }
 
 #[no_mangle]
@@ -364,6 +370,17 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
 
     let statement_from_raw = ptr_to_ref_mut(statement);
     statement_from_raw.request_timeout_ms = Some(timeout_ms);
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_reset_parameters(
+    statement_raw: *mut CassStatement,
+    count: size_t,
+) -> CassError {
+    let statement = ptr_to_ref_mut(statement_raw);
+    statement.reset_bound_values(count as usize);
 
     CassError::CASS_OK
 }
