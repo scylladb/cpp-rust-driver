@@ -40,6 +40,7 @@ const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
+    pub(crate) token_aware_shuffling_replicas_enabled: bool,
     pub(crate) dc_awareness: Option<DcAwareness>,
     pub(crate) latency_awareness_enabled: bool,
     pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
@@ -49,6 +50,11 @@ impl LoadBalancingConfig {
     // as it results in panic due to DefaultPolicyBuilder::build() spawning a tokio task.
     pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
         let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
+        if self.token_awareness_enabled {
+            // Cpp-driver enables shuffling replicas only if token aware routing is enabled.
+            builder =
+                builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
+        }
         if let Some(dc_awareness) = self.dc_awareness.as_ref() {
             builder = builder
                 .prefer_datacenter(dc_awareness.local_dc.clone())
@@ -64,6 +70,7 @@ impl Default for LoadBalancingConfig {
     fn default() -> Self {
         Self {
             token_awareness_enabled: true,
+            token_aware_shuffling_replicas_enabled: true,
             dc_awareness: None,
             latency_awareness_enabled: false,
             latency_awareness_builder: Default::default(),
@@ -617,6 +624,18 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.load_balancing_config.token_awareness_enabled = enabled != 0;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster
+        .load_balancing_config
+        .token_aware_shuffling_replicas_enabled = enabled != 0;
 }
 
 #[no_mangle]

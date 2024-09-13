@@ -421,6 +421,19 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     CassError::CASS_OK
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_replicas(
+    profile: *mut CassExecProfile,
+    enabled: cass_bool_t,
+) -> CassError {
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder
+        .load_balancing_config
+        .token_aware_shuffling_replicas_enabled = enabled != 0;
+
+    CassError::CASS_OK
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
