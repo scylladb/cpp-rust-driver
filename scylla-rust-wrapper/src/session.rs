@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{get_column_type, CassDataType, MapDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -388,8 +388,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
         (
             CqlValue::Map(map),
             CassDataType::Map {
-                key_type: Some(key_typ),
-                val_type: Some(value_type),
+                typ: MapDataType::KeyAndValue(key_type, value_type),
                 ..
             },
         ) => CollectionValue(Collection::Map(
@@ -397,8 +396,8 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                 .map(|(key, val)| {
                     (
                         CassValue {
-                            value_type: key_typ.clone(),
-                            value: Some(get_column_value(key, key_typ)),
+                            value_type: key_type.clone(),
+                            value: Some(get_column_value(key, key_type)),
                         },
                         CassValue {
                             value_type: value_type.clone(),

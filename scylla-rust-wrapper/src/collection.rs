@@ -1,5 +1,5 @@
 use crate::cass_error::CassError;
-use crate::cass_types::CassDataType;
+use crate::cass_types::{CassDataType, MapDataType};
 use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
@@ -18,8 +18,7 @@ static UNTYPED_SET_TYPE: CassDataType = CassDataType::Set {
     frozen: false,
 };
 static UNTYPED_MAP_TYPE: CassDataType = CassDataType::Map {
-    key_type: None,
-    val_type: None,
+    typ: MapDataType::Untyped,
     frozen: false,
 };
 
@@ -47,23 +46,27 @@ impl CassCollection {
                         }
                     }
                 }
-                CassDataType::Map {
-                    key_type: k_typ,
-                    val_type: v_typ,
-                    ..
-                } => {
+
+                CassDataType::Map { typ, .. } => {
                     // Cpp-driver does the typecheck only if both map types are present...
                     // However, we decided not to mimic this behaviour (which is probably a bug).
                     // We will do the typecheck if just the key type is defined as well (half-typed maps).
-                    if let Some(k_typ) = k_typ {
-                        if index % 2 == 0 && !value::is_type_compatible(value, k_typ) {
-                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                    match typ {
+                        MapDataType::Key(k_typ) => {
+                            if index % 2 == 0 && !value::is_type_compatible(value, k_typ) {
+                                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                            }
                         }
-                    }
-                    if let Some(v_typ) = v_typ {
-                        if index % 2 != 0 && !value::is_type_compatible(value, v_typ) {
-                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                        MapDataType::KeyAndValue(k_typ, v_typ) => {
+                            if index % 2 == 0 && !value::is_type_compatible(value, k_typ) {
+                                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                            }
+                            if index % 2 != 0 && !value::is_type_compatible(value, v_typ) {
+                                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                            }
                         }
+                        // Skip the typecheck for untyped map.
+                        MapDataType::Untyped => (),
                     }
                 }
                 _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -214,7 +217,7 @@ mod tests {
 
     use crate::{
         cass_error::CassError,
-        cass_types::{CassDataType, CassValueType},
+        cass_types::{CassDataType, CassValueType, MapDataType},
         collection::{
             cass_collection_append_double, cass_collection_append_float, cass_collection_free,
         },
@@ -255,8 +258,7 @@ mod tests {
             // untyped map (via cass_collection_new_from_data_type - collection's type is Some(untyped_map)).
             {
                 let dt = Arc::new(CassDataType::Map {
-                    key_type: None,
-                    val_type: None,
+                    typ: MapDataType::Untyped,
                     frozen: false,
                 });
 
@@ -285,10 +287,9 @@ mod tests {
             // half-typed map (key-only)
             {
                 let dt = Arc::new(CassDataType::Map {
-                    key_type: Some(Arc::new(CassDataType::Value(
+                    typ: MapDataType::Key(Arc::new(CassDataType::Value(
                         CassValueType::CASS_VALUE_TYPE_BOOLEAN,
                     ))),
-                    val_type: None,
                     frozen: false,
                 });
 
@@ -325,12 +326,12 @@ mod tests {
             // typed map
             {
                 let dt = Arc::new(CassDataType::Map {
-                    key_type: Some(Arc::new(CassDataType::Value(
-                        CassValueType::CASS_VALUE_TYPE_BOOLEAN,
-                    ))),
-                    val_type: Some(Arc::new(CassDataType::Value(
-                        CassValueType::CASS_VALUE_TYPE_SMALL_INT,
-                    ))),
+                    typ: MapDataType::KeyAndValue(
+                        Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN)),
+                        Arc::new(CassDataType::Value(
+                            CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+                        )),
+                    ),
                     frozen: false,
                 });
                 let dt_ptr = Arc::into_raw(dt);

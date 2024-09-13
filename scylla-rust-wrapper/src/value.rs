@@ -402,7 +402,7 @@ mod tests {
     use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
-        cass_types::{CassDataType, CassValueType, UDTDataType},
+        cass_types::{CassDataType, CassValueType, MapDataType, UDTDataType},
         value::{is_type_compatible, CassCqlValue},
     };
 
@@ -630,8 +630,7 @@ mod tests {
         });
 
         let data_type_bool_float_map = Arc::new(CassDataType::Map {
-            key_type: Some(data_type_bool.clone()),
-            val_type: Some(data_type_float.clone()),
+            typ: MapDataType::KeyAndValue(data_type_bool.clone(), data_type_float.clone()),
             frozen: false,
         });
 
@@ -820,18 +819,16 @@ mod tests {
             });
 
             let data_type_untyped_map = Arc::new(CassDataType::Map {
-                key_type: None,
-                val_type: None,
+                typ: MapDataType::Untyped,
                 frozen: false,
             });
             let data_type_typed_key_float_map = Arc::new(CassDataType::Map {
-                key_type: Some(data_type_float.clone()),
-                val_type: None,
+                typ: MapDataType::Key(data_type_float.clone()),
+
                 frozen: false,
             });
             let data_type_float_int_map = Arc::new(CassDataType::Map {
-                key_type: Some(data_type_float.clone()),
-                val_type: Some(data_type_int.clone()),
+                typ: MapDataType::KeyAndValue(data_type_float.clone(), data_type_int.clone()),
                 frozen: false,
             });
 
