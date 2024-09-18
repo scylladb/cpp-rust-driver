@@ -60,10 +60,6 @@ ifndef CASSANDRA_VERSION
 	CASSANDRA_VERSION := 3.11.17
 endif
 
-ifndef DONT_REBUILD_INTEGRATION_BIN
-	DONT_REBUILD_INTEGRATION_BIN := ${EMPTY}
-endif
-
 CURRENT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BUILD_DIR := "${CURRENT_DIR}build"
 INTEGRATION_TEST_BIN := ${BUILD_DIR}/cassandra-integration-tests
@@ -171,7 +167,7 @@ download-ccm-cassandra-image: install-ccm-if-missing
 	@rm -rf /tmp/download-cassandra.ccm
 
 run-test-integration-scylla: prepare-integration-test download-ccm-scylla-image
-ifeq ($(DONT_REBUILD_INTEGRATION_BIN), $(EMPTY))
+ifdef DONT_REBUILD_INTEGRATION_BIN
 run-test-integration-scylla: build-integration-test-bin-if-missing
 else
 run-test-integration-scylla: build-integration-test-bin
@@ -180,7 +176,7 @@ endif
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
 
 run-test-integration-cassandra: prepare-integration-test download-ccm-cassandra-image install-java8-if-missing
-ifeq ($(DONT_REBUILD_INTEGRATION_BIN), $(EMPTY))
+ifdef DONT_REBUILD_INTEGRATION_BIN
 run-test-integration-cassandra: build-integration-test-bin-if-missing
 else
 run-test-integration-cassandra: build-integration-test-bin
