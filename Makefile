@@ -91,6 +91,12 @@ install-valgrind-if-missing: update-apt-cache-if-needed
 		sudo snap install valgrind --classic;\
 	)
 
+install-clang-format-if-missing: update-apt-cache-if-needed
+	@clang-format --version >/dev/null 2>&1 || (\
+		echo "clang-format not found in the system, install it.";\
+		sudo apt install -y clang-format;\
+	)
+
 install-ccm-if-missing:
 	@ccm list >/dev/null 2>&1 || (\
 		echo "CCM not found in the system, install it.";\
@@ -158,9 +164,17 @@ fix-cargo-fmt: install-cargo-if-missing _update-rust-tooling
 	@echo "Running \"cargo fmt --verbose --all\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo fmt --verbose --all
 
-check: check-cargo check-cargo-clippy check-cargo-fmt
+check-clang-format: install-clang-format-if-missing
+	@echo "Running \"clang-format --dry-run\" on all files in ./src"
+	@find src -regextype posix-egrep -regex '.*\.(cpp|hpp|c|h)' -not -path 'src/third_party/*' | xargs clang-format --dry-run
 
-fix: fix-cargo fix-cargo-clippy fix-cargo-fmt
+fix-clang-format: install-clang-format-if-missing
+	@echo "Running \"clang-format -i\" on all files in ./src"
+	@find src -regextype posix-egrep -regex '.*\.(cpp|hpp|c|h)' -not -path 'src/third_party/*' | xargs clang-format -i
+
+check: check-clang-format check-cargo check-cargo-clippy check-cargo-fmt
+
+fix: fix-clang-format fix-cargo fix-cargo-clippy fix-cargo-fmt
 
 prepare-integration-test: update-apt-cache-if-needed install-valgrind-if-missing install-cargo-if-missing _update-rust-tooling
 	@sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
