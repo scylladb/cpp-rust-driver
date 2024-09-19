@@ -67,7 +67,7 @@ INTEGRATION_TEST_BIN := ${BUILD_DIR}/cassandra-integration-tests
 clean:
 	rm -rf "${BUILD_DIR}"
 
-update-repo-cache-if-needed:
+update-apt-cache-if-needed:
 	@{\
 		@sudo find /var/cache/apt -type f -mtime -1 2>/dev/null | grep -c "" 2>/dev/null | grep 0 >/dev/null 2>&1 || (\
 			echo "Apt cache is outdated, update it.";\
@@ -75,13 +75,13 @@ update-repo-cache-if-needed:
 		)\
 	}
 
-install-cargo-if-missing: update-repo-cache-if-needed
+install-cargo-if-missing: update-apt-cache-if-needed
 	@cargo --version >/dev/null 2>&1 || (\
 		echo "Cargo not found in the system, install it.";\
 		sudo apt-get install -y cargo;\
 	)
 
-install-valgrind-if-missing: update-repo-cache-if-needed
+install-valgrind-if-missing: update-apt-cache-if-needed
 	@valgrind --version >/dev/null 2>&1 || (\
 		echo "Valgrind not found in the system, install it.";\
 		sudo snap install valgrind --classic;\
@@ -103,10 +103,10 @@ install-java8-if-missing:
 		sudo apt install -y openjdk-8-jre;\
 	}
 
-install-build-dependencies: update-repo-cache-if-needed
+install-build-dependencies: update-apt-cache-if-needed
 	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
 
-install-bin-dependencies: update-repo-cache-if-needed
+install-bin-dependencies: update-apt-cache-if-needed
 	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
 
 build-integration-test-bin:
@@ -126,29 +126,39 @@ build-integration-test-bin-if-missing:
 		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON .. && (make -j 4 || make);\
 	}
 
-check-cargo: install-cargo-if-missing
+_update-rust-tooling:
+	@echo "Run rustup update"
+	@rustup update
+
+check-cargo: install-cargo-if-missing _update-rust-tooling
+	@echo "Running \"cargo check\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo check
 
 fix-cargo:
+	@echo "Running \"cargo fix --verbose --all\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo fix --verbose --all
 
-check-cargo-clippy: install-cargo-if-missing
+check-cargo-clippy: install-cargo-if-missing _update-rust-tooling
+	@echo "Running \"cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args
 
-fix-cargo-clippy: install-cargo-if-missing
+fix-cargo-clippy: install-cargo-if-missing _update-rust-tooling
+	@echo "Running \"cargo clippy --verbose --all-targets --fix -- -D warnings -Aclippy::uninlined_format_args\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo clippy --verbose --all-targets --fix -- -D warnings -Aclippy::uninlined_format_args
 
-check-cargo-fmt: install-cargo-if-missing
+check-cargo-fmt: install-cargo-if-missing _update-rust-tooling
+	@echo "Running \"cargo fmt --verbose --all -- --check\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo fmt --verbose --all -- --check
 
-fix-cargo-fmt: install-cargo-if-missing
+fix-cargo-fmt: install-cargo-if-missing _update-rust-tooling
+	@echo "Running \"cargo fmt --verbose --all\" in ./scylla-rust-wrapper"
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo fmt --verbose --all
 
 check: check-cargo check-cargo-clippy check-cargo-fmt
 
 fix: fix-cargo fix-cargo-clippy fix-cargo-fmt
 
-prepare-integration-test: update-repo-cache-if-needed install-valgrind-if-missing
+prepare-integration-test: update-apt-cache-if-needed install-valgrind-if-missing install-cargo-if-missing _update-rust-tooling
 	@sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
 	@dpkg -l libc6-dbg >/dev/null 2>&1 || sudo apt-get install -y libc6-dbg
 
@@ -184,5 +194,5 @@ endif
 	@echo "Running integration tests on cassandra ${CASSANDRA_VERSION}"
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_TEST_FILTER}"
 
-run-test-unit: install-cargo-if-missing
+run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo test
