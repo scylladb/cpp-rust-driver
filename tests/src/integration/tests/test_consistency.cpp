@@ -15,6 +15,7 @@
 */
 
 #include "integration.hpp"
+#include "options.hpp"
 
 /**
  * Consistency integration tests; two node cluster
@@ -227,7 +228,9 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleEachQuorum) {
   session_.execute(insert_);
   // Handle `EACH_QUORUM` read support; added to C* v3.0.0
   // https://issues.apache.org/jira/browse/CASSANDRA-9602
-  if (server_version_ >= "3.0.0") {
+  //
+  // Scylla supports `EACH_QUORUM` for writes only.
+  if (!Options::is_scylla() && server_version_ >= "3.0.0") {
     session_.execute(select_);
   } else {
     ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, session_.execute(select_, false).error_code());
