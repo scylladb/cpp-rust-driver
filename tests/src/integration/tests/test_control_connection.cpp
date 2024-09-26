@@ -332,7 +332,7 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, TopologyChange) {
    * Decommission the bootstrapped node and ensure only the first node is
    * actively used
    */
-  force_decommission_node(2); // Triggers a `REMOVE_NODE` event
+  decommission_node(2); // Triggers a `REMOVE_NODE` event
   expected_nodes.erase(2);
   check_hosts(session, expected_nodes);
 }
@@ -613,7 +613,7 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTwoNodeClusterTests, NodeDecommiss
    */
   logger_.reset();
   logger_.add_critera("Spawning new connection to host " + ccm_->get_ip_prefix() + "1");
-  force_decommission_node(1);
+  decommission_node(1);
   TEST_LOG("Node Decommissioned [" << ccm_->get_ip_prefix() << "1]: Sleeping "
                                    << "for 30 seconds");
   msleep(30000u);
