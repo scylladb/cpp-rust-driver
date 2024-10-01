@@ -188,6 +188,8 @@ run-test-integration-scylla: build-integration-test-bin
 endif
 	@echo "Running integration tests on scylla ${SCYLLA_VERSION}"
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
+	@echo "Running timeout sensitive tests on scylla ${SCYLLA_VERSION}"
+	build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="AsyncTests.Integration_Cassandra_Simple"
 
 run-test-integration-cassandra: prepare-integration-test download-ccm-cassandra-image install-java8-if-missing
 ifdef DONT_REBUILD_INTEGRATION_BIN
@@ -197,6 +199,8 @@ run-test-integration-cassandra: build-integration-test-bin
 endif
 	@echo "Running integration tests on cassandra ${CASSANDRA_VERSION}"
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_TEST_FILTER}"
+	@echo "Running timeout sensitive tests on cassandra ${CASSANDRA_VERSION}"
+	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="AsyncTests.Integration_Cassandra_Simple"
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo test
