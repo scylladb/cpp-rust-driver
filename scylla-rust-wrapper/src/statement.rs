@@ -1,15 +1,15 @@
-use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::exec_profile::PerStatementExecProfile;
+use crate::prepared::CassPrepared;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
-use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::statement::SerialConsistency;
 use scylla::transport::{PagingState, PagingStateResponse};
 use std::collections::HashMap;
@@ -24,7 +24,7 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 pub enum Statement {
     Simple(SimpleQuery),
     // Arc is needed, because PreparedStatement is passed by reference to session.execute
-    Prepared(Arc<PreparedStatement>),
+    Prepared(Arc<CassPrepared>),
 }
 
 #[derive(Clone)]
@@ -45,12 +45,35 @@ pub struct CassStatement {
 
 impl CassStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
-        if index >= self.bound_values.len() {
-            CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
-        } else {
-            self.bound_values[index] = Set(value);
-            CassError::CASS_OK
+        let (bound_value, maybe_data_type) = match &self.statement {
+            Statement::Simple(_) => match self.bound_values.get_mut(index) {
+                Some(v) => (v, None),
+                None => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+            Statement::Prepared(p) => match (
+                self.bound_values.get_mut(index),
+                p.variable_col_data_types.get(index),
+            ) {
+                (Some(v), Some(dt)) => (v, Some(dt)),
+                (None, None) => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+                // This indicates a length mismatch between col specs table and self.bound_values.
+                //
+                // It can only occur when user provides bad `count` value in `cass_statement_reset_parameters`.
+                // Cpp-driver does not verify that both of these values are equal.
+                // I believe returning CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS is best we can do here.
+                _ => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+        };
+
+        // Perform the typecheck.
+        if let Some(dt) = maybe_data_type {
+            if !value::is_type_compatible(&value, dt) {
+                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+            }
         }
+
+        *bound_value = Set(value);
+        CassError::CASS_OK
     }
 
     fn bind_multiple_values_by_name(
@@ -83,6 +106,7 @@ impl CassStatement {
         match &self.statement {
             Statement::Prepared(prepared) => {
                 let indices: Vec<usize> = prepared
+                    .statement
                     .get_variable_col_specs()
                     .iter()
                     .enumerate()
@@ -185,7 +209,9 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
     if let Some(consistency) = consistency_opt {
         match &mut ptr_to_ref_mut(statement).statement {
             Statement::Simple(inner) => inner.query.set_consistency(consistency),
-            Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(consistency),
+            Statement::Prepared(inner) => {
+                Arc::make_mut(inner).statement.set_consistency(consistency)
+            }
         }
     }
 
@@ -205,7 +231,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
         statement.paging_enabled = true;
         match &mut statement.statement {
             Statement::Simple(inner) => inner.query.set_page_size(page_size),
-            Statement::Prepared(inner) => Arc::make_mut(inner).set_page_size(page_size),
+            Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_page_size(page_size),
         }
     }
 
@@ -253,7 +279,9 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_is_idempotent(is_idempotent != 0),
     }
 
     CassError::CASS_OK
@@ -266,7 +294,7 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.query.set_tracing(enabled != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_tracing(enabled != 0),
     }
 
     CassError::CASS_OK
@@ -288,9 +316,9 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
 
     match &mut ptr_to_ref_mut(statement).statement {
         Statement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
-        Statement::Prepared(inner) => {
-            Arc::make_mut(inner).set_retry_policy(maybe_arced_retry_policy)
-        }
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_retry_policy(maybe_arced_retry_policy),
     }
 
     CassError::CASS_OK
@@ -317,9 +345,9 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
 
     match &mut ptr_to_ref_mut(statement).statement {
         Statement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
-        Statement::Prepared(inner) => {
-            Arc::make_mut(inner).set_serial_consistency(Some(consistency))
-        }
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_serial_consistency(Some(consistency)),
     }
 
     CassError::CASS_OK
@@ -349,7 +377,9 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement).statement {
         Statement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_timestamp(Some(timestamp)),
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_timestamp(Some(timestamp)),
     }
 
     CassError::CASS_OK

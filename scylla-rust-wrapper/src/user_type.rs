@@ -1,9 +1,8 @@
-use crate::argconv::*;
-use crate::binding::is_compatible_type;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
 use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -20,7 +19,7 @@ impl CassUserType {
         if index >= self.field_values.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
-        if !is_compatible_type(&self.data_type.get_udt_type().field_types[index].1, &value) {
+        if !value::is_type_compatible(&value, &self.data_type.get_udt_type().field_types[index].1) {
             return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
         }
         self.field_values[index] = value;
@@ -37,7 +36,7 @@ impl CassUserType {
                 if index >= self.field_values.len() {
                     return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
                 }
-                if !is_compatible_type(field_type, &value) {
+                if !value::is_type_compatible(&value, field_type) {
                     return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
                 }
                 self.field_values[index].clone_from(&value);
@@ -55,8 +54,7 @@ impl CassUserType {
 impl From<&CassUserType> for CassCqlValue {
     fn from(user_type: &CassUserType) -> Self {
         CassCqlValue::UserDefinedType {
-            keyspace: user_type.data_type.get_udt_type().keyspace.clone(),
-            type_name: user_type.data_type.get_udt_type().name.clone(),
+            data_type: user_type.data_type.clone(),
             fields: user_type
                 .field_values
                 .iter()

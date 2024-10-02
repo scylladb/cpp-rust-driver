@@ -1,6 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
-use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType};
+use crate::cass_types::{cass_data_type_type, CassDataType, CassValueType, MapDataType};
 use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
@@ -1239,7 +1239,7 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
         } => list.get_value_type(),
         CassDataType::Set { typ: Some(set), .. } => set.get_value_type(),
         CassDataType::Map {
-            key_type: Some(key),
+            typ: MapDataType::Key(key) | MapDataType::KeyAndValue(key, _),
             ..
         } => key.get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
@@ -1254,7 +1254,7 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 
     match val.value_type.as_ref() {
         CassDataType::Map {
-            val_type: Some(value),
+            typ: MapDataType::KeyAndValue(_, value),
             ..
         } => value.get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
