@@ -24,7 +24,7 @@
 #include <iostream>
 
 extern "C" {
-  #include "testing_rust_impls.h"
+#include "testing_rust_impls.h"
 }
 
 namespace datastax { namespace internal { namespace testing {
@@ -43,9 +43,7 @@ unsigned get_connect_timeout_from_cluster(CassCluster* cluster) {
   return testing_cluster_get_connect_timeout(cluster);
 }
 
-int get_port_from_cluster(CassCluster* cluster) {
-  return testing_cluster_get_port(cluster);
-}
+int get_port_from_cluster(CassCluster* cluster) { return testing_cluster_get_port(cluster); }
 
 String get_contact_points_from_cluster(CassCluster* cluster) {
   char* contact_points;
