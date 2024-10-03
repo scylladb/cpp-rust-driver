@@ -14,7 +14,7 @@ export CARGO_HOME
 export RUSTUP_HOME
 
 %:
-	dh $@
+	dh $@ --buildsystem=cmake
 
 override_dh_auto_clean:
 	rm -rf scylla-rust-wrapper/.cargo
