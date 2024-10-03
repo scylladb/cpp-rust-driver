@@ -52,7 +52,7 @@
         STATIC_ASSERT_CONCAT(STATIC_ASSERTION_FAILED_AT_LINE_, __LINE__);                       \
   };                                                                                            \
   typedef StaticAssertTest<sizeof(STATIC_ASSERT_CONCAT(__static_assertion_at_line_, __LINE__))> \
-      STATIC_ASSERT_CONCAT(__static_assertion_test_at_line_, __LINE__)
+  STATIC_ASSERT_CONCAT(__static_assertion_test_at_line_, __LINE__)
 
 template <bool>
 struct StaticAssert;

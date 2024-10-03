@@ -26,9 +26,7 @@
 
 namespace datastax { namespace internal {
 
-const char* driver_name() {
-  return "Scylla Shard-Aware C/C++ Driver";
-}
+const char* driver_name() { return "Scylla Shard-Aware C/C++ Driver"; }
 
 const char* driver_version() {
   if (strlen(CASS_VERSION_SUFFIX) == 0) {
