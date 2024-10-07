@@ -1,10 +1,12 @@
 use scylla::{frame::value::MaybeUnset::Unset, transport::PagingState};
-use std::sync::Arc;
+use std::{os::raw::c_char, sync::Arc};
 
 use crate::{
     argconv::*,
+    cass_error::CassError,
     cass_types::{get_column_type, CassDataType},
     statement::{CassStatement, Statement},
+    types::size_t,
 };
 use scylla::prepared_statement::PreparedStatement;
 
@@ -55,4 +57,26 @@ pub unsafe extern "C" fn cass_prepared_bind(
         request_timeout_ms: None,
         exec_profile: None,
     }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_prepared_parameter_name(
+    prepared_raw: *const CassPrepared,
+    index: size_t,
+    name: *mut *const c_char,
+    name_length: *mut size_t,
+) -> CassError {
+    let prepared = ptr_to_ref(prepared_raw);
+
+    match prepared
+        .statement
+        .get_variable_col_specs()
+        .get(index as usize)
+    {
+        Some(col_spec) => {
+            write_str_to_c(&col_spec.name, name, name_length);
+            CassError::CASS_OK
+        }
+        None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+    }
 }
