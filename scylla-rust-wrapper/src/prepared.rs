@@ -30,6 +30,26 @@ impl CassPrepared {
             statement,
         }
     }
+
+    pub fn get_variable_data_type_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
+        let index = self
+            .statement
+            .get_variable_col_specs()
+            .iter()
+            .position(|col_spec| col_spec.name == name)?;
+
+        match self.variable_col_data_types.get(index) {
+            Some(dt) => Some(dt),
+            // This is a violation of driver's internal invariant.
+            // Since `self.variable_col_data_types` is created based on prepared statement's
+            // col specs, and we found an index with a corresponding name, we should
+            // find a CassDataType at given index.
+            None => panic!(
+                "Cannot find a data type of parameter with given name: {}. This is a driver bug!",
+                name
+            ),
+        }
+    }
 }
 
 #[no_mangle]
@@ -89,6 +109,31 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type(
     let prepared = ptr_to_ref(prepared_raw);
 
     match prepared.variable_col_data_types.get(index as usize) {
+        Some(dt) => Arc::as_ptr(dt),
+        None => std::ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name(
+    prepared_raw: *const CassPrepared,
+    name: *const c_char,
+) -> *const CassDataType {
+    cass_prepared_parameter_data_type_by_name_n(prepared_raw, name, strlen(name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
+    prepared_raw: *const CassPrepared,
+    name: *const c_char,
+    name_length: size_t,
+) -> *const CassDataType {
+    let prepared = ptr_to_ref(prepared_raw);
+    let parameter_name =
+        ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8");
+
+    let data_type = prepared.get_variable_data_type_by_name(parameter_name);
+    match data_type {
         Some(dt) => Arc::as_ptr(dt),
         None => std::ptr::null(),
     }

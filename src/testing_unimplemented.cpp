@@ -210,10 +210,6 @@ cass_materialized_view_meta_field_by_name(const CassMaterializedViewMeta* view_m
                                           const char* name) {
   throw std::runtime_error("UNIMPLEMENTED cass_materialized_view_meta_field_by_name\n");
 }
-CASS_EXPORT const CassDataType*
-cass_prepared_parameter_data_type_by_name(const CassPrepared* prepared, const char* name) {
-  throw std::runtime_error("UNIMPLEMENTED cass_prepared_parameter_data_type_by_name\n");
-}
 CASS_EXPORT CassRetryPolicy* cass_retry_policy_logging_new(CassRetryPolicy* child_retry_policy) {
   throw std::runtime_error("UNIMPLEMENTED cass_retry_policy_logging_new\n");
 }
