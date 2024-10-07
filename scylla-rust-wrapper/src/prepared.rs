@@ -12,6 +12,11 @@ use scylla::prepared_statement::PreparedStatement;
 pub struct CassPrepared {
     // Data types of columns from PreparedMetadata.
     pub variable_col_data_types: Vec<Arc<CassDataType>>,
+    // Data types of columns from ResultMetadata.
+    //
+    // Arc<CassDataType> -> to share each data type with other structs such as `CassValue`
+    // Arc<Vec<...>> -> to share the whole vector with `CassResultData`.
+    pub result_col_data_types: Arc<Vec<Arc<CassDataType>>>,
     pub statement: PreparedStatement,
 }
 
@@ -23,8 +28,17 @@ impl CassPrepared {
             .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
             .collect();
 
+        let result_col_data_types: Arc<Vec<Arc<CassDataType>>> = Arc::new(
+            statement
+                .get_result_set_col_specs()
+                .iter()
+                .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+                .collect(),
+        );
+
         Self {
             variable_col_data_types,
+            result_col_data_types,
             statement,
         }
     }
