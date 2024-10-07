@@ -80,3 +80,16 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
         None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_prepared_parameter_data_type(
+    prepared_raw: *const CassPrepared,
+    index: size_t,
+) -> *const CassDataType {
+    let prepared = ptr_to_ref(prepared_raw);
+
+    match prepared.variable_col_data_types.get(index as usize) {
+        Some(dt) => Arc::as_ptr(dt),
+        None => std::ptr::null(),
+    }
+}

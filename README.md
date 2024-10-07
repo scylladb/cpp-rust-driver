@@ -149,7 +149,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td colspan=2 align="center" style="font-weight:bold">Prepared</td>
         </tr>
         <tr>
-            <td>cass_prepared_parameter_data_type[by_name]</td>
+            <td>cass_prepared_parameter_data_type_by_name_[n]</td>
             <td>Unimplemented</td>
         </tr>
         <tr>
