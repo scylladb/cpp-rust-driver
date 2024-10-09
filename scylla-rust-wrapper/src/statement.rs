@@ -58,14 +58,12 @@ impl BoundPreparedStatement {
     }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
-        let mut name_str = name;
-        let mut is_case_sensitive = false;
-
-        if name_str.starts_with('\"') && name_str.ends_with('\"') {
-            name_str = name_str.strip_prefix('\"').unwrap();
-            name_str = name_str.strip_suffix('\"').unwrap();
-            is_case_sensitive = true;
-        }
+        // If the name was quoted, then we should treat it as case sensitive.
+        let (name_unquoted, is_case_sensitive) =
+            match name.strip_prefix('\"').and_then(|s| s.strip_suffix('\"')) {
+                Some(name_unquoted) => (name_unquoted, true),
+                None => (name, false),
+            };
 
         let indices: Vec<usize> = self
             .statement
@@ -74,8 +72,8 @@ impl BoundPreparedStatement {
             .iter()
             .enumerate()
             .filter(|(_, col)| {
-                is_case_sensitive && col.name() == name_str
-                    || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_str)
+                is_case_sensitive && col.name() == name_unquoted
+                    || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_unquoted)
             })
             .map(|(i, _)| i)
             .collect();
@@ -123,24 +121,19 @@ impl BoundSimpleQuery {
     }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
-        let mut set_bound_val_index: Option<usize> = None;
-
         let index = self.name_to_bound_index.get(name);
+
         if let Some(idx) = index {
             return self.bind_cql_value(*idx, value);
         } else {
-            for (index, bound_val) in self.bound_values.iter().enumerate() {
-                if let Unset = bound_val {
-                    set_bound_val_index = Some(index);
-                    break;
-                }
+            // Find first free index, i.e. index where value at this index is Unset.
+            let free_index = self.bound_values.iter().position(|v| matches!(v, Unset));
+
+            if let Some(index) = free_index {
+                self.name_to_bound_index.insert(name.to_string(), index);
+
+                return self.bind_cql_value(index, value);
             }
-        }
-
-        if let Some(index) = set_bound_val_index {
-            self.name_to_bound_index.insert(name.to_string(), index);
-
-            return self.bind_cql_value(index, value);
         }
 
         CassError::CASS_OK
