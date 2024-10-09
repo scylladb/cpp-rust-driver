@@ -7,6 +7,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ConfigTests.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
+:SerialConsistencyTests.*\
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
@@ -32,6 +33,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ConfigTests.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
+:SerialConsistencyTests.*\
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ErrorTests.*\
