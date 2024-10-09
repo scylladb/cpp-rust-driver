@@ -125,7 +125,7 @@ impl CassStatement {
                 return self.bind_multiple_values_by_name(&indices, value);
             }
             Statement::Simple(query) => {
-                let index = query.name_to_bound_index.get(name);
+                let index = query.name_to_bound_index.get(name_unquoted);
 
                 if let Some(idx) = index {
                     return self.bind_cql_value(*idx, value);
@@ -140,7 +140,9 @@ impl CassStatement {
         // Borrow checker does not allow us to borrow a mutable reference twice (&mut self.statement and self.bind_cql_value(...)).
         if let Some(index) = free_index {
             if let Statement::Simple(query) = &mut self.statement {
-                query.name_to_bound_index.insert(name.to_string(), index);
+                query
+                    .name_to_bound_index
+                    .insert(name_unquoted.to_string(), index);
             }
 
             self.bind_cql_value(index, value)
