@@ -11,6 +11,10 @@ use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
+use scylla::serialize::row::{RowSerializationContext, SerializeRow};
+use scylla::serialize::value::SerializeValue;
+use scylla::serialize::writers::RowWriter;
+use scylla::serialize::SerializationError;
 use scylla::statement::SerialConsistency;
 use scylla::transport::{PagingState, PagingStateResponse};
 use std::collections::HashMap;
@@ -18,6 +22,8 @@ use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::sync::Arc;
+
+use thiserror::Error;
 
 #[derive(Clone)]
 pub enum BoundStatement {
@@ -141,6 +147,63 @@ impl BoundSimpleQuery {
             self.name_to_bound_index.insert(name.to_string(), index);
             self.bind_cql_value(index, value)
         }
+    }
+}
+
+/// Used to provide a custom serialization implementation for unprepared queries.
+///
+/// Users are allowed to bind values by either position, or name.
+/// This is done via `cass_statement_bind_*` API.
+///
+/// In case of binding by position, it's really simple - we simply
+/// append the value at the end of `bound_values` struct.
+///
+/// When binding by name, we append the value at the end of `bound_values`,
+/// but we also store the name-to-index mapping in `name_to_bound_index` map.
+/// Having this information, and prepared metadata provided in serialization context,
+/// we can build a resulting vector of bound values.
+pub struct SimpleQueryRowSerializer {
+    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub name_to_bound_index: HashMap<String, usize>,
+}
+
+#[derive(Debug, Error)]
+#[error("Unknown named parameter \"{0}\"")]
+pub struct UnknownNamedParameterError(String);
+
+impl SerializeRow for SimpleQueryRowSerializer {
+    fn serialize(
+        &self,
+        ctx: &RowSerializationContext<'_>,
+        writer: &mut RowWriter,
+    ) -> Result<(), SerializationError> {
+        if self.name_to_bound_index.is_empty() {
+            // Values bound by position - no need to reorder anything.
+            <_ as SerializeRow>::serialize(&self.bound_values, ctx, writer)
+        } else {
+            // Values bound by names - we need to make use of col specs from metadata to
+            // bind the values in correct order.
+            ctx.columns().iter().try_for_each(|col_spec| {
+                let bound_values_idx =
+                    self.name_to_bound_index
+                        .get(col_spec.name())
+                        .ok_or_else(|| {
+                            SerializationError::new(UnknownNamedParameterError(
+                                col_spec.name().to_owned(),
+                            ))
+                        })?;
+
+                let val = &self.bound_values[*bound_values_idx];
+
+                <_ as SerializeValue>::serialize(val, col_spec.typ(), writer.make_cell_writer())?;
+
+                Ok(())
+            })
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.bound_values.is_empty()
     }
 }
 

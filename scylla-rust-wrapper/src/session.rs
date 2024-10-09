@@ -10,8 +10,7 @@ use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
 use crate::prepared::CassPrepared;
 use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
-use crate::statement::BoundStatement;
-use crate::statement::CassStatement;
+use crate::statement::{BoundStatement, CassStatement, SimpleQueryRowSerializer};
 use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
 use scylla::frame::types::Consistency;
@@ -307,14 +306,19 @@ pub unsafe extern "C" fn cass_session_execute(
                 // We don't store result metadata for Queries - return None.
                 let maybe_result_metadata = None;
 
+                let bound_values = SimpleQueryRowSerializer {
+                    bound_values: query.bound_values,
+                    name_to_bound_index: query.name_to_bound_index,
+                };
+
                 if paging_enabled {
                     session
-                        .query_single_page(query.query, query.bound_values, paging_state)
+                        .query_single_page(query.query, bound_values, paging_state)
                         .await
                         .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
                 } else {
                     session
-                        .query_unpaged(query.query, query.bound_values)
+                        .query_unpaged(query.query, bound_values)
                         .await
                         .map(|result| {
                             (
