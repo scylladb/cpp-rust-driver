@@ -154,6 +154,11 @@ impl CassStatement {
         // Clear bound values and resize the vector - all values should be unset.
         self.bound_values.clear();
         self.bound_values.resize(count, Unset);
+
+        // Reset name-to-index mapping.
+        if let Statement::Simple(simple) = &mut self.statement {
+            simple.name_to_bound_index.clear();
+        }
     }
 }
 
