@@ -10,6 +10,8 @@ use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
+use scylla::serialize::row::{RowSerializationContext, SerializeRow};
+use scylla::serialize::{RowWriter, SerializationError};
 use scylla::statement::SerialConsistency;
 use scylla::transport::{PagingState, PagingStateResponse};
 use std::collections::HashMap;
@@ -31,6 +33,72 @@ pub enum Statement {
 pub struct SimpleQuery {
     pub query: Query,
     pub name_to_bound_index: HashMap<String, usize>,
+}
+
+/// Used to provide a custom serialization implementation for unprepared queries.
+///
+/// Users are allowed to bind values by either position, or name.
+/// This is done via `cass_statement_bind_*` API.
+///
+/// In case of binding by position, it's really simple - we simply
+/// append the value at the end of `bound_values` struct.
+///
+/// When binding by name, we append the value at the end of `bound_values`,
+/// but we also store the name-to-index mapping in `name_to_bound_index` map.
+/// Having this information, and prepared metadata provided in serialization context,
+/// we can build a resulting vector of bound values.
+pub struct SimpleQueryRowSerializer {
+    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub name_to_bound_index: HashMap<String, usize>,
+}
+
+#[derive(Debug)]
+pub struct UnknownNamedParameterError(String);
+
+impl std::fmt::Display for UnknownNamedParameterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown named parameter: \"{}\"", self.0)
+    }
+}
+
+impl std::error::Error for UnknownNamedParameterError {}
+
+impl SerializeRow for SimpleQueryRowSerializer {
+    fn serialize(
+        &self,
+        ctx: &RowSerializationContext<'_>,
+        writer: &mut RowWriter,
+    ) -> Result<(), SerializationError> {
+        let bound_values = if self.name_to_bound_index.is_empty() {
+            // Values bound by position - no need to reorder anything.
+            &self.bound_values
+        } else {
+            // Values bound by names - we need to make use of col specs from metadata to construct
+            // a values vector in correct order.
+            &ctx.columns()
+                .iter()
+                .map(|col_spec| -> Result<_, _> {
+                    let bound_values_idx = self
+                        .name_to_bound_index
+                        .get(&col_spec.name)
+                        .ok_or_else(|| {
+                            SerializationError::new(UnknownNamedParameterError(
+                                col_spec.name.clone(),
+                            ))
+                        })?;
+
+                    Ok(self.bound_values[*bound_values_idx].clone())
+                })
+                .collect::<Result<_, _>>()?
+        };
+
+        // This will validate the length as well.
+        <_ as SerializeRow>::serialize(bound_values, ctx, writer)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.bound_values.is_empty()
+    }
 }
 
 pub struct CassStatement {
