@@ -57,14 +57,12 @@ impl BoundPreparedStatement {
         }
     }
 
-    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
-        // If the name was quoted, then we should treat it as case sensitive.
-        let (name_unquoted, is_case_sensitive) =
-            match name.strip_prefix('\"').and_then(|s| s.strip_suffix('\"')) {
-                Some(name_unquoted) => (name_unquoted, true),
-                None => (name, false),
-            };
-
+    fn bind_cql_value_by_name(
+        &mut self,
+        name: &str,
+        is_case_sensitive: bool,
+        value: Option<CassCqlValue>,
+    ) -> CassError {
         let indices: Vec<usize> = self
             .statement
             .statement
@@ -72,8 +70,8 @@ impl BoundPreparedStatement {
             .iter()
             .enumerate()
             .filter(|(_, col)| {
-                is_case_sensitive && col.name() == name_unquoted
-                    || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_unquoted)
+                is_case_sensitive && col.name() == name
+                    || !is_case_sensitive && col.name().eq_ignore_ascii_case(name)
             })
             .map(|(i, _)| i)
             .collect();
@@ -166,9 +164,18 @@ impl CassStatement {
     }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
+        // If the name was quoted, then we should treat it as case sensitive.
+        let (name_unquoted, is_case_sensitive) =
+            match name.strip_prefix('\"').and_then(|s| s.strip_suffix('\"')) {
+                Some(name_unquoted) => (name_unquoted, true),
+                None => (name, false),
+            };
+
         match &mut self.statement {
-            BoundStatement::Simple(simple) => simple.bind_cql_value_by_name(name, value),
-            BoundStatement::Prepared(prepared) => prepared.bind_cql_value_by_name(name, value),
+            BoundStatement::Simple(simple) => simple.bind_cql_value_by_name(name_unquoted, value),
+            BoundStatement::Prepared(prepared) => {
+                prepared.bind_cql_value_by_name(name_unquoted, is_case_sensitive, value)
+            }
         }
     }
 
