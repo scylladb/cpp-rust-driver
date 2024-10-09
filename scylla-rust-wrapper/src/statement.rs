@@ -179,6 +179,7 @@ impl CassStatement {
             BoundStatement::Simple(simple) => {
                 simple.bound_values.clear();
                 simple.bound_values.resize(count, Unset);
+                simple.name_to_bound_index.clear();
             }
             BoundStatement::Prepared(prepared) => {
                 prepared.bound_values.clear();
