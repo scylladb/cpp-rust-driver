@@ -11,8 +11,8 @@ use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta
 use crate::prepared::CassPrepared;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collection, Value};
-use crate::statement::CassStatement;
 use crate::statement::Statement;
+use crate::statement::{CassStatement, SimpleQueryRowSerializer};
 use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
@@ -287,6 +287,11 @@ pub unsafe extern "C" fn cass_session_execute(
 
         let query_res: Result<(QueryResult, PagingStateResponse), QueryError> = match statement {
             Statement::Simple(query) => {
+                let bound_values = SimpleQueryRowSerializer {
+                    bound_values,
+                    name_to_bound_index: query.name_to_bound_index,
+                };
+
                 if paging_enabled {
                     session
                         .query_single_page(query.query, bound_values, paging_state)
