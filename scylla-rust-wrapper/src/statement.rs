@@ -143,10 +143,11 @@ impl CassStatement {
                 query.name_to_bound_index.insert(name.to_string(), index);
             }
 
-            return self.bind_cql_value(index, value);
+            self.bind_cql_value(index, value)
+        } else {
+            // No free index for a given name. Cpp-driver returns this error in such case.
+            CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
         }
-
-        CassError::CASS_OK
     }
 
     fn reset_bound_values(&mut self, count: usize) {
