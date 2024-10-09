@@ -93,15 +93,16 @@ impl CassStatement {
     }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
-        let mut set_bound_val_index: Option<usize> = None;
-        let mut name_str = name;
-        let mut is_case_sensitive = false;
+        // A free index for a value. Used only if the statement is an unprepared query.
+        let free_index: Option<usize>;
 
-        if name_str.starts_with('\"') && name_str.ends_with('\"') {
-            name_str = name_str.strip_prefix('\"').unwrap();
-            name_str = name_str.strip_suffix('\"').unwrap();
-            is_case_sensitive = true;
-        }
+        // If the name was quoted, then we should treat it as case sensitive.
+        let (name_unquoted, is_case_sensitive) = if name.starts_with('\"') && name.ends_with('\"') {
+            let name_unquoted = name.strip_prefix('\"').unwrap().strip_suffix('\"').unwrap();
+            (name_unquoted, true)
+        } else {
+            (name, false)
+        };
 
         match &self.statement {
             Statement::Prepared(prepared) => {
@@ -111,8 +112,8 @@ impl CassStatement {
                     .iter()
                     .enumerate()
                     .filter(|(_, col)| {
-                        is_case_sensitive && col.name == name_str
-                            || !is_case_sensitive && col.name.eq_ignore_ascii_case(name_str)
+                        is_case_sensitive && col.name == name_unquoted
+                            || !is_case_sensitive && col.name.eq_ignore_ascii_case(name_unquoted)
                     })
                     .map(|(i, _)| i)
                     .collect();
@@ -129,17 +130,15 @@ impl CassStatement {
                 if let Some(idx) = index {
                     return self.bind_cql_value(*idx, value);
                 } else {
-                    for (index, bound_val) in self.bound_values.iter().enumerate() {
-                        if let Unset = bound_val {
-                            set_bound_val_index = Some(index);
-                            break;
-                        }
-                    }
+                    // Find first free index, i.e. index where value at this index is Unset.
+                    free_index = self.bound_values.iter().position(|v| matches!(v, Unset));
                 }
             }
         }
 
-        if let Some(index) = set_bound_val_index {
+        // Note: We unfortunately have to do it here, and not in the `match` expression above.
+        // Borrow checker does not allow us to borrow a mutable reference twice (&mut self.statement and self.bind_cql_value(...)).
+        if let Some(index) = free_index {
             if let Statement::Simple(query) = &mut self.statement {
                 query.name_to_bound_index.insert(name.to_string(), index);
             }
