@@ -124,7 +124,7 @@ impl BoundSimpleQuery {
         let index = self.name_to_bound_index.get(name);
 
         if let Some(idx) = index {
-            return self.bind_cql_value(*idx, value);
+            self.bind_cql_value(*idx, value)
         } else {
             // Find first free index, i.e. index where value at this index is Unset.
             let free_index = self.bound_values.iter().position(|v| matches!(v, Unset));
@@ -132,11 +132,12 @@ impl BoundSimpleQuery {
             if let Some(index) = free_index {
                 self.name_to_bound_index.insert(name.to_string(), index);
 
-                return self.bind_cql_value(index, value);
+                self.bind_cql_value(index, value)
+            } else {
+                // No free index for a given name. Cpp-driver returns this error in such case.
+                CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
             }
         }
-
-        CassError::CASS_OK
     }
 }
 
