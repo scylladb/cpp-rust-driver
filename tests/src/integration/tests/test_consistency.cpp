@@ -14,6 +14,7 @@
   limitations under the License.
 */
 
+#include "cassandra.h"
 #include "integration.hpp"
 #include "options.hpp"
 
@@ -425,6 +426,17 @@ CASSANDRA_INTEGRATION_TEST_F(SerialConsistencyTests, Simple) {
 CASSANDRA_INTEGRATION_TEST_F(SerialConsistencyTests, Invalid) {
   CHECK_FAILURE;
 
-  Result result = insert_if_not_exists(CASS_CONSISTENCY_ONE); // Invalid serial consistency
-  EXPECT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+  // Original cpp-driver allows user to SET the invalid serial consistency.
+  // Then, the request is sent with an invalid serial consistency, resulting in a server error.
+  // However, rust-driver comes with a type safety in this matter, disallowing
+  // the user to set invalid serial consistency, thus we are not able to mimic this behaviour in cpp-rust-driver.
+  // We need to adjust this test, and assert that setting the invalid serial consistency fails with an error.
+  // Original test case logic:
+  //// Result result = insert_if_not_exists(CASS_CONSISTENCY_ONE); // Invalid serial consistency
+  //// EXPECT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+
+  Statement statement(format_string("INSERT INTO %s (key, value) VALUES (1, 99) IF NOT EXISTS",
+                                    table_name_.c_str()));
+  CassError result = cass_statement_set_serial_consistency(statement.get(), CASS_CONSISTENCY_ONE);
+  ASSERT_EQ(CASS_ERROR_LIB_BAD_PARAMS, result);
 }
