@@ -59,7 +59,16 @@ impl From<&BadQuery> for CassError {
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::SerializationError(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::SerializationError(e) => {
+                // TODO: make the member of SerializationError public in rust-driver.
+                // There is no other way to check the actual error.
+                if e.to_string().contains("Unknown named parameter:") {
+                    // It means that our custom `UnknownNamedParameterError` was returned.
+                    CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
+                } else {
+                    CassError::CASS_ERROR_LAST_ENTRY
+                }
+            }
             BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
