@@ -357,7 +357,9 @@ pub unsafe extern "C" fn cass_session_execute(
                     maybe_col_data_types,
                     result.tracing_id,
                 ));
-                let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
+                let cass_rows = result
+                    .rows
+                    .map(|rows| create_cass_rows_from_rows(rows, &metadata));
                 let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
                     metadata,
@@ -378,19 +380,15 @@ pub unsafe extern "C" fn cass_session_execute(
 }
 
 pub(crate) fn create_cass_rows_from_rows(
-    rows: Option<Vec<Row>>,
+    rows: Vec<Row>,
     metadata: &Arc<CassResultData>,
-) -> Option<Vec<CassRow>> {
-    let rows = rows?;
-    let cass_rows = rows
-        .into_iter()
+) -> Vec<CassRow> {
+    rows.into_iter()
         .map(|r| CassRow {
             columns: create_cass_row_columns(r, metadata),
             result_metadata: metadata.clone(),
         })
-        .collect();
-
-    Some(cass_rows)
+        .collect()
 }
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {

@@ -1433,7 +1433,7 @@ mod tests {
         ));
 
         let rows = create_cass_rows_from_rows(
-            Some(vec![Row {
+            vec![Row {
                 columns: vec![
                     Some(CqlValue::BigInt(42)),
                     None,
@@ -1443,11 +1443,14 @@ mod tests {
                         CqlValue::Float(9999.9999),
                     ])),
                 ],
-            }]),
+            }],
             &metadata,
         );
 
-        CassResult { rows, metadata }
+        CassResult {
+            rows: Some(rows),
+            metadata,
+        }
     }
 
     unsafe fn cass_result_column_name_rust_str(
