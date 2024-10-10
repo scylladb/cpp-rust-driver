@@ -5,8 +5,6 @@
 // Definition for size_t (and possibly other types in the future)
 include!(concat!(env!("OUT_DIR"), "/basic_types.rs"));
 
-pub type size_t = cass_uint64_t;
-
 // Implementation directly ported from Cpp Driver implementation:
 
 const NUM_SECONDS_PER_DAY: i64 = 24 * 60 * 60;
