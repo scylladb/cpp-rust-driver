@@ -45,6 +45,7 @@ fn prepare_basic_types(out_path: &Path) {
         .allowlist_type("cass_byte_t")
         .allowlist_type("cass_duration_t")
         .allowlist_type("size_t")
+        .size_t_is_usize(false)
         .generate()
         .expect("Unable to generate bindings");
 
