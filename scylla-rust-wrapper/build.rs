@@ -27,6 +27,23 @@ fn prepare_basic_types(out_path: &Path) {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
+        .allowlist_type("cass_bool_t")
+        // cass_bool_t enum variants represented as constants.
+        .constified_enum("cass_bool_t")
+        // cass_[false/true] instead of cass_bool_t_cass_[*].
+        .prepend_enum_name(false)
+        .allowlist_type("cass_float_t")
+        .allowlist_type("cass_double_t")
+        .allowlist_type("cass_int8_t")
+        .allowlist_type("cass_uint8_t")
+        .allowlist_type("cass_int16_t")
+        .allowlist_type("cass_uint16_t")
+        .allowlist_type("cass_int32_t")
+        .allowlist_type("cass_uint32_t")
+        .allowlist_type("cass_int64_t")
+        .allowlist_type("cass_uint64_t")
+        .allowlist_type("cass_byte_t")
+        .allowlist_type("cass_duration_t")
         .allowlist_type("size_t")
         .generate()
         .expect("Unable to generate bindings");
