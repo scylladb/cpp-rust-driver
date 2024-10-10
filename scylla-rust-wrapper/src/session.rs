@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, MapDataType, UDTDataType};
+use crate::cass_types::{CassDataType, MapDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -214,11 +214,12 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
-                metadata: Arc::new(CassResultData {
-                    paging_state_response: PagingStateResponse::NoMorePages,
-                    col_specs: vec![],
-                    tracing_id: None,
-                }),
+                metadata: Arc::new(CassResultData::from_result_payload(
+                    PagingStateResponse::NoMorePages,
+                    vec![],
+                    None,
+                    None,
+                )),
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
@@ -285,41 +286,80 @@ pub unsafe extern "C" fn cass_session_execute(
                 .set_execution_profile_handle(handle),
         }
 
-        let query_res: Result<(QueryResult, PagingStateResponse), QueryError> = match statement {
+        // Creating a type alias here to fix clippy lints.
+        // I want this type to be explicit, so future developers can understand
+        // what's going on here (and why we include some weird Option of data types).
+        type QueryRes = Result<
+            (
+                QueryResult,
+                PagingStateResponse,
+                // We unfortunately have to retrieve the metadata here.
+                // Since `query.query` is consumed, we cannot match the statement
+                // after execution, to retrieve the cached metadata in case
+                // of prepared statements.
+                Option<Arc<Vec<Arc<CassDataType>>>>,
+            ),
+            QueryError,
+        >;
+        let query_res: QueryRes = match statement {
             Statement::Simple(query) => {
+                // We don't store result metadata for Queries - return None.
+                let maybe_result_col_data_types = None;
+
                 if paging_enabled {
                     session
                         .query_single_page(query.query, bound_values, paging_state)
                         .await
+                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
                 } else {
                     session
                         .query_unpaged(query.query, bound_values)
                         .await
-                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                        .map(|result| {
+                            (
+                                result,
+                                PagingStateResponse::NoMorePages,
+                                maybe_result_col_data_types,
+                            )
+                        })
                 }
             }
             Statement::Prepared(prepared) => {
+                // Clone vector of the Arc<CassDataType>, so we don't do additional allocations when constructing
+                // CassDataTypes in `CassResultData::from_result_payload`.
+                let maybe_result_col_data_types = Some(prepared.result_col_data_types.clone());
+
                 if paging_enabled {
                     session
                         .execute_single_page(&prepared.statement, bound_values, paging_state)
                         .await
+                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
                 } else {
                     session
                         .execute_unpaged(&prepared.statement, bound_values)
                         .await
-                        .map(|result| (result, PagingStateResponse::NoMorePages))
+                        .map(|result| {
+                            (
+                                result,
+                                PagingStateResponse::NoMorePages,
+                                maybe_result_col_data_types,
+                            )
+                        })
                 }
             }
         };
 
         match query_res {
-            Ok((result, paging_state_response)) => {
-                let metadata = Arc::new(CassResultData {
+            Ok((result, paging_state_response, maybe_col_data_types)) => {
+                let metadata = Arc::new(CassResultData::from_result_payload(
                     paging_state_response,
-                    col_specs: result.col_specs().to_vec(),
-                    tracing_id: result.tracing_id,
-                });
-                let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
+                    result.col_specs().to_vec(),
+                    maybe_col_data_types,
+                    result.tracing_id,
+                ));
+                let cass_rows = result
+                    .rows
+                    .map(|rows| create_cass_rows_from_rows(rows, &metadata));
                 let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
                     metadata,
@@ -339,28 +379,24 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-fn create_cass_rows_from_rows(
-    rows: Option<Vec<Row>>,
+pub(crate) fn create_cass_rows_from_rows(
+    rows: Vec<Row>,
     metadata: &Arc<CassResultData>,
-) -> Option<Vec<CassRow>> {
-    let rows = rows?;
-    let cass_rows = rows
-        .into_iter()
+) -> Vec<CassRow> {
+    rows.into_iter()
         .map(|r| CassRow {
             columns: create_cass_row_columns(r, metadata),
             result_metadata: metadata.clone(),
         })
-        .collect();
-
-    Some(cass_rows)
+        .collect()
 }
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {
     row.columns
         .into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(val, col)| {
-            let column_type = Arc::new(get_column_type(&col.typ));
+        .zip(metadata.col_data_types.iter())
+        .map(|(val, col_data_type)| {
+            let column_type = Arc::clone(col_data_type);
             CassValue {
                 value: val.map(|col_val| get_column_value(col_val, &column_type)),
                 value_type: column_type,
