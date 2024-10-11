@@ -85,7 +85,7 @@ fn main() {
     prepare_basic_types(&out_path);
 
     prepare_cppdriver_data(
-        "cppdriver_data_errors.rs",
+        "cppdriver_error_types.rs",
         &[
             "CassErrorSource_",
             "CassErrorSource",
