@@ -117,7 +117,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_inet.rs",
+        "cppdriver_inet_types.rs",
         &["CassInet_", "CassInet"],
         &out_path,
     );

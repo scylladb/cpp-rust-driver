@@ -84,6 +84,13 @@ pub mod cass_collection_types {
     include_bindgen_generated!("cppdriver_collection_types.rs");
 }
 
+/// CassInet
+pub mod cass_inet_types {
+    #![allow(non_camel_case_types, non_snake_case)]
+
+    include_bindgen_generated!("cppdriver_inet_types.rs");
+}
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {

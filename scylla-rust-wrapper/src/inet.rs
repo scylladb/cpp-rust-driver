@@ -1,4 +1,3 @@
-#![allow(non_camel_case_types, non_snake_case)]
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
@@ -11,7 +10,7 @@ use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 use std::str::FromStr;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_inet.rs"));
+pub(crate) use crate::cass_inet_types::CassInet;
 
 #[repr(u8)] // address_length field in CassInet is cass_uint8_t
 #[allow(non_camel_case_types)]
