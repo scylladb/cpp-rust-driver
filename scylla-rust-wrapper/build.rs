@@ -122,7 +122,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_log.rs",
+        "cppdriver_log_types.rs",
         &[
             "CassLogLevel_",
             "CassLogLevel",
