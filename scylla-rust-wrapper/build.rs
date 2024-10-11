@@ -107,7 +107,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_collection.rs",
+        "cppdriver_collection_types.rs",
         &["CassCollectionType_", "CassCollectionType"],
         &out_path,
     );

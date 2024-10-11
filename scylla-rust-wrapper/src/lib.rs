@@ -79,6 +79,11 @@ pub mod cass_compression_types {
     include_bindgen_generated!("cppdriver_compression_types.rs");
 }
 
+/// CassCollectionType
+pub mod cass_collection_types {
+    include_bindgen_generated!("cppdriver_collection_types.rs");
+}
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {
