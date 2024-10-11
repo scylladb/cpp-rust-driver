@@ -59,6 +59,11 @@ pub mod cass_error_types {
     include_bindgen_generated!("cppdriver_error_types.rs");
 }
 
+/// CassValueType
+pub mod cass_data_types {
+    include_bindgen_generated!("cppdriver_data_types.rs");
+}
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {
