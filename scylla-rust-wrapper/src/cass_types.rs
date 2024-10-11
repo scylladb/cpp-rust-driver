@@ -15,7 +15,7 @@ include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UDTDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, Arc<CassDataType>)>,
@@ -131,14 +131,14 @@ impl Default for UDTDataType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MapDataType {
     Untyped,
     Key(Arc<CassDataType>),
     KeyAndValue(Arc<CassDataType>, Arc<CassDataType>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
