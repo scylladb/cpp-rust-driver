@@ -132,7 +132,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_uuid.rs",
+        "cppdriver_uuid_types.rs",
         &["CassUuid_", "CassUuid"],
         &out_path,
     );

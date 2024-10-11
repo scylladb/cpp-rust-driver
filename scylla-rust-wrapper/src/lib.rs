@@ -98,6 +98,18 @@ pub mod cass_log_types {
     include_bindgen_generated!("cppdriver_log_types.rs");
 }
 
+/// CassColumnType
+pub mod cass_column_types {
+    include_bindgen_generated!("cppdriver_column_type.rs");
+}
+
+/// CassUuid
+pub mod cass_uuid_types {
+    #![allow(non_camel_case_types, non_snake_case)]
+
+    include_bindgen_generated!("cppdriver_uuid_types.rs");
+}
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {
