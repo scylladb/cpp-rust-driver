@@ -64,6 +64,11 @@ pub mod cass_data_types {
     include_bindgen_generated!("cppdriver_data_types.rs");
 }
 
+/// CassConsistency
+pub mod cass_consistency_types {
+    include_bindgen_generated!("cppdriver_consistency_types.rs");
+}
+
 lazy_static! {
     pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
     pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {

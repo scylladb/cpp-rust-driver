@@ -1,4 +1,5 @@
 use crate::cass_error::CassError;
+use crate::cass_types::CassConsistency;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::prepared::CassPrepared;
 use crate::query_result::CassResult;

@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::*;
+use crate::cass_types::CassConsistency;
 use crate::types::*;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;

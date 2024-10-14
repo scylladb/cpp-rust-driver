@@ -1,6 +1,8 @@
 use std::ffi::{c_char, CStr};
 
-// CassConsistency definition.
+use crate::cass_types::CassConsistency;
+
+// CassWriteType definition.
 include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 
 impl CassConsistency {

@@ -95,6 +95,11 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
+        "cppdriver_consistency_types.rs",
+        &["CassConsistency_", "CassConsistency"],
+        &out_path,
+    );
+    prepare_cppdriver_data(
         "cppdriver_batch_types.rs",
         &["CassBatchType_", "CassBatchType"],
         &out_path,
@@ -126,12 +131,7 @@ fn main() {
     );
     prepare_cppdriver_data(
         "cppdriver_data_query_error.rs",
-        &[
-            "CassConsistency_",
-            "CassConsistency",
-            "CassWriteType",
-            "CassWriteType_",
-        ],
+        &["CassWriteType", "CassWriteType_"],
         &out_path,
     );
     prepare_cppdriver_data(
