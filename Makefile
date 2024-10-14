@@ -196,7 +196,7 @@ download-ccm-cassandra-image: install-ccm-if-missing
 	@ccm create ccm_1 -i 127.0.1. -n 3:0 -v "${CASSANDRA_VERSION}" --config-dir=/tmp/download-cassandra.ccm
 	@rm -rf /tmp/download-cassandra.ccm
 
-run-test-integration-scylla: prepare-integration-test download-ccm-scylla-image
+run-test-integration-scylla: prepare-integration-test download-ccm-scylla-image install-java8-if-missing
 ifdef DONT_REBUILD_INTEGRATION_BIN
 run-test-integration-scylla: build-integration-test-bin-if-missing
 else
