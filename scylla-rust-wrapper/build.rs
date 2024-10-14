@@ -91,6 +91,8 @@ fn main() {
             "CassErrorSource",
             "CassError_",
             "CassError",
+            "CassWriteType",
+            "CassWriteType_",
         ],
         &out_path,
     );
@@ -127,11 +129,6 @@ fn main() {
             "CassLogMessage_",
             "CassLogMessage",
         ],
-        &out_path,
-    );
-    prepare_cppdriver_data(
-        "cppdriver_data_query_error.rs",
-        &["CassWriteType", "CassWriteType_"],
         &out_path,
     );
     prepare_cppdriver_data(

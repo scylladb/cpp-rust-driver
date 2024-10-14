@@ -19,8 +19,6 @@ use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::sync::Arc;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
-
 #[derive(Clone)]
 pub enum Statement {
     Simple(SimpleQuery),

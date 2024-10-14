@@ -14,7 +14,6 @@ use std::sync::Arc;
 pub(crate) use crate::cass_consistency_types::CassConsistency;
 pub(crate) use crate::cass_data_types::CassValueType;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
 
 #[derive(Clone, Debug, PartialEq, Eq)]

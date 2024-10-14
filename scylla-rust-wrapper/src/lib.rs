@@ -54,7 +54,7 @@ pub mod types {
     include_bindgen_generated!("basic_types.rs");
 }
 
-/// CassError, CassErrorSource
+/// CassError, CassErrorSource, CassWriteType
 pub mod cass_error_types {
     include_bindgen_generated!("cppdriver_error_types.rs");
 }
