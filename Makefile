@@ -55,7 +55,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 endif
 
 ifndef CCM_COMMIT_ID
-	export CCM_COMMIT_ID := 81076bce792a0fb3f2050e4c209a93e4a62ab55f
+	export CCM_COMMIT_ID := master
 endif
 
 ifndef SCYLLA_VERSION
