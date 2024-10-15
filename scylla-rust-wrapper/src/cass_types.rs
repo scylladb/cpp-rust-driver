@@ -11,9 +11,9 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
-include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
+pub(crate) use crate::cass_batch_types::CassBatchType;
+pub(crate) use crate::cass_consistency_types::CassConsistency;
+pub(crate) use crate::cass_data_types::CassValueType;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UDTDataType {

@@ -1,10 +1,10 @@
 use crate::argconv::*;
 use crate::cass_error::*;
+use crate::cass_error_types::CassWriteType;
+use crate::cass_types::CassConsistency;
 use crate::types::*;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
-
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
 
 pub type CassErrorResult = QueryError;
 

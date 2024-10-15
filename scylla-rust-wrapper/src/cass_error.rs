@@ -1,6 +1,7 @@
 use scylla::transport::errors::*;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_errors.rs"));
+// Re-export error types.
+pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
 
 impl From<&QueryError> for CassError {
     fn from(error: &QueryError) -> Self {

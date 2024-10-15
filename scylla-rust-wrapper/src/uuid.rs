@@ -1,4 +1,3 @@
-#![allow(non_camel_case_types, non_snake_case)]
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
@@ -11,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_uuid.rs"));
+pub(crate) use crate::cass_uuid_types::CassUuid;
 
 pub struct CassUuidGen {
     pub clock_seq_and_node: cass_uint64_t,

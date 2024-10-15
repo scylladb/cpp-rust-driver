@@ -1,3 +1,4 @@
+use crate::cass_collection_types::CassCollectionType;
 use crate::cass_error::CassError;
 use crate::cass_types::{CassDataType, MapDataType};
 use crate::types::*;
@@ -5,8 +6,6 @@ use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
 use std::convert::TryFrom;
 use std::sync::Arc;
-
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_collection.rs"));
 
 // These constants help us to save an allocation in case user calls `cass_collection_new` (untyped collection).
 static UNTYPED_LIST_TYPE: CassDataType = CassDataType::List {

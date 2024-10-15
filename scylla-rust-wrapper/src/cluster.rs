@@ -26,7 +26,7 @@ use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
 use std::time::Duration;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
+use crate::cass_compression_types::CassCompressionType;
 
 // According to `cassandra.h` the default CPP driver's
 // - consistency for statements is LOCAL_ONE,
