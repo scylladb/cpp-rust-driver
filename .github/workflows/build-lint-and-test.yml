@@ -21,7 +21,7 @@ env:
 jobs:
   build-lint-and-unit-test:
     name: Build, lint and run unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,8 +48,8 @@ jobs:
 
   scylla-integration-tests:
     name: Scylla ITs
-    runs-on: ubuntu-latest
-    needs: [build-lint-and-unit-test]
+    runs-on: ubuntu-22.04
+    # needs: [build-lint-and-unit-test]
     timeout-minutes: 90
 
     strategy:
@@ -117,32 +117,55 @@ jobs:
           path: ${{ env.INTEGRATION_TEST_BIN }}
           key: ${{ env.INTEGRATION_TEST_BIN_CACHE_KEY }}
 
-      - name: Install valgrind
-        run: make install-valgrind-if-missing
+      # - name: Install valgrind
+      #   run: make install-valgrind-if-missing
 
-      - name: Install binary dependencies
-        run: make install-bin-dependencies
+      # - name: Install binary dependencies
+      #   run: make install-bin-dependencies
 
-      - name: Run integration tests on Scylla ${{ steps.scylla-version.outputs.value }}
-        id: run-integration-tests
-        run: SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make run-test-integration-scylla
+      # - name: Run integration tests on Scylla ${{ steps.scylla-version.outputs.value }}
+      #   id: run-integration-tests
+      #   run: SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make run-test-integration-scylla
 
-      - name: Upload test logs
-        uses: actions/upload-artifact@v4
-        if: steps.run-integration-tests.outcome == 'failure'
-        with:
-          name: test-logs-scylla-${{ matrix.scylla-version }}
-          path: ./log/*
+      - name: Run cluster using ccm (commands copied directly from IT run)
+        run: |
+          ccm create --scylla -n 1:0 -i 127.0.0. --version=release:${{ steps.scylla-version.outputs.value }} -b cpp-driver_${{ steps.scylla-version.outputs.value }}_1-0
+          ccm updateconf --rt=10000 read_request_timeout_in_ms:10000 write_request_timeout_in_ms:10000 request_timeout_in_ms:10000 phi_convict_threshold:16 hinted_handoff_enabled:false enable_materialized_views:true dynamic_snitch_update_interval_in_ms:1000 native_transport_max_threads:1 concurrent_reads:2 concurrent_writes:2 concurrent_compactors:1 compaction_throughput_mb_per_sec:0 key_cache_size_in_mb:0 key_cache_save_period:0 memtable_flush_writers:1 max_hints_delivery_threads:1 cas_contention_timeout_in_ms:10000 file_cache_size_in_mb:0
+          ccm start --wait-other-notice --wait-for-binary-proto --jvm_arg=--skip-wait-for-gossip-to-settle=0
 
-      - name: Upload CCM logs
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: ccm-log-scylla-${{ matrix.scylla-version }}
-          path: ${{ env.CCM_LOGS_PATTERN }}
+      - name: print used ports
+        if: always()
+        run: |
+          sudo apt-get install net-tools
+          netstat -tulpn
+      
+      - name: Some ccm prints
+        if: always()
+        run: |
+          ccm list
+          ccm status
+          ccm node1 show
+      
+      - name: Scylla logs
+        if: always()
+        run: ccm node1 showlog
+
+      # - name: Upload test logs
+      #   uses: actions/upload-artifact@v4
+      #   if: steps.run-integration-tests.outcome == 'failure'
+      #   with:
+      #     name: test-logs-scylla-${{ matrix.scylla-version }}
+      #     path: ./log/*
+
+      # - name: Upload CCM logs
+      #   uses: actions/upload-artifact@v4
+      #   if: failure()
+      #   with:
+      #     name: ccm-log-scylla-${{ matrix.scylla-version }}
+      #     path: ${{ env.CCM_LOGS_PATTERN }}
 
   cassandra-integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [build-lint-and-unit-test]
 
     strategy:

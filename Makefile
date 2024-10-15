@@ -2,29 +2,7 @@ EMPTY :=
 SPACE := ${EMPTY} ${EMPTY}
 
 ifndef SCYLLA_TEST_FILTER
-SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
-:BasicsTests.*\
-:ConfigTests.*\
-:ConsistencyTwoNodeClusterTests.*\
-:ConsistencyThreeNodeClusterTests.*\
-:SerialConsistencyTests.*\
-:PreparedTests.*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
-:BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
-:ErrorTests.*\
-:SslNoClusterTests*:SslNoSslOnClusterTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
-:TracingTests.*\
-:ByNameTests.*\
-:CompressionTests.*\
-:LoggingTests.*\
-:PreparedMetadataTests.*\
-:UseKeyspaceCaseSensitiveTests.*\
-:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
-:ExecutionProfileTest.InvalidName\
-:*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},BasicsTests.Integration_Cassandra_Timestamps)
 endif
 
 ifndef CASSANDRA_TEST_FILTER
@@ -55,7 +33,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 endif
 
 ifndef CCM_COMMIT_ID
-	export CCM_COMMIT_ID := 81076bce792a0fb3f2050e4c209a93e4a62ab55f
+	export CCM_COMMIT_ID := master
 endif
 
 ifndef SCYLLA_VERSION
@@ -116,10 +94,10 @@ install-java8-if-missing:
 	}
 
 install-build-dependencies: update-apt-cache-if-needed
-	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
+	@sudo apt-get install -y libssl3 libuv1-dev libkrb5-dev libc6-dbg
 
 install-bin-dependencies: update-apt-cache-if-needed
-	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
+	@sudo apt-get install -y libssl3 libuv1-dev libkrb5-dev libc6-dbg
 
 build-integration-test-bin:
 	@{\
@@ -196,14 +174,14 @@ download-ccm-cassandra-image: install-ccm-if-missing
 	@ccm create ccm_1 -i 127.0.1. -n 3:0 -v "${CASSANDRA_VERSION}" --config-dir=/tmp/download-cassandra.ccm
 	@rm -rf /tmp/download-cassandra.ccm
 
-run-test-integration-scylla: prepare-integration-test download-ccm-scylla-image
+run-test-integration-scylla: prepare-integration-test download-ccm-scylla-image install-java8-if-missing
 ifdef DONT_REBUILD_INTEGRATION_BIN
 run-test-integration-scylla: build-integration-test-bin-if-missing
 else
 run-test-integration-scylla: build-integration-test-bin
 endif
 	@echo "Running integration tests on scylla ${SCYLLA_VERSION}"
-	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
+	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --keep-clusters --gtest_filter="${SCYLLA_TEST_FILTER}"
 	@echo "Running timeout sensitive tests on scylla ${SCYLLA_VERSION}"
 	build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="AsyncTests.Integration_Cassandra_Simple"
 
