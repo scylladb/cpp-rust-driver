@@ -62,14 +62,6 @@ CASS_EXPORT CassError cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib
   throw std::runtime_error(
       "UNIMPLEMENTED cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init\n");
 }
-CASS_EXPORT void cass_cluster_set_connection_heartbeat_interval(CassCluster* cluster,
-                                                                unsigned interval_secs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_connection_heartbeat_interval\n");
-}
-CASS_EXPORT void cass_cluster_set_connection_idle_timeout(CassCluster* cluster,
-                                                          unsigned timeout_secs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_connection_idle_timeout\n");
-}
 CASS_EXPORT void cass_cluster_set_constant_reconnect(CassCluster* cluster, cass_uint64_t delay_ms) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_constant_reconnect\n");
 }
