@@ -555,10 +555,12 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     query: *const c_char,
     query_length: size_t,
 ) -> *const CassFuture {
-    let query_str = match ptr_to_cstr_n(query, query_length) {
-        Some(v) => v,
-        None => return std::ptr::null(),
-    };
+    let query_str = ptr_to_cstr_n(query, query_length)
+        // Apparently nullptr denotes an empty statement string.
+        // It seems to be intended (for some weird reason, why not save a round-trip???)
+        // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
+        // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
+        .unwrap_or_default();
     let query = Query::new(query_str.to_string());
     let cass_session: &CassSession = ptr_to_ref(cass_session_raw);
 

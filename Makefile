@@ -5,6 +5,7 @@ ifndef SCYLLA_TEST_FILTER
 SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
 :ConfigTests.*\
+:NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
 :SerialConsistencyTests.*\
@@ -31,6 +32,7 @@ ifndef CASSANDRA_TEST_FILTER
 CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
 :ConfigTests.*\
+:NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
 :SerialConsistencyTests.*\
