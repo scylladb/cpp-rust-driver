@@ -28,11 +28,17 @@ use std::time::Duration;
 
 use crate::cass_compression_types::CassCompressionType;
 
-// According to `cassandra.h` the default CPP driver's
+// According to `cassandra.h` the defaults for
 // - consistency for statements is LOCAL_ONE,
-// - request client timeout is 12000 millis.
 const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
-const DEFAULT_REQUEST_TIMEOUT_MILLIS: u64 = 12000;
+// - request client timeout is 12000 millis,
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_millis(12000);
+// - fetching schema metadata is true
+const DEFAULT_DO_FETCH_SCHEMA_METADATA: bool = true;
+// - setting TCP_NODELAY is true
+const DEFAULT_SET_TCP_NO_DELAY: bool = true;
+// - connect timeout is 5000 millis
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -157,15 +163,20 @@ pub fn build_session_builder(
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
-        .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
+        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
 
+    // Default config options - according to cassandra.h
     let default_session_builder = {
         // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
         let custom_identity = SelfIdentity::new()
             .with_custom_driver_name(DRIVER_NAME)
             .with_custom_driver_version(DRIVER_VERSION);
 
-        SessionBuilder::new().custom_identity(custom_identity)
+        SessionBuilder::new()
+            .custom_identity(custom_identity)
+            .fetch_schema_metadata(DEFAULT_DO_FETCH_SCHEMA_METADATA)
+            .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
+            .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
     };
 
     Box::into_raw(Box::new(CassCluster {
