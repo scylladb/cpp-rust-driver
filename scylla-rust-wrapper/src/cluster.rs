@@ -39,6 +39,10 @@ const DEFAULT_DO_FETCH_SCHEMA_METADATA: bool = true;
 const DEFAULT_SET_TCP_NO_DELAY: bool = true;
 // - connect timeout is 5000 millis
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
+// - keepalive interval is 30 secs
+const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+// - keepalive timeout is 60 secs
+const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -177,6 +181,8 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
             .fetch_schema_metadata(DEFAULT_DO_FETCH_SCHEMA_METADATA)
             .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
+            .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
+            .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
     };
 
     Box::into_raw(Box::new(CassCluster {
@@ -356,6 +362,28 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
 
     cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
+    cluster_raw: *mut CassCluster,
+    interval_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_interval = (interval_secs > 0).then(|| Duration::from_secs(interval_secs as u64));
+
+    cluster.session_builder.config.keepalive_interval = keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs as u64));
+
+    cluster.session_builder.config.keepalive_timeout = keepalive_timeout;
 }
 
 #[no_mangle]
