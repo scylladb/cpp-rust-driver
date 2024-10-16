@@ -159,13 +159,17 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         .consistency(DEFAULT_CONSISTENCY)
         .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
 
-    // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
-    let custom_identity = SelfIdentity::new()
-        .with_custom_driver_name(DRIVER_NAME)
-        .with_custom_driver_version(DRIVER_VERSION);
+    let default_session_builder = {
+        // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
+        let custom_identity = SelfIdentity::new()
+            .with_custom_driver_name(DRIVER_NAME)
+            .with_custom_driver_version(DRIVER_VERSION);
+
+        SessionBuilder::new().custom_identity(custom_identity)
+    };
 
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new().custom_identity(custom_identity),
+        session_builder: default_session_builder,
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
