@@ -65,9 +65,9 @@ impl LoadBalancingConfig {
             builder =
                 builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
         }
-        if let Some(dc_awareness) = self.dc_awareness.as_ref() {
+        if let Some(dc_awareness) = self.dc_awareness {
             builder = builder
-                .prefer_datacenter(dc_awareness.local_dc.clone())
+                .prefer_datacenter(dc_awareness.local_dc)
                 .permit_dc_failover(true)
         }
         if self.latency_awareness_enabled {
