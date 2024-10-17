@@ -2233,6 +2233,46 @@ cass_cluster_set_load_balance_dc_aware_n(CassCluster* cluster,
                                          unsigned used_hosts_per_remote_dc,
                                          cass_bool_t allow_remote_dcs_for_local_cl);
 
+
+/**
+ * Configures the cluster to use Rack-aware load balancing.
+ * For each query, all live nodes in a primary 'local' rack are tried first,
+ * followed by nodes from local DC and then nodes from other DCs.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] local_dc The primary data center to try first
+ * @param[in] local_rack The primary rack to try first
+ * @return CASS_OK if successful, otherwise an error occurred
+ */
+CASS_EXPORT CassError
+cass_cluster_set_load_balance_rack_aware(CassCluster* cluster,
+                                       const char* local_dc,
+                                       const char* local_rack);
+
+
+/**
+ * Same as cass_cluster_set_load_balance_rack_aware(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] local_dc
+ * @param[in] local_dc_length
+ * @return same as cass_cluster_set_load_balance_dc_aware()
+ *
+ * @see cass_cluster_set_load_balance_dc_aware()
+ */
+CASS_EXPORT CassError
+cass_cluster_set_load_balance_rack_aware_n(CassCluster* cluster,
+                                         const char* local_dc,
+                                         size_t local_dc_length,
+                                         const char* local_rack,
+                                         size_t local_rack_length);
+
+
 /**
  * Configures the cluster to use token-aware request routing or not.
  *
