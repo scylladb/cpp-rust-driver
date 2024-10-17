@@ -606,7 +606,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware_n(
     )
 }
 
-unsafe fn set_load_balance_rack_aware_n(
+pub(crate) unsafe fn set_load_balance_rack_aware_n(
     load_balancing_config: &mut LoadBalancingConfig,
     local_dc_raw: *const c_char,
     local_dc_length: size_t,

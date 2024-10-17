@@ -17,7 +17,10 @@ use crate::argconv::{free_boxed, ptr_to_cstr_n, ptr_to_ref, ptr_to_ref_mut, strl
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cluster::{set_load_balance_dc_aware_n, LoadBalancingConfig, LoadBalancingKind};
+use crate::cluster::{
+    set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, LoadBalancingConfig,
+    LoadBalancingKind,
+};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
@@ -354,6 +357,40 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
         local_dc_length,
         used_hosts_per_remote_dc,
         allow_remote_dcs_for_local_cl,
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware(
+    profile: *mut CassExecProfile,
+    local_dc_raw: *const c_char,
+    local_rack_raw: *const c_char,
+) -> CassError {
+    cass_execution_profile_set_load_balance_rack_aware_n(
+        profile,
+        local_dc_raw,
+        strlen(local_dc_raw),
+        local_rack_raw,
+        strlen(local_rack_raw),
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
+    profile: *mut CassExecProfile,
+    local_dc_raw: *const c_char,
+    local_dc_length: size_t,
+    local_rack_raw: *const c_char,
+    local_rack_length: size_t,
+) -> CassError {
+    let profile_builder = ptr_to_ref_mut(profile);
+
+    set_load_balance_rack_aware_n(
+        &mut profile_builder.load_balancing_config,
+        local_dc_raw,
+        local_dc_length,
+        local_rack_raw,
+        local_rack_length,
     )
 }
 
