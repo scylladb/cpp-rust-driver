@@ -2220,13 +2220,6 @@ cass_cluster_set_load_balance_round_robin(CassCluster* cluster);
  * For each query, all live nodes in a primary 'local' DC are tried first,
  * followed by any node from other DCs.
  *
- * <b>Note:</b> This is the default, and does not need to be called unless
- * switching an existing from another policy or changing settings.
- * Without further configuration, a default local_dc is chosen from the
- * first connected contact point, and no remote hosts are considered in
- * query plans. If relying on this mechanism, be sure to use only contact
- * points from the local DC.
- *
  * @deprecated The remote DC settings for DC-aware are not suitable for most
  * scenarios that require DC failover. There is also unhandled gap between
  * replication factor number of nodes failing and the full cluster failing. Only
