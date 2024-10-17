@@ -17,7 +17,7 @@ use crate::argconv::{free_boxed, ptr_to_cstr_n, ptr_to_ref, ptr_to_ref_mut, strl
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cluster::{set_load_balance_dc_aware_n, LoadBalancingConfig};
+use crate::cluster::{set_load_balance_dc_aware_n, LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
@@ -353,7 +353,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile: *mut CassExecProfile,
 ) -> CassError {
     let profile_builder = ptr_to_ref_mut(profile);
-    profile_builder.load_balancing_config.dc_awareness = None;
+    profile_builder.load_balancing_config.load_balancing_kind = LoadBalancingKind::RoundRobin;
 
     CassError::CASS_OK
 }
@@ -473,7 +473,10 @@ mod tests {
                 /* Test valid configurations */
                 let profile = ptr_to_ref(profile_raw);
                 {
-                    assert_matches!(profile.load_balancing_config.dc_awareness, None);
+                    assert_matches!(
+                        profile.load_balancing_config.load_balancing_kind,
+                        LoadBalancingKind::RoundRobin
+                    );
                     assert!(profile.load_balancing_config.token_awareness_enabled);
                     assert!(!profile.load_balancing_config.latency_awareness_enabled);
                 }
@@ -500,8 +503,13 @@ mod tests {
                         40,
                     );
 
-                    let dc_awareness = profile.load_balancing_config.dc_awareness.as_ref().unwrap();
-                    assert_eq!(dc_awareness.local_dc, "eu");
+                    let load_balancing_kind = &profile.load_balancing_config.load_balancing_kind;
+                    match load_balancing_kind {
+                        LoadBalancingKind::DcAware { local_dc } => {
+                            assert_eq!(local_dc, "eu")
+                        }
+                        _ => panic!("Expected preferred dc"),
+                    }
                     assert!(!profile.load_balancing_config.token_awareness_enabled);
                     assert!(profile.load_balancing_config.latency_awareness_enabled);
                 }
