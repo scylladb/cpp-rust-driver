@@ -972,12 +972,7 @@ mod tests {
                 {
                     cass_cluster_set_token_aware_routing(cluster_raw, 0);
                     assert_cass_error_eq!(
-                        cass_cluster_set_load_balance_dc_aware(
-                            cluster_raw,
-                            "eu\0".as_ptr() as *const i8,
-                            0,
-                            0
-                        ),
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, c"eu".as_ptr(), 0, 0),
                         CassError::CASS_OK
                     );
                     cass_cluster_set_latency_aware_routing(cluster_raw, 1);
@@ -1001,25 +996,98 @@ mod tests {
                     }
                     assert!(!cluster.load_balancing_config.token_awareness_enabled);
                     assert!(cluster.load_balancing_config.latency_awareness_enabled);
+
+                    // set preferred rack+dc
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_rack_aware(
+                            cluster_raw,
+                            c"eu-east".as_ptr(),
+                            c"rack1".as_ptr(),
+                        ),
+                        CassError::CASS_OK
+                    );
+
+                    let node_location_preference =
+                        &cluster.load_balancing_config.load_balancing_kind;
+                    match node_location_preference {
+                        Some(LoadBalancingKind::RackAware {
+                            local_dc,
+                            local_rack,
+                        }) => {
+                            assert_eq!(local_dc, "eu-east");
+                            assert_eq!(local_rack, "rack1");
+                        }
+                        _ => panic!("Expected preferred dc and rack"),
+                    }
+
+                    // set back to preferred dc
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, c"eu".as_ptr(), 0, 0),
+                        CassError::CASS_OK
+                    );
+
+                    let node_location_preference =
+                        &cluster.load_balancing_config.load_balancing_kind;
+                    match node_location_preference {
+                        Some(LoadBalancingKind::DcAware { local_dc }) => {
+                            assert_eq!(local_dc, "eu")
+                        }
+                        _ => panic!("Expected preferred dc"),
+                    }
                 }
                 /* Test invalid configurations */
                 {
                     // Nonzero deprecated parameters
                     assert_cass_error_eq!(
-                        cass_cluster_set_load_balance_dc_aware(
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, c"eu".as_ptr(), 1, 0),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, c"eu".as_ptr(), 0, 1),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+
+                    // null pointers
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, std::ptr::null(), 0, 0),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_rack_aware(
                             cluster_raw,
-                            "eu\0".as_ptr() as *const i8,
-                            1,
-                            0
+                            c"eu".as_ptr(),
+                            std::ptr::null(),
                         ),
                         CassError::CASS_ERROR_LIB_BAD_PARAMS
                     );
                     assert_cass_error_eq!(
-                        cass_cluster_set_load_balance_dc_aware(
+                        cass_cluster_set_load_balance_rack_aware(
                             cluster_raw,
-                            "eu\0".as_ptr() as *const i8,
-                            0,
-                            1
+                            std::ptr::null(),
+                            c"rack".as_ptr(),
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+
+                    // empty strings
+                    let empty_str = "\0".as_ptr() as *const i8;
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_dc_aware(cluster_raw, std::ptr::null(), 0, 0),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_rack_aware(
+                            cluster_raw,
+                            c"eu".as_ptr(),
+                            empty_str,
+                        ),
+                        CassError::CASS_ERROR_LIB_BAD_PARAMS
+                    );
+                    assert_cass_error_eq!(
+                        cass_cluster_set_load_balance_rack_aware(
+                            cluster_raw,
+                            empty_str,
+                            c"rack".as_ptr(),
                         ),
                         CassError::CASS_ERROR_LIB_BAD_PARAMS
                     );
