@@ -41,7 +41,7 @@ const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
     pub(crate) token_aware_shuffling_replicas_enabled: bool,
-    pub(crate) dc_awareness: Option<DcAwareness>,
+    pub(crate) load_balancing_kind: LoadBalancingKind,
     pub(crate) latency_awareness_enabled: bool,
     pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
 }
@@ -55,10 +55,8 @@ impl LoadBalancingConfig {
             builder =
                 builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
         }
-        if let Some(dc_awareness) = self.dc_awareness {
-            builder = builder
-                .prefer_datacenter(dc_awareness.local_dc)
-                .permit_dc_failover(true)
+        if let LoadBalancingKind::DcAware { local_dc } = self.load_balancing_kind {
+            builder = builder.prefer_datacenter(local_dc).permit_dc_failover(true)
         }
         if self.latency_awareness_enabled {
             builder = builder.latency_awareness(self.latency_awareness_builder);
@@ -71,7 +69,7 @@ impl Default for LoadBalancingConfig {
         Self {
             token_awareness_enabled: true,
             token_aware_shuffling_replicas_enabled: true,
-            dc_awareness: None,
+            load_balancing_kind: LoadBalancingKind::RoundRobin,
             latency_awareness_enabled: false,
             latency_awareness_builder: Default::default(),
         }
@@ -79,8 +77,9 @@ impl Default for LoadBalancingConfig {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DcAwareness {
-    pub(crate) local_dc: String,
+pub(crate) enum LoadBalancingKind {
+    RoundRobin,
+    DcAware { local_dc: String },
 }
 
 #[derive(Clone)]
@@ -414,7 +413,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.load_balancing_config.dc_awareness = None;
+    cluster.load_balancing_config.load_balancing_kind = LoadBalancingKind::RoundRobin;
 }
 
 #[no_mangle]
@@ -453,7 +452,7 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         .unwrap()
         .to_string();
 
-    load_balancing_config.dc_awareness = Some(DcAwareness { local_dc });
+    load_balancing_config.load_balancing_kind = LoadBalancingKind::DcAware { local_dc };
 
     CassError::CASS_OK
 }
@@ -808,7 +807,10 @@ mod tests {
                 /* Test valid configurations */
                 let cluster = ptr_to_ref(cluster_raw);
                 {
-                    assert_matches!(cluster.load_balancing_config.dc_awareness, None);
+                    assert_matches!(
+                        cluster.load_balancing_config.load_balancing_kind,
+                        LoadBalancingKind::RoundRobin
+                    );
                     assert!(cluster.load_balancing_config.token_awareness_enabled);
                     assert!(!cluster.load_balancing_config.latency_awareness_enabled);
                 }
@@ -835,8 +837,13 @@ mod tests {
                         40,
                     );
 
-                    let dc_awareness = cluster.load_balancing_config.dc_awareness.as_ref().unwrap();
-                    assert_eq!(dc_awareness.local_dc, "eu");
+                    let load_balancing_kind = &cluster.load_balancing_config.load_balancing_kind;
+                    match load_balancing_kind {
+                        LoadBalancingKind::DcAware { local_dc } => {
+                            assert_eq!(local_dc, "eu")
+                        }
+                        _ => panic!("Expected preferred dc"),
+                    }
                     assert!(!cluster.load_balancing_config.token_awareness_enabled);
                     assert!(cluster.load_balancing_config.latency_awareness_enabled);
                 }
