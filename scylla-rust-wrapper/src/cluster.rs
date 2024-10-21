@@ -130,9 +130,9 @@ pub struct CassCustomPayload;
 
 // We want to make sure that the returned future does not depend
 // on the provided &CassCluster, hence the `static here.
-pub fn build_session_builder(
+pub fn build_session_builder_and_default_lbp(
     cluster: &CassCluster,
-) -> impl Future<Output = SessionBuilder> + 'static {
+) -> impl Future<Output = (SessionBuilder, Arc<dyn LoadBalancingPolicy>)> + 'static {
     let known_nodes = cluster
         .contact_points
         .iter()
@@ -146,9 +146,12 @@ pub fn build_session_builder(
 
     async move {
         let load_balancing = load_balancing_config.clone().build().await;
-        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
-        session_builder
-            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        execution_profile_builder =
+            execution_profile_builder.load_balancing_policy(load_balancing.clone());
+        let session_builder = session_builder
+            .default_execution_profile_handle(execution_profile_builder.build().into_handle());
+
+        (session_builder, load_balancing)
     }
 }
 
