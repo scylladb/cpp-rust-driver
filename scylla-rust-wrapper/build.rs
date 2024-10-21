@@ -3,9 +3,11 @@ extern crate bindgen;
 use std::env;
 use std::path::{Path, PathBuf};
 
+const RELATIVE_PATH_TO_CASSANDRA_H: &str = "../include/cassandra.h";
+
 fn prepare_full_bindings(out_path: &Path) {
     let bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(false)
         .generate_comments(false)
@@ -23,7 +25,7 @@ fn prepare_full_bindings(out_path: &Path) {
 
 fn prepare_basic_types(out_path: &Path) {
     let basic_bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
@@ -56,7 +58,7 @@ fn prepare_basic_types(out_path: &Path) {
 
 fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path) {
     let mut type_bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
@@ -79,7 +81,7 @@ fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=extern/cassandra.h");
+    println!("cargo:rerun-if-changed={}", RELATIVE_PATH_TO_CASSANDRA_H);
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     prepare_full_bindings(&out_path);
     prepare_basic_types(&out_path);
