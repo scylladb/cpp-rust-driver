@@ -42,10 +42,19 @@ impl CassExecProfile {
         }
     }
 
-    pub(crate) async fn build(self) -> ExecutionProfile {
-        self.inner
-            .load_balancing_policy(self.load_balancing_config.build().await)
-            .build()
+    pub(crate) async fn build(
+        self,
+        cluster_default_profile: &ExecutionProfile,
+    ) -> ExecutionProfile {
+        let load_balacing = if self.load_balancing_config.load_balancing_kind.is_some() {
+            self.load_balancing_config.build().await
+        } else {
+            // If load balancing config does not have LB kind defined,
+            // we make use of cluster's LBP.
+            cluster_default_profile.get_load_balancing_policy().clone()
+        };
+
+        self.inner.load_balancing_policy(load_balacing).build()
     }
 }
 
@@ -353,7 +362,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile: *mut CassExecProfile,
 ) -> CassError {
     let profile_builder = ptr_to_ref_mut(profile);
-    profile_builder.load_balancing_config.load_balancing_kind = LoadBalancingKind::RoundRobin;
+    profile_builder.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 
     CassError::CASS_OK
 }
@@ -473,10 +482,7 @@ mod tests {
                 /* Test valid configurations */
                 let profile = ptr_to_ref(profile_raw);
                 {
-                    assert_matches!(
-                        profile.load_balancing_config.load_balancing_kind,
-                        LoadBalancingKind::RoundRobin
-                    );
+                    assert_matches!(profile.load_balancing_config.load_balancing_kind, None);
                     assert!(profile.load_balancing_config.token_awareness_enabled);
                     assert!(!profile.load_balancing_config.latency_awareness_enabled);
                 }
@@ -505,7 +511,7 @@ mod tests {
 
                     let load_balancing_kind = &profile.load_balancing_config.load_balancing_kind;
                     match load_balancing_kind {
-                        LoadBalancingKind::DcAware { local_dc } => {
+                        Some(LoadBalancingKind::DcAware { local_dc }) => {
                             assert_eq!(local_dc, "eu")
                         }
                         _ => panic!("Expected preferred dc"),

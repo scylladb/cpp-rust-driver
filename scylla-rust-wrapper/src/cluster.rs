@@ -51,7 +51,7 @@ const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
     pub(crate) token_aware_shuffling_replicas_enabled: bool,
-    pub(crate) load_balancing_kind: LoadBalancingKind,
+    pub(crate) load_balancing_kind: Option<LoadBalancingKind>,
     pub(crate) latency_awareness_enabled: bool,
     pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
 }
@@ -59,13 +59,18 @@ impl LoadBalancingConfig {
     // This is `async` to prevent running this function from beyond tokio context,
     // as it results in panic due to DefaultPolicyBuilder::build() spawning a tokio task.
     pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
+        let load_balancing_kind = self
+            .load_balancing_kind
+            // Round robin is chosen by default for cluster wide LBP.
+            .unwrap_or(LoadBalancingKind::RoundRobin);
+
         let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
         if self.token_awareness_enabled {
             // Cpp-driver enables shuffling replicas only if token aware routing is enabled.
             builder =
                 builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
         }
-        if let LoadBalancingKind::DcAware { local_dc } = self.load_balancing_kind {
+        if let LoadBalancingKind::DcAware { local_dc } = load_balancing_kind {
             builder = builder.prefer_datacenter(local_dc).permit_dc_failover(true)
         }
         if self.latency_awareness_enabled {
@@ -79,7 +84,7 @@ impl Default for LoadBalancingConfig {
         Self {
             token_awareness_enabled: true,
             token_aware_shuffling_replicas_enabled: true,
-            load_balancing_kind: LoadBalancingKind::RoundRobin,
+            load_balancing_kind: None,
             latency_awareness_enabled: false,
             latency_awareness_builder: Default::default(),
         }
@@ -456,7 +461,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(cluster_raw: *mut CassCluster) {
     let cluster = ptr_to_ref_mut(cluster_raw);
-    cluster.load_balancing_config.load_balancing_kind = LoadBalancingKind::RoundRobin;
+    cluster.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 }
 
 #[no_mangle]
@@ -495,7 +500,7 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         .unwrap()
         .to_string();
 
-    load_balancing_config.load_balancing_kind = LoadBalancingKind::DcAware { local_dc };
+    load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::DcAware { local_dc });
 
     CassError::CASS_OK
 }
@@ -850,10 +855,7 @@ mod tests {
                 /* Test valid configurations */
                 let cluster = ptr_to_ref(cluster_raw);
                 {
-                    assert_matches!(
-                        cluster.load_balancing_config.load_balancing_kind,
-                        LoadBalancingKind::RoundRobin
-                    );
+                    assert_matches!(cluster.load_balancing_config.load_balancing_kind, None);
                     assert!(cluster.load_balancing_config.token_awareness_enabled);
                     assert!(!cluster.load_balancing_config.latency_awareness_enabled);
                 }
@@ -882,7 +884,7 @@ mod tests {
 
                     let load_balancing_kind = &cluster.load_balancing_config.load_balancing_kind;
                     match load_balancing_kind {
-                        LoadBalancingKind::DcAware { local_dc } => {
+                        Some(LoadBalancingKind::DcAware { local_dc }) => {
                             assert_eq!(local_dc, "eu")
                         }
                         _ => panic!("Expected preferred dc"),
