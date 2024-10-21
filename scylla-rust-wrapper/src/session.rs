@@ -112,13 +112,14 @@ impl CassSessionInner {
                 "Already connecting, closing, or connected".msg(),
             ));
         }
+
+        let (mut session_builder, default_lbp) = session_builder_and_default_lbp_fut.await;
+
         let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
         for (name, builder) in exec_profile_builder_map {
-            exec_profile_map.insert(name, builder.build().await.into_handle());
+            exec_profile_map.insert(name, builder.build(default_lbp.clone()).await.into_handle());
         }
 
-        // TODO: pass default_lbp to exec profiles above.
-        let (mut session_builder, _default_lbp) = session_builder_and_default_lbp_fut.await;
         if let Some(keyspace) = keyspace {
             session_builder = session_builder.use_keyspace(keyspace, false);
         }
