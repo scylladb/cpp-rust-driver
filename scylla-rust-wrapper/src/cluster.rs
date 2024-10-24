@@ -28,11 +28,21 @@ use std::time::Duration;
 
 use crate::cass_compression_types::CassCompressionType;
 
-// According to `cassandra.h` the default CPP driver's
+// According to `cassandra.h` the defaults for
 // - consistency for statements is LOCAL_ONE,
-// - request client timeout is 12000 millis.
 const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
-const DEFAULT_REQUEST_TIMEOUT_MILLIS: u64 = 12000;
+// - request client timeout is 12000 millis,
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_millis(12000);
+// - fetching schema metadata is true
+const DEFAULT_DO_FETCH_SCHEMA_METADATA: bool = true;
+// - setting TCP_NODELAY is true
+const DEFAULT_SET_TCP_NO_DELAY: bool = true;
+// - connect timeout is 5000 millis
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
+// - keepalive interval is 30 secs
+const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+// - keepalive timeout is 60 secs
+const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -157,15 +167,26 @@ pub fn build_session_builder(
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
-        .request_timeout(Some(Duration::from_millis(DEFAULT_REQUEST_TIMEOUT_MILLIS)));
+        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
 
-    // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
-    let custom_identity = SelfIdentity::new()
-        .with_custom_driver_name(DRIVER_NAME)
-        .with_custom_driver_version(DRIVER_VERSION);
+    // Default config options - according to cassandra.h
+    let default_session_builder = {
+        // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
+        let custom_identity = SelfIdentity::new()
+            .with_custom_driver_name(DRIVER_NAME)
+            .with_custom_driver_version(DRIVER_VERSION);
+
+        SessionBuilder::new()
+            .custom_identity(custom_identity)
+            .fetch_schema_metadata(DEFAULT_DO_FETCH_SCHEMA_METADATA)
+            .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
+            .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
+            .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
+            .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
+    };
 
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new().custom_identity(custom_identity),
+        session_builder: default_session_builder,
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
@@ -341,6 +362,28 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
 
     cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
+    cluster_raw: *mut CassCluster,
+    interval_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_interval = (interval_secs > 0).then(|| Duration::from_secs(interval_secs as u64));
+
+    cluster.session_builder.config.keepalive_interval = keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs as u64));
+
+    cluster.session_builder.config.keepalive_timeout = keepalive_timeout;
 }
 
 #[no_mangle]
