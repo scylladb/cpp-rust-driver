@@ -43,6 +43,8 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - tracing consistency is ONE
+const DEFAULT_TRACING_CONSISTENCY: Consistency = Consistency::One;
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -183,6 +185,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
+            .tracing_info_fetch_consistency(DEFAULT_TRACING_CONSISTENCY)
     };
 
     Box::into_raw(Box::new(CassCluster {
@@ -406,6 +409,22 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
         // 0 -> no timeout
         builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tracing_consistency(
+    cluster_raw: *mut CassCluster,
+    consistency: CassConsistency,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let consistency = Consistency::try_from(consistency)
+        .expect("Invalid consistency passed to `cass_cluster_set_tracing_consistency`.");
+
+    cluster
+        .session_builder
+        .config
+        .tracing_info_fetch_consistency = consistency;
 }
 
 #[no_mangle]
