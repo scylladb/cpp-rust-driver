@@ -855,6 +855,8 @@ impl TryFrom<CassConsistency> for Consistency {
             CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Ok(Consistency::LocalQuorum),
             CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Ok(Consistency::EachQuorum),
             CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Ok(Consistency::LocalOne),
+            CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Ok(Consistency::LocalSerial),
+            CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(Consistency::Serial),
             _ => Err(()),
         }
     }
