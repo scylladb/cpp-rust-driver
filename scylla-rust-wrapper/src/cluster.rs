@@ -43,6 +43,8 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - tracing info fetch interval is 3 millis
+const DEFAULT_TRACING_INFO_FETCH_INTERVAL: Duration = Duration::from_millis(3);
 // - tracing consistency is ONE
 const DEFAULT_TRACING_CONSISTENCY: Consistency = Consistency::One;
 
@@ -185,6 +187,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
+            .tracing_info_fetch_interval(DEFAULT_TRACING_INFO_FETCH_INTERVAL)
             .tracing_info_fetch_consistency(DEFAULT_TRACING_CONSISTENCY)
     };
 
@@ -409,6 +412,17 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
         // 0 -> no timeout
         builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tracing_retry_wait_time(
+    cluster_raw: *mut CassCluster,
+    retry_wait_time_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster.session_builder.config.tracing_info_fetch_interval =
+        Duration::from_millis(retry_wait_time_ms.into());
 }
 
 #[no_mangle]
