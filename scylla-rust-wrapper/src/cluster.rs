@@ -22,6 +22,7 @@ use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
+use std::num::NonZeroU32;
 use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,6 +44,8 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - tracing info fetch timeout is 15 millis
+const DEFAULT_TRACING_INFO_FETCH_TIMEOUT: Duration = Duration::from_millis(15);
 // - tracing info fetch interval is 3 millis
 const DEFAULT_TRACING_INFO_FETCH_INTERVAL: Duration = Duration::from_millis(3);
 // - tracing consistency is ONE
@@ -113,6 +116,11 @@ pub struct CassCluster {
     auth_password: Option<String>,
 
     client_id: Option<uuid::Uuid>,
+
+    /// The default timeout for tracing info fetch.
+    /// Rust-driver only defines the number of retries.
+    /// However, this can be easily computed: `tracing_max_wait_time / tracing_retry_wait_time`.
+    tracing_max_wait_time: Duration,
 }
 
 impl CassCluster {
@@ -159,6 +167,19 @@ pub fn build_session_builder(
         session_builder = session_builder.user(username, password)
     }
 
+    // Compute the number of retries for tracing info fetch
+    // based on the timeout and interval provided by user.
+    let tracing_info_fetch_attemps = {
+        let attemps = cluster.tracing_max_wait_time.as_millis()
+            / session_builder
+                .config
+                .tracing_info_fetch_interval
+                .as_millis();
+
+        NonZeroU32::new(attemps as u32).unwrap_or_else(|| NonZeroU32::new(1).unwrap())
+    };
+    session_builder = session_builder.tracing_info_fetch_attempts(tracing_info_fetch_attemps);
+
     async move {
         let load_balancing = load_balancing_config.clone().build().await;
         execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
@@ -204,6 +225,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
         client_id: None,
+        tracing_max_wait_time: DEFAULT_TRACING_INFO_FETCH_TIMEOUT,
     }))
 }
 
@@ -412,6 +434,16 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
         // 0 -> no timeout
         builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tracing_max_wait_time(
+    cluster_raw: *mut CassCluster,
+    max_wait_time_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster.tracing_max_wait_time = Duration::from_millis(max_wait_time_ms.into());
 }
 
 #[no_mangle]
