@@ -2,7 +2,7 @@ use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
 use crate::cass_types::{CassDataType, MapDataType, UDTDataType};
-use crate::cluster::build_session_builder;
+use crate::cluster::build_session_builder_and_default_lbp;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
@@ -17,6 +17,7 @@ use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
+use scylla::load_balancing::LoadBalancingPolicy;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
@@ -78,12 +79,12 @@ impl CassSessionInner {
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> *const CassFuture {
-        let session_builder = build_session_builder(cluster);
+        let session_builder_and_default_lbp = build_session_builder_and_default_lbp(cluster);
         let exec_profile_map = cluster.execution_profile_map().clone();
 
         CassFuture::make_raw(Self::connect_fut(
             session_opt,
-            session_builder,
+            session_builder_and_default_lbp,
             exec_profile_map,
             cluster
                 .get_client_id()
@@ -95,7 +96,9 @@ impl CassSessionInner {
 
     async fn connect_fut(
         session_opt: &RwLock<Option<CassSessionInner>>,
-        session_builder_fut: impl Future<Output = SessionBuilder>,
+        session_builder_and_default_lbp_fut: impl Future<
+            Output = (SessionBuilder, Arc<dyn LoadBalancingPolicy>),
+        >,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         client_id: uuid::Uuid,
         keyspace: Option<String>,
@@ -109,12 +112,14 @@ impl CassSessionInner {
                 "Already connecting, closing, or connected".msg(),
             ));
         }
+
+        let (mut session_builder, default_lbp) = session_builder_and_default_lbp_fut.await;
+
         let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
         for (name, builder) in exec_profile_builder_map {
-            exec_profile_map.insert(name, builder.build().await.into_handle());
+            exec_profile_map.insert(name, builder.build(default_lbp.clone()).await.into_handle());
         }
 
-        let mut session_builder = session_builder_fut.await;
         if let Some(keyspace) = keyspace {
             session_builder = session_builder.use_keyspace(keyspace, false);
         }
