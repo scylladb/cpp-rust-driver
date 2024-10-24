@@ -2068,6 +2068,20 @@ CASS_EXPORT void
 cass_cluster_set_max_schema_wait_time(CassCluster* cluster,
                                       unsigned wait_time_ms);
 
+/**
+ * Set the delay for schema agreement check after a schema change.
+ * How often driver should ask if schema is in agreement.
+ *
+ * <b>Default:</b> 200 milliseconds
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] interval_ms Interval in milliseconds
+ */
+CASS_EXPORT void
+cass_cluster_set_schema_agreement_interval(CassCluster* cluster,
+                                           unsigned interval_ms);
 
 /**
  * Sets the maximum time to wait for tracing data to become available.
