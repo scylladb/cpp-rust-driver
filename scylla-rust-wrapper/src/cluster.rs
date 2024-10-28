@@ -689,13 +689,13 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     let cluster = ptr_to_ref_mut(cluster_raw);
 
     let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
-        DefaultRetryPolicy(default) => default.clone(),
-        FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
-        DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+        DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.retry_policy(retry_policy.clone_boxed())
+        builder.retry_policy(retry_policy)
     });
 }
 

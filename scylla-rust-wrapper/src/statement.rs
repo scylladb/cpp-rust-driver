@@ -110,8 +110,8 @@ impl CassStatement {
                     .iter()
                     .enumerate()
                     .filter(|(_, col)| {
-                        is_case_sensitive && col.name == name_str
-                            || !is_case_sensitive && col.name.eq_ignore_ascii_case(name_str)
+                        is_case_sensitive && col.name() == name_str
+                            || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_str)
                     })
                     .map(|(i, _)| i)
                     .collect();
