@@ -11,8 +11,8 @@ use scylla::{
             SetOrListSerializationErrorKind, TupleSerializationErrorKind,
             UdtSerializationErrorKind,
         },
-        writers::WrittenCellProof,
-        CellWriter, SerializationError,
+        writers::{CellWriter, WrittenCellProof},
+        SerializationError,
     },
 };
 use uuid::Uuid;

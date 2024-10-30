@@ -23,7 +23,7 @@ pub struct CassResult {
 
 pub struct CassResultData {
     pub paging_state_response: PagingStateResponse,
-    pub col_specs: Vec<ColumnSpec>,
+    pub col_specs: Vec<ColumnSpec<'static>>,
     pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
     pub tracing_id: Option<Uuid>,
 }
@@ -31,7 +31,7 @@ pub struct CassResultData {
 impl CassResultData {
     pub fn from_result_payload(
         paging_state_response: PagingStateResponse,
-        col_specs: Vec<ColumnSpec>,
+        col_specs: Vec<ColumnSpec<'static>>,
         maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
         tracing_id: Option<Uuid>,
     ) -> CassResultData {
@@ -43,7 +43,7 @@ impl CassResultData {
             Arc::new(
                 col_specs
                     .iter()
-                    .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+                    .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
                     .collect(),
             )
         });
@@ -903,8 +903,8 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
         .iter()
         .enumerate()
         .find(|(_, spec)| {
-            is_case_sensitive && spec.name == name_str
-                || !is_case_sensitive && spec.name.eq_ignore_ascii_case(name_str)
+            is_case_sensitive && spec.name() == name_str
+                || !is_case_sensitive && spec.name().eq_ignore_ascii_case(name_str)
         })
         .map(|(index, _)| {
             return match row_from_raw.columns.get(index) {
@@ -930,7 +930,7 @@ pub unsafe extern "C" fn cass_result_column_name(
     }
 
     let column_spec: &ColumnSpec = result_from_raw.metadata.col_specs.get(index_usize).unwrap();
-    let column_name = column_spec.name.as_str();
+    let column_name = column_spec.name();
 
     write_str_to_c(column_name, name, name_length);
 
@@ -1406,12 +1406,8 @@ mod tests {
 
     use super::{cass_result_column_count, cass_result_column_type, CassResult, CassResultData};
 
-    fn col_spec(name: &str, typ: ColumnType) -> ColumnSpec {
-        ColumnSpec {
-            table_spec: TableSpec::borrowed("ks", "tbl"),
-            name: name.to_owned(),
-            typ,
-        }
+    fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
+        ColumnSpec::borrowed(name, typ, TableSpec::borrowed("ks", "tbl"))
     }
 
     const FIRST_COLUMN_NAME: &str = "bigint_col";

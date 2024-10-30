@@ -422,7 +422,7 @@ impl CassDataType {
 
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     match column_type {
-        ColumnType::Custom(s) => CassDataType::Custom((*s).clone()),
+        ColumnType::Custom(s) => CassDataType::Custom(s.clone().into_owned()),
         ColumnType::Ascii => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
         ColumnType::Boolean => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
         ColumnType::Blob => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
@@ -459,10 +459,15 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         } => CassDataType::UDT(UDTDataType {
             field_types: field_types
                 .iter()
-                .map(|(name, col_type)| ((*name).clone(), Arc::new(get_column_type(col_type))))
+                .map(|(name, col_type)| {
+                    (
+                        name.clone().into_owned(),
+                        Arc::new(get_column_type(col_type)),
+                    )
+                })
                 .collect(),
-            keyspace: (*keyspace).clone(),
-            name: (*type_name).clone(),
+            keyspace: keyspace.clone().into_owned(),
+            name: type_name.clone().into_owned(),
             frozen: false,
         }),
         ColumnType::SmallInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT),

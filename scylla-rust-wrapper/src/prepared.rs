@@ -27,14 +27,14 @@ impl CassPrepared {
         let variable_col_data_types = statement
             .get_variable_col_specs()
             .iter()
-            .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+            .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
             .collect();
 
         let result_col_data_types: Arc<Vec<Arc<CassDataType>>> = Arc::new(
             statement
                 .get_result_set_col_specs()
                 .iter()
-                .map(|col_spec| Arc::new(get_column_type(&col_spec.typ)))
+                .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
                 .collect(),
         );
 
@@ -50,7 +50,7 @@ impl CassPrepared {
             .statement
             .get_variable_col_specs()
             .iter()
-            .position(|col_spec| col_spec.name == name)?;
+            .position(|col_spec| col_spec.name() == name)?;
 
         match self.variable_col_data_types.get(index) {
             Some(dt) => Some(dt),
@@ -108,7 +108,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
         .get(index as usize)
     {
         Some(col_spec) => {
-            write_str_to_c(&col_spec.name, name, name_length);
+            write_str_to_c(col_spec.name(), name, name_length);
             CassError::CASS_OK
         }
         None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,

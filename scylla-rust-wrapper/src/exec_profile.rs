@@ -376,13 +376,13 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: *mut CassExecProfile,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let retry_policy: &dyn RetryPolicy = match ptr_to_ref(retry_policy) {
-        DefaultRetryPolicy(default) => default.as_ref(),
-        FallthroughRetryPolicy(fallthrough) => fallthrough.as_ref(),
-        DowngradingConsistencyRetryPolicy(downgrading) => downgrading.as_ref(),
+    let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
+        DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
     };
     let profile_builder = ptr_to_ref_mut(profile);
-    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy.clone_boxed()));
+    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
 
     CassError::CASS_OK
 }
