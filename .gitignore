@@ -5,4 +5,5 @@ scylla-rust-wrapper/target/
 cmake-build-debug/
 .cache/
 version
+docs/_build
 log/
