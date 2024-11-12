@@ -67,7 +67,7 @@ CASSANDRA_INTEGRATION_TEST_F(PreparedTests, FailFastWhenPreparedIDChangesDuringR
   insert_statement.bind<Integer>(0, Integer(0));
   insert_statement.bind<Integer>(1, Integer(1));
   Result result = session_.execute(insert_statement, false);
-  EXPECT_TRUE(contains(result.error_message(), "Prepared statement Id changed"));
+  EXPECT_TRUE(contains(result.error_message(), "Prepared statement id changed after repreparation"));
 }
 
 /**

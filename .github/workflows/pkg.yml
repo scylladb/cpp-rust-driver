@@ -1,0 +1,64 @@
+name: Build packages
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLORS: always
+
+jobs:
+  build-rpm-pkgs:
+    name: Build rpm packages
+    runs-on: ubuntu-22.04
+    container:
+      image: fedora:latest
+      # Required by `mock`:
+      ### INFO: It seems that you run Mock in a Docker container.
+      ### Mock though uses container tooling itself (namely Podman) for downloading bootstrap image.
+      ### This might require you to run Mock in 'docker run --privileged'.
+      options: --privileged
+      # It does not seem to be necessary (CI run without it was successful).
+      # However, without it, there appear some errors during `mock` execution.
+      # I've found the solution to these errors here: https://github.com/containers/buildah/issues/3666.
+      # They are related to podman, which is used by `mock` under the hood.
+      volumes:
+        - /var/lib/containers:/var/lib/containers
+
+    strategy:
+      matrix:
+        dist-version: [rocky-9-x86_64, fedora-40-x86_64]
+      fail-fast: false
+    
+    steps:
+      # See: https://github.com/actions/checkout/issues/363
+      # An issue related to GH actions containers
+      - name: Install git and update safe directory
+        run: |
+          dnf update -y
+          dnf install -y git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Build rpm package for ${{ matrix.dist-version }}
+        run: ./dist/redhat/build_rpm.sh --target ${{ matrix.dist-version }}
+  
+  build-deb-pkgs:
+    name: Build deb packages
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        dist-version: [jammy, noble]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Build deb package for ${{ matrix.dist-version }}
+        run: ./dist/debian/build_deb.sh --target ${{ matrix.dist-version }}

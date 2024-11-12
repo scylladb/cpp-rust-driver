@@ -249,6 +249,17 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_policy(
+    profile: *mut CassExecProfile,
+) -> CassError {
+    let profile_builder = ptr_to_ref_mut(profile);
+
+    profile_builder.modify_in_place(|builder| builder.speculative_execution_policy(None));
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_execution_policy(
     profile: *mut CassExecProfile,
     constant_delay_ms: cass_int64_t,
@@ -365,13 +376,13 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: *mut CassExecProfile,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let retry_policy: &dyn RetryPolicy = match ptr_to_ref(retry_policy) {
-        DefaultRetryPolicy(default) => default.as_ref(),
-        FallthroughRetryPolicy(fallthrough) => fallthrough.as_ref(),
-        DowngradingConsistencyRetryPolicy(downgrading) => downgrading.as_ref(),
+    let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
+        DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
     };
     let profile_builder = ptr_to_ref_mut(profile);
-    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy.clone_boxed()));
+    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
 
     CassError::CASS_OK
 }
@@ -406,6 +417,19 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     profile_builder
         .load_balancing_config
         .token_awareness_enabled = enabled != 0;
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_replicas(
+    profile: *mut CassExecProfile,
+    enabled: cass_bool_t,
+) -> CassError {
+    let profile_builder = ptr_to_ref_mut(profile);
+    profile_builder
+        .load_balancing_config
+        .token_aware_shuffling_replicas_enabled = enabled != 0;
 
     CassError::CASS_OK
 }

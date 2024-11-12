@@ -11,17 +11,18 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_types.rs"));
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
-include!(concat!(env!("OUT_DIR"), "/cppdriver_batch_types.rs"));
+pub(crate) use crate::cass_batch_types::CassBatchType;
+pub(crate) use crate::cass_consistency_types::CassConsistency;
+pub(crate) use crate::cass_data_types::CassValueType;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UDTDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, Arc<CassDataType>)>,
 
     pub keyspace: String,
     pub name: String,
+    pub frozen: bool,
 }
 
 impl UDTDataType {
@@ -30,6 +31,7 @@ impl UDTDataType {
             field_types: Vec::new(),
             keyspace: "".to_string(),
             name: "".to_string(),
+            frozen: false,
         }
     }
 
@@ -37,6 +39,7 @@ impl UDTDataType {
         user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
         keyspace_name: &str,
         name: &str,
+        frozen: bool,
     ) -> UDTDataType {
         UDTDataType {
             field_types: user_defined_types
@@ -57,6 +60,7 @@ impl UDTDataType {
                 .collect(),
             keyspace: keyspace_name.to_string(),
             name: name.to_owned(),
+            frozen,
         }
     }
 
@@ -65,6 +69,7 @@ impl UDTDataType {
             field_types: Vec::with_capacity(capacity),
             keyspace: "".to_string(),
             name: "".to_string(),
+            frozen: false,
         }
     }
 
@@ -82,6 +87,42 @@ impl UDTDataType {
     pub fn get_field_by_index(&self, index: usize) -> Option<&Arc<CassDataType>> {
         self.field_types.get(index).map(|(_, b)| b)
     }
+
+    fn typecheck_equals(&self, other: &UDTDataType) -> bool {
+        // See: https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L354-L386
+
+        if !any_string_empty_or_both_equal(&self.keyspace, &other.keyspace) {
+            return false;
+        }
+        if !any_string_empty_or_both_equal(&self.name, &other.name) {
+            return false;
+        }
+
+        // A comment from cpp-driver:
+        //// UDT's can be considered equal as long as the mutual first fields shared
+        //// between them are equal. UDT's are append only as far as fields go, so a
+        //// newer 'version' of the UDT data type after a schema change event should be
+        //// treated as equivalent in this scenario, by simply looking at the first N
+        //// mutual fields they should share.
+        //
+        // Iterator returned from zip() is perfect for checking the first mutual fields.
+        for (field, other_field) in self.field_types.iter().zip(other.field_types.iter()) {
+            // Compare field names.
+            if field.0 != other_field.0 {
+                return false;
+            }
+            // Compare field types.
+            if !field.1.typecheck_equals(&other_field.1) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+fn any_string_empty_or_both_equal(s1: &str, s2: &str) -> bool {
+    s1.is_empty() || s2.is_empty() || s1 == s2
 }
 
 impl Default for UDTDataType {
@@ -90,15 +131,104 @@ impl Default for UDTDataType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MapDataType {
+    Untyped,
+    Key(Arc<CassDataType>),
+    KeyAndValue(Arc<CassDataType>, Arc<CassDataType>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CassDataType {
     Value(CassValueType),
     UDT(UDTDataType),
-    List(Option<Arc<CassDataType>>),
-    Set(Option<Arc<CassDataType>>),
-    Map(Option<Arc<CassDataType>>, Option<Arc<CassDataType>>),
+    List {
+        // None stands for untyped list.
+        typ: Option<Arc<CassDataType>>,
+        frozen: bool,
+    },
+    Set {
+        // None stands for untyped set.
+        typ: Option<Arc<CassDataType>>,
+        frozen: bool,
+    },
+    Map {
+        typ: MapDataType,
+        frozen: bool,
+    },
+    // Empty vector stands for untyped tuple.
     Tuple(Vec<Arc<CassDataType>>),
     Custom(String),
+}
+
+impl CassDataType {
+    /// Checks for equality during typechecks.
+    ///
+    /// This takes into account the fact that tuples/collections may be untyped.
+    pub fn typecheck_equals(&self, other: &CassDataType) -> bool {
+        match self {
+            CassDataType::Value(t) => *t == other.get_value_type(),
+            CassDataType::UDT(udt) => match other {
+                CassDataType::UDT(other_udt) => udt.typecheck_equals(other_udt),
+                _ => false,
+            },
+            CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => match other {
+                CassDataType::List { typ: other_typ, .. }
+                | CassDataType::Set { typ: other_typ, .. } => {
+                    // If one of them is list, and the other is set, fail the typecheck.
+                    if self.get_value_type() != other.get_value_type() {
+                        return false;
+                    }
+                    match (typ, other_typ) {
+                        // One of them is untyped, skip the typecheck for subtype.
+                        (None, _) | (_, None) => true,
+                        (Some(typ), Some(other_typ)) => typ.typecheck_equals(other_typ),
+                    }
+                }
+                _ => false,
+            },
+            CassDataType::Map { typ: t, .. } => match other {
+                CassDataType::Map { typ: t_other, .. } => match (t, t_other) {
+                    // See https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L218
+                    // In cpp-driver the types are held in a vector.
+                    // The logic is following:
+
+                    // If either of vectors is empty, skip the typecheck.
+                    (MapDataType::Untyped, _) => true,
+                    (_, MapDataType::Untyped) => true,
+
+                    // Otherwise, the vectors should have equal length and we perform the typecheck for subtypes.
+                    (MapDataType::Key(k), MapDataType::Key(k_other)) => k.typecheck_equals(k_other),
+                    (
+                        MapDataType::KeyAndValue(k, v),
+                        MapDataType::KeyAndValue(k_other, v_other),
+                    ) => k.typecheck_equals(k_other) && v.typecheck_equals(v_other),
+                    _ => false,
+                },
+                _ => false,
+            },
+            CassDataType::Tuple(sub) => match other {
+                CassDataType::Tuple(other_sub) => {
+                    // If either of tuples is untyped, skip the typecheck for subtypes.
+                    if sub.is_empty() || other_sub.is_empty() {
+                        return true;
+                    }
+
+                    // If both are non-empty, check for subtypes equality.
+                    if sub.len() != other_sub.len() {
+                        return false;
+                    }
+                    sub.iter()
+                        .zip(other_sub.iter())
+                        .all(|(typ, other_typ)| typ.typecheck_equals(other_typ))
+                }
+                _ => false,
+            },
+            CassDataType::Custom(_) => {
+                unimplemented!("Cpp-rust-driver does not support custom types!")
+            }
+        }
+    }
 }
 
 impl From<NativeType> for CassValueType {
@@ -135,25 +265,38 @@ pub fn get_column_type_from_cql_type(
 ) -> CassDataType {
     match cql_type {
         CqlType::Native(native) => CassDataType::Value(native.clone().into()),
-        CqlType::Collection { type_, .. } => match type_ {
-            CollectionType::List(list) => CassDataType::List(Some(Arc::new(
-                get_column_type_from_cql_type(list, user_defined_types, keyspace_name),
-            ))),
-            CollectionType::Map(key, value) => CassDataType::Map(
-                Some(Arc::new(get_column_type_from_cql_type(
-                    key,
+        CqlType::Collection { type_, frozen } => match type_ {
+            CollectionType::List(list) => CassDataType::List {
+                typ: Some(Arc::new(get_column_type_from_cql_type(
+                    list,
                     user_defined_types,
                     keyspace_name,
                 ))),
-                Some(Arc::new(get_column_type_from_cql_type(
-                    value,
+                frozen: *frozen,
+            },
+            CollectionType::Map(key, value) => CassDataType::Map {
+                typ: MapDataType::KeyAndValue(
+                    Arc::new(get_column_type_from_cql_type(
+                        key,
+                        user_defined_types,
+                        keyspace_name,
+                    )),
+                    Arc::new(get_column_type_from_cql_type(
+                        value,
+                        user_defined_types,
+                        keyspace_name,
+                    )),
+                ),
+                frozen: *frozen,
+            },
+            CollectionType::Set(set) => CassDataType::Set {
+                typ: Some(Arc::new(get_column_type_from_cql_type(
+                    set,
                     user_defined_types,
                     keyspace_name,
                 ))),
-            ),
-            CollectionType::Set(set) => CassDataType::Set(Some(Arc::new(
-                get_column_type_from_cql_type(set, user_defined_types, keyspace_name),
-            ))),
+                frozen: *frozen,
+            },
         },
         CqlType::Tuple(tuple) => CassDataType::Tuple(
             tuple
@@ -167,7 +310,7 @@ pub fn get_column_type_from_cql_type(
                 })
                 .collect(),
         ),
-        CqlType::UserDefinedType { definition, .. } => {
+        CqlType::UserDefinedType { definition, frozen } => {
             let name = match definition {
                 Ok(resolved) => &resolved.name,
                 Err(not_resolved) => &not_resolved.name,
@@ -176,6 +319,7 @@ pub fn get_column_type_from_cql_type(
                 user_defined_types,
                 keyspace_name,
                 name,
+                *frozen,
             ))
         }
     }
@@ -187,16 +331,27 @@ impl CassDataType {
             CassDataType::UDT(udt_data_type) => {
                 udt_data_type.field_types.get(index).map(|(_, b)| b)
             }
-            CassDataType::List(t) | CassDataType::Set(t) => {
+            CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => {
                 if index > 0 {
                     None
                 } else {
-                    t.as_ref()
+                    typ.as_ref()
                 }
             }
-            CassDataType::Map(t1, t2) => match index {
-                0 => t1.as_ref(),
-                1 => t2.as_ref(),
+            CassDataType::Map {
+                typ: MapDataType::Untyped,
+                ..
+            } => None,
+            CassDataType::Map {
+                typ: MapDataType::Key(k),
+                ..
+            } => (index == 0).then_some(k),
+            CassDataType::Map {
+                typ: MapDataType::KeyAndValue(k, v),
+                ..
+            } => match index {
+                0 => Some(k),
+                1 => Some(v),
                 _ => None,
             },
             CassDataType::Tuple(v) => v.get(index),
@@ -206,23 +361,36 @@ impl CassDataType {
 
     fn add_sub_data_type(&mut self, sub_type: Arc<CassDataType>) -> Result<(), CassError> {
         match self {
-            CassDataType::List(t) | CassDataType::Set(t) => match t {
+            CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => match typ {
                 Some(_) => Err(CassError::CASS_ERROR_LIB_BAD_PARAMS),
                 None => {
-                    *t = Some(sub_type);
+                    *typ = Some(sub_type);
                     Ok(())
                 }
             },
-            CassDataType::Map(t1, t2) => {
-                if t1.is_some() && t2.is_some() {
-                    Err(CassError::CASS_ERROR_LIB_BAD_PARAMS)
-                } else if t1.is_none() {
-                    *t1 = Some(sub_type);
-                    Ok(())
-                } else {
-                    *t2 = Some(sub_type);
-                    Ok(())
-                }
+            CassDataType::Map {
+                typ: MapDataType::KeyAndValue(_, _),
+                ..
+            } => Err(CassError::CASS_ERROR_LIB_BAD_PARAMS),
+            CassDataType::Map {
+                typ: MapDataType::Key(k),
+                frozen,
+            } => {
+                *self = CassDataType::Map {
+                    typ: MapDataType::KeyAndValue(k.clone(), sub_type),
+                    frozen: *frozen,
+                };
+                Ok(())
+            }
+            CassDataType::Map {
+                typ: MapDataType::Untyped,
+                frozen,
+            } => {
+                *self = CassDataType::Map {
+                    typ: MapDataType::Key(sub_type),
+                    frozen: *frozen,
+                };
+                Ok(())
             }
             CassDataType::Tuple(types) => {
                 types.push(sub_type);
@@ -243,9 +411,9 @@ impl CassDataType {
         match &self {
             CassDataType::Value(value_data_type) => *value_data_type,
             CassDataType::UDT { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
-            CassDataType::List(..) => CassValueType::CASS_VALUE_TYPE_LIST,
-            CassDataType::Set(..) => CassValueType::CASS_VALUE_TYPE_SET,
-            CassDataType::Map(..) => CassValueType::CASS_VALUE_TYPE_MAP,
+            CassDataType::List { .. } => CassValueType::CASS_VALUE_TYPE_LIST,
+            CassDataType::Set { .. } => CassValueType::CASS_VALUE_TYPE_SET,
+            CassDataType::Map { .. } => CassValueType::CASS_VALUE_TYPE_MAP,
             CassDataType::Tuple(..) => CassValueType::CASS_VALUE_TYPE_TUPLE,
             CassDataType::Custom(..) => CassValueType::CASS_VALUE_TYPE_CUSTOM,
         }
@@ -254,7 +422,7 @@ impl CassDataType {
 
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     match column_type {
-        ColumnType::Custom(s) => CassDataType::Custom((*s).clone()),
+        ColumnType::Custom(s) => CassDataType::Custom(s.clone().into_owned()),
         ColumnType::Ascii => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
         ColumnType::Boolean => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
         ColumnType::Blob => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
@@ -268,16 +436,22 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ColumnType::Text => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
         ColumnType::Timestamp => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
         ColumnType::Inet => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INET),
-        ColumnType::List(boxed_type) => {
-            CassDataType::List(Some(Arc::new(get_column_type(boxed_type.as_ref()))))
-        }
-        ColumnType::Map(key, value) => CassDataType::Map(
-            Some(Arc::new(get_column_type(key.as_ref()))),
-            Some(Arc::new(get_column_type(value.as_ref()))),
-        ),
-        ColumnType::Set(boxed_type) => {
-            CassDataType::Set(Some(Arc::new(get_column_type(boxed_type.as_ref()))))
-        }
+        ColumnType::Duration => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_DURATION),
+        ColumnType::List(boxed_type) => CassDataType::List {
+            typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
+            frozen: false,
+        },
+        ColumnType::Map(key, value) => CassDataType::Map {
+            typ: MapDataType::KeyAndValue(
+                Arc::new(get_column_type(key.as_ref())),
+                Arc::new(get_column_type(value.as_ref())),
+            ),
+            frozen: false,
+        },
+        ColumnType::Set(boxed_type) => CassDataType::Set {
+            typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
+            frozen: false,
+        },
         ColumnType::UserDefinedType {
             type_name,
             keyspace,
@@ -285,10 +459,16 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         } => CassDataType::UDT(UDTDataType {
             field_types: field_types
                 .iter()
-                .map(|(name, col_type)| ((*name).clone(), Arc::new(get_column_type(col_type))))
+                .map(|(name, col_type)| {
+                    (
+                        name.clone().into_owned(),
+                        Arc::new(get_column_type(col_type)),
+                    )
+                })
                 .collect(),
-            keyspace: (*keyspace).clone(),
-            name: (*type_name).clone(),
+            keyspace: keyspace.clone().into_owned(),
+            name: type_name.clone().into_owned(),
+            frozen: false,
         }),
         ColumnType::SmallInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
         ColumnType::TinyInt => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT),
@@ -301,7 +481,6 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         ),
         ColumnType::Uuid => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UUID),
         ColumnType::Varint => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
-        _ => CassDataType::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
     }
 }
 
@@ -312,10 +491,19 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_new(value_type: CassValueType) -> *const CassDataType {
     let data_type = match value_type {
-        CassValueType::CASS_VALUE_TYPE_LIST => CassDataType::List(None),
-        CassValueType::CASS_VALUE_TYPE_SET => CassDataType::Set(None),
+        CassValueType::CASS_VALUE_TYPE_LIST => CassDataType::List {
+            typ: None,
+            frozen: false,
+        },
+        CassValueType::CASS_VALUE_TYPE_SET => CassDataType::Set {
+            typ: None,
+            frozen: false,
+        },
         CassValueType::CASS_VALUE_TYPE_TUPLE => CassDataType::Tuple(Vec::new()),
-        CassValueType::CASS_VALUE_TYPE_MAP => CassDataType::Map(None, None),
+        CassValueType::CASS_VALUE_TYPE_MAP => CassDataType::Map {
+            typ: MapDataType::Untyped,
+            frozen: false,
+        },
         CassValueType::CASS_VALUE_TYPE_UDT => CassDataType::UDT(UDTDataType::new()),
         CassValueType::CASS_VALUE_TYPE_CUSTOM => CassDataType::Custom("".to_string()),
         CassValueType::CASS_VALUE_TYPE_UNKNOWN => return ptr::null_mut(),
@@ -358,8 +546,19 @@ pub unsafe extern "C" fn cass_data_type_type(data_type: *const CassDataType) -> 
     data_type.get_value_type()
 }
 
-// #[no_mangle]
-// pub unsafe extern "C" fn cass_data_type_is_frozen(data_type: *const CassDataType) -> cass_bool_t {}
+#[no_mangle]
+pub unsafe extern "C" fn cass_data_type_is_frozen(data_type: *const CassDataType) -> cass_bool_t {
+    let data_type = ptr_to_ref(data_type);
+    let is_frozen = match data_type {
+        CassDataType::UDT(udt) => udt.frozen,
+        CassDataType::List { frozen, .. } => *frozen,
+        CassDataType::Set { frozen, .. } => *frozen,
+        CassDataType::Map { frozen, .. } => *frozen,
+        _ => false,
+    };
+
+    is_frozen as cass_bool_t
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_type_name(
@@ -498,8 +697,12 @@ pub unsafe extern "C" fn cass_data_type_sub_type_count(data_type: *const CassDat
     match data_type {
         CassDataType::Value(..) => 0,
         CassDataType::UDT(udt_data_type) => udt_data_type.field_types.len() as size_t,
-        CassDataType::List(t) | CassDataType::Set(t) => t.is_some() as size_t,
-        CassDataType::Map(t1, t2) => t1.is_some() as size_t + t2.is_some() as size_t,
+        CassDataType::List { typ, .. } | CassDataType::Set { typ, .. } => typ.is_some() as size_t,
+        CassDataType::Map { typ, .. } => match typ {
+            MapDataType::Untyped => 0,
+            MapDataType::Key(_) => 1,
+            MapDataType::KeyAndValue(_, _) => 2,
+        },
         CassDataType::Tuple(v) => v.len() as size_t,
         CassDataType::Custom(..) => 0,
     }

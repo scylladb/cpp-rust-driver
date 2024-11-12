@@ -7,6 +7,7 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::types::*;
+use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::execution_profile::ExecutionProfileBuilder;
@@ -16,7 +17,8 @@ use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
 use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::SessionBuilder;
+use scylla::transport::SelfIdentity;
+use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -24,11 +26,31 @@ use std::os::raw::{c_char, c_int, c_uint};
 use std::sync::Arc;
 use std::time::Duration;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_compression_types.rs"));
+use crate::cass_compression_types::CassCompressionType;
+
+// According to `cassandra.h` the defaults for
+// - consistency for statements is LOCAL_ONE,
+const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
+// - request client timeout is 12000 millis,
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_millis(12000);
+// - fetching schema metadata is true
+const DEFAULT_DO_FETCH_SCHEMA_METADATA: bool = true;
+// - setting TCP_NODELAY is true
+const DEFAULT_SET_TCP_NO_DELAY: bool = true;
+// - connect timeout is 5000 millis
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
+// - keepalive interval is 30 secs
+const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+// - keepalive timeout is 60 secs
+const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+
+const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
+const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
     pub(crate) token_awareness_enabled: bool,
+    pub(crate) token_aware_shuffling_replicas_enabled: bool,
     pub(crate) dc_awareness: Option<DcAwareness>,
     pub(crate) latency_awareness_enabled: bool,
     pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
@@ -38,6 +60,11 @@ impl LoadBalancingConfig {
     // as it results in panic due to DefaultPolicyBuilder::build() spawning a tokio task.
     pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
         let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
+        if self.token_awareness_enabled {
+            // Cpp-driver enables shuffling replicas only if token aware routing is enabled.
+            builder =
+                builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
+        }
         if let Some(dc_awareness) = self.dc_awareness.as_ref() {
             builder = builder
                 .prefer_datacenter(dc_awareness.local_dc.clone())
@@ -53,6 +80,7 @@ impl Default for LoadBalancingConfig {
     fn default() -> Self {
         Self {
             token_awareness_enabled: true,
+            token_aware_shuffling_replicas_enabled: true,
             dc_awareness: None,
             latency_awareness_enabled: false,
             latency_awareness_builder: Default::default(),
@@ -79,11 +107,33 @@ pub struct CassCluster {
     use_beta_protocol_version: bool,
     auth_username: Option<String>,
     auth_password: Option<String>,
+
+    client_id: Option<uuid::Uuid>,
 }
 
 impl CassCluster {
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
         &self.execution_profile_map
+    }
+
+    #[inline]
+    pub(crate) fn get_session_config(&self) -> &SessionConfig {
+        &self.session_builder.config
+    }
+
+    #[inline]
+    pub(crate) fn get_port(&self) -> u16 {
+        self.port
+    }
+
+    #[inline]
+    pub(crate) fn get_contact_points(&self) -> &[String] {
+        &self.contact_points
+    }
+
+    #[inline]
+    pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
+        self.client_id
     }
 }
 
@@ -115,12 +165,28 @@ pub fn build_session_builder(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
-    // According to `cassandra.h` the default CPP driver's consistency for statements is LOCAL_ONE.
-    let default_execution_profile_builder =
-        ExecutionProfileBuilder::default().consistency(Consistency::LocalOne);
+    let default_execution_profile_builder = ExecutionProfileBuilder::default()
+        .consistency(DEFAULT_CONSISTENCY)
+        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
+
+    // Default config options - according to cassandra.h
+    let default_session_builder = {
+        // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
+        let custom_identity = SelfIdentity::new()
+            .with_custom_driver_name(DRIVER_NAME)
+            .with_custom_driver_version(DRIVER_VERSION);
+
+        SessionBuilder::new()
+            .custom_identity(custom_identity)
+            .fetch_schema_metadata(DEFAULT_DO_FETCH_SCHEMA_METADATA)
+            .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
+            .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
+            .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
+            .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
+    };
 
     Box::into_raw(Box::new(CassCluster {
-        session_builder: SessionBuilder::new(),
+        session_builder: default_session_builder,
         port: 9042,
         contact_points: Vec::new(),
         // Per DataStax documentation: Without additional configuration the C/C++ driver
@@ -131,6 +197,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         default_execution_profile_builder,
         execution_profile_map: Default::default(),
         load_balancing_config: Default::default(),
+        client_id: None,
     }))
 }
 
@@ -168,9 +235,10 @@ unsafe fn cluster_set_contact_points(
     let mut contact_points = ptr_to_cstr_n(contact_points_raw, contact_points_length)
         .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
         .split(',')
+        .filter(|s| !s.is_empty()) // Extra commas should be ignored.
         .peekable();
 
-    if contact_points.peek().is_none() {
+    if contact_points.peek().is_none() || contact_points.peek().unwrap().is_empty() {
         // If cass_cluster_set_contact_points() is called with empty
         // set of contact points, the contact points should be cleared.
         cluster.contact_points.clear();
@@ -198,6 +266,74 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+) {
+    cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_name_n(
+    cluster_raw: *mut CassCluster,
+    app_name: *const c_char,
+    app_name_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_name = ptr_to_cstr_n(app_name, app_name_len).unwrap().to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_name(app_name)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+) {
+    cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_application_version_n(
+    cluster_raw: *mut CassCluster,
+    app_version: *const c_char,
+    app_version_len: size_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let app_version = ptr_to_cstr_n(app_version, app_version_len)
+        .unwrap()
+        .to_string();
+
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_application_version(app_version);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_client_id(
+    cluster_raw: *mut CassCluster,
+    client_id: CassUuid,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    let client_uuid: uuid::Uuid = client_id.into();
+    let client_uuid_str = client_uuid.to_string();
+
+    cluster.client_id = Some(client_uuid);
+    cluster
+        .session_builder
+        .config
+        .identity
+        .set_client_id(client_uuid_str)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster_raw: *mut CassCluster,
     enabled: cass_bool_t,
@@ -216,12 +352,60 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+    delay_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let enabled = enabled != 0;
+    let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
+
+    cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
+    cluster_raw: *mut CassCluster,
+    interval_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_interval = (interval_secs > 0).then(|| Duration::from_secs(interval_secs as u64));
+
+    cluster.session_builder.config.keepalive_interval = keepalive_interval;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_secs: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+    let keepalive_timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs as u64));
+
+    cluster.session_builder.config.keepalive_timeout = keepalive_timeout;
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
     cluster_raw: *mut CassCluster,
     timeout_ms: c_uint,
 ) {
     let cluster = ptr_to_ref_mut(cluster_raw);
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_request_timeout(
+    cluster_raw: *mut CassCluster,
+    timeout_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
+        // 0 -> no timeout
+        builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
+    })
 }
 
 #[no_mangle]
@@ -486,6 +670,18 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
+    cluster_raw: *mut CassCluster,
+    enabled: cass_bool_t,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster
+        .load_balancing_config
+        .token_aware_shuffling_replicas_enabled = enabled != 0;
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     cluster_raw: *mut CassCluster,
     retry_policy: *const CassRetryPolicy,
@@ -493,13 +689,13 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     let cluster = ptr_to_ref_mut(cluster_raw);
 
     let retry_policy: Arc<dyn RetryPolicy> = match ptr_to_ref(retry_policy) {
-        DefaultRetryPolicy(default) => default.clone(),
-        FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
-        DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+        DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.retry_policy(retry_policy.clone_boxed())
+        builder.retry_policy(retry_policy)
     });
 }
 

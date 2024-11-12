@@ -153,7 +153,7 @@ CASSANDRA_INTEGRATION_TEST_F(SessionTest, ExternalHostListener) {
   check_event(CASS_HOST_LISTENER_EVENT_UP, 1);
 
   // Decomission node 1 (down and remove events)
-  force_decommission_node(1);
+  decommission_node(1);
   ASSERT_TRUE(wait_for_event(1u));
   check_event(CASS_HOST_LISTENER_EVENT_DOWN, 1);
   check_event(CASS_HOST_LISTENER_EVENT_REMOVE, 1);

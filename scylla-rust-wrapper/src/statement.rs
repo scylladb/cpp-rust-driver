@@ -1,31 +1,29 @@
-use crate::argconv::*;
 use crate::cass_error::CassError;
+use crate::cass_types::CassConsistency;
 use crate::exec_profile::PerStatementExecProfile;
+use crate::prepared::CassPrepared;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
-use scylla::frame::types::LegacyConsistency::{Regular, Serial};
-use scylla::frame::types::{Consistency, LegacyConsistency};
+use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
+use scylla::frame::types::Consistency;
 use scylla::frame::value::MaybeUnset;
 use scylla::frame::value::MaybeUnset::{Set, Unset};
 use scylla::query::Query;
-use scylla::statement::prepared_statement::PreparedStatement;
 use scylla::statement::SerialConsistency;
-use scylla::{BufMut, Bytes, BytesMut};
+use scylla::transport::{PagingState, PagingStateResponse};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
 use std::slice;
 use std::sync::Arc;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_query_error.rs"));
-
 #[derive(Clone)]
 pub enum Statement {
     Simple(SimpleQuery),
     // Arc is needed, because PreparedStatement is passed by reference to session.execute
-    Prepared(Arc<PreparedStatement>),
+    Prepared(Arc<CassPrepared>),
 }
 
 #[derive(Clone)]
@@ -36,27 +34,51 @@ pub struct SimpleQuery {
 
 pub struct CassStatement {
     pub statement: Statement,
-    pub bound_values: Vec<MaybeUnset<Option<CqlValue>>>,
-    pub paging_state: Option<Bytes>,
+    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub paging_state: PagingState,
+    pub paging_enabled: bool,
     pub request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
 impl CassStatement {
-    fn bind_cql_value(&mut self, index: usize, value: Option<CqlValue>) -> CassError {
-        if index >= self.bound_values.len() {
-            CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS
-        } else {
-            self.bound_values[index] = Set(value);
-            CassError::CASS_OK
+    fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
+        let (bound_value, maybe_data_type) = match &self.statement {
+            Statement::Simple(_) => match self.bound_values.get_mut(index) {
+                Some(v) => (v, None),
+                None => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+            Statement::Prepared(p) => match (
+                self.bound_values.get_mut(index),
+                p.variable_col_data_types.get(index),
+            ) {
+                (Some(v), Some(dt)) => (v, Some(dt)),
+                (None, None) => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+                // This indicates a length mismatch between col specs table and self.bound_values.
+                //
+                // It can only occur when user provides bad `count` value in `cass_statement_reset_parameters`.
+                // Cpp-driver does not verify that both of these values are equal.
+                // I believe returning CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS is best we can do here.
+                _ => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            },
+        };
+
+        // Perform the typecheck.
+        if let Some(dt) = maybe_data_type {
+            if !value::is_type_compatible(&value, dt) {
+                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+            }
         }
+
+        *bound_value = Set(value);
+        CassError::CASS_OK
     }
 
     fn bind_multiple_values_by_name(
         &mut self,
         indices: &[usize],
-        value: Option<CqlValue>,
+        value: Option<CassCqlValue>,
     ) -> CassError {
         for i in indices {
             let bind_status = self.bind_cql_value(*i, value.clone());
@@ -69,7 +91,7 @@ impl CassStatement {
         CassError::CASS_OK
     }
 
-    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
+    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut set_bound_val_index: Option<usize> = None;
         let mut name_str = name;
         let mut is_case_sensitive = false;
@@ -83,13 +105,13 @@ impl CassStatement {
         match &self.statement {
             Statement::Prepared(prepared) => {
                 let indices: Vec<usize> = prepared
-                    .get_prepared_metadata()
-                    .col_specs
+                    .statement
+                    .get_variable_col_specs()
                     .iter()
                     .enumerate()
                     .filter(|(_, col)| {
-                        is_case_sensitive && col.name == name_str
-                            || !is_case_sensitive && col.name.eq_ignore_ascii_case(name_str)
+                        is_case_sensitive && col.name() == name_str
+                            || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_str)
                     })
                     .map(|(i, _)| i)
                     .collect();
@@ -126,6 +148,12 @@ impl CassStatement {
 
         CassError::CASS_OK
     }
+
+    fn reset_bound_values(&mut self, count: usize) {
+        // Clear bound values and resize the vector - all values should be unset.
+        self.bound_values.clear();
+        self.bound_values.resize(count, Unset);
+    }
 }
 
 #[no_mangle]
@@ -147,10 +175,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         None => return std::ptr::null_mut(),
     };
 
-    let mut query = Query::new(query_str.to_string());
-
-    // Set Cpp Driver default configuration for queries:
-    query.disable_paging();
+    let query = Query::new(query_str.to_string());
 
     let simple_query = SimpleQuery {
         query,
@@ -160,7 +185,9 @@ pub unsafe extern "C" fn cass_statement_new_n(
     Box::into_raw(Box::new(CassStatement {
         statement: Statement::Simple(simple_query),
         bound_values: vec![Unset; parameter_count as usize],
-        paging_state: None,
+        paging_state: PagingState::start(),
+        // Cpp driver disables paging by default.
+        paging_enabled: false,
         request_timeout_ms: None,
         exec_profile: None,
     }))
@@ -178,10 +205,12 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
 ) -> CassError {
     let consistency_opt = get_consistency_from_cass_consistency(consistency);
 
-    if let Some(Regular(regular_consistency)) = consistency_opt {
+    if let Some(consistency) = consistency_opt {
         match &mut ptr_to_ref_mut(statement).statement {
-            Statement::Simple(inner) => inner.query.set_consistency(regular_consistency),
-            Statement::Prepared(inner) => Arc::make_mut(inner).set_consistency(regular_consistency),
+            Statement::Simple(inner) => inner.query.set_consistency(consistency),
+            Statement::Prepared(inner) => {
+                Arc::make_mut(inner).statement.set_consistency(consistency)
+            }
         }
     }
 
@@ -193,21 +222,15 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     statement_raw: *mut CassStatement,
     page_size: c_int,
 ) -> CassError {
-    // TODO: validate page_size
-    match &mut ptr_to_ref_mut(statement_raw).statement {
-        Statement::Simple(inner) => {
-            if page_size == -1 {
-                inner.query.disable_paging()
-            } else {
-                inner.query.set_page_size(page_size)
-            }
-        }
-        Statement::Prepared(inner) => {
-            if page_size == -1 {
-                Arc::make_mut(inner).disable_paging()
-            } else {
-                Arc::make_mut(inner).set_page_size(page_size)
-            }
+    let statement = ptr_to_ref_mut(statement_raw);
+    if page_size <= 0 {
+        // Cpp driver sets the page size flag only for positive page size provided by user.
+        statement.paging_enabled = false;
+    } else {
+        statement.paging_enabled = true;
+        match &mut statement.statement {
+            Statement::Simple(inner) => inner.query.set_page_size(page_size),
+            Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_page_size(page_size),
         }
     }
 
@@ -222,9 +245,10 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    statement
-        .paging_state
-        .clone_from(&result.metadata.paging_state);
+    match &result.metadata.paging_state_response {
+        PagingStateResponse::HasMorePages { state } => statement.paging_state.clone_from(state),
+        PagingStateResponse::NoMorePages => statement.paging_state = PagingState::start(),
+    }
     CassError::CASS_OK
 }
 
@@ -237,18 +261,13 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     let statement_from_raw = ptr_to_ref_mut(statement);
 
     if paging_state.is_null() {
-        statement_from_raw.paging_state = None;
+        statement_from_raw.paging_state = PagingState::start();
         return CassError::CASS_ERROR_LIB_NULL_VALUE;
     }
 
     let paging_state_usize: usize = paging_state_size.try_into().unwrap();
-    let mut b = BytesMut::with_capacity(paging_state_usize);
-    let paging_state_bytes = slice::from_raw_parts(paging_state, paging_state_usize);
-    for byte in paging_state_bytes {
-        b.put_i8(*byte);
-    }
-    statement_from_raw.paging_state = Some(b.freeze());
-
+    let paging_state_bytes = slice::from_raw_parts(paging_state as *const u8, paging_state_usize);
+    statement_from_raw.paging_state = PagingState::new_from_raw_bytes(paging_state_bytes);
     CassError::CASS_OK
 }
 
@@ -259,7 +278,9 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_is_idempotent(is_idempotent != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_is_idempotent(is_idempotent != 0),
     }
 
     CassError::CASS_OK
@@ -272,7 +293,7 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement_raw).statement {
         Statement::Simple(inner) => inner.query.set_tracing(enabled != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_tracing(enabled != 0),
+        Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_tracing(enabled != 0),
     }
 
     CassError::CASS_OK
@@ -294,9 +315,9 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
 
     match &mut ptr_to_ref_mut(statement).statement {
         Statement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
-        Statement::Prepared(inner) => {
-            Arc::make_mut(inner).set_retry_policy(maybe_arced_retry_policy)
-        }
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_retry_policy(maybe_arced_retry_policy),
     }
 
     CassError::CASS_OK
@@ -307,40 +328,43 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     statement: *mut CassStatement,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let consistency = get_consistency_from_cass_consistency(serial_consistency);
-
-    let serial_consistency = match consistency {
-        Some(Serial(s)) => Some(s),
-        _ => None,
+    // cpp-driver doesn't validate passed value in any way.
+    // If it is an incorrect serial-consistency value then it will be set
+    // and sent as-is.
+    // Before adapting the driver to Rust Driver 0.12 this code
+    // set serial consistency if a user passed correct value and set it to
+    // None otherwise.
+    // I think that failing explicitly is a better idea, so I decided to return
+    // and error
+    let consistency = match get_consistency_from_cass_consistency(serial_consistency) {
+        Some(Consistency::Serial) => SerialConsistency::Serial,
+        Some(Consistency::LocalSerial) => SerialConsistency::LocalSerial,
+        _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
     };
 
     match &mut ptr_to_ref_mut(statement).statement {
-        Statement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),
-        Statement::Prepared(inner) => {
-            Arc::make_mut(inner).set_serial_consistency(serial_consistency)
-        }
+        Statement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_serial_consistency(Some(consistency)),
     }
 
     CassError::CASS_OK
 }
 
-fn get_consistency_from_cass_consistency(
-    consistency: CassConsistency,
-) -> Option<LegacyConsistency> {
+fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option<Consistency> {
     match consistency {
-        CassConsistency::CASS_CONSISTENCY_ANY => Some(Regular(Consistency::Any)),
-        CassConsistency::CASS_CONSISTENCY_ONE => Some(Regular(Consistency::One)),
-        CassConsistency::CASS_CONSISTENCY_TWO => Some(Regular(Consistency::Two)),
-        CassConsistency::CASS_CONSISTENCY_THREE => Some(Regular(Consistency::Three)),
-        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Regular(Consistency::Quorum)),
-        CassConsistency::CASS_CONSISTENCY_ALL => Some(Regular(Consistency::All)),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Regular(Consistency::LocalQuorum)),
-        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Regular(Consistency::EachQuorum)),
-        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Serial(SerialConsistency::Serial)),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => {
-            Some(Serial(SerialConsistency::LocalSerial))
-        }
-        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Regular(Consistency::LocalOne)),
+        CassConsistency::CASS_CONSISTENCY_ANY => Some(Consistency::Any),
+        CassConsistency::CASS_CONSISTENCY_ONE => Some(Consistency::One),
+        CassConsistency::CASS_CONSISTENCY_TWO => Some(Consistency::Two),
+        CassConsistency::CASS_CONSISTENCY_THREE => Some(Consistency::Three),
+        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Consistency::Quorum),
+        CassConsistency::CASS_CONSISTENCY_ALL => Some(Consistency::All),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Consistency::LocalQuorum),
+        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Consistency::EachQuorum),
+        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Consistency::Serial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Some(Consistency::LocalSerial),
+        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Consistency::LocalOne),
         _ => None,
     }
 }
@@ -352,7 +376,9 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
 ) -> CassError {
     match &mut ptr_to_ref_mut(statement).statement {
         Statement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
-        Statement::Prepared(inner) => Arc::make_mut(inner).set_timestamp(Some(timestamp)),
+        Statement::Prepared(inner) => Arc::make_mut(inner)
+            .statement
+            .set_timestamp(Some(timestamp)),
     }
 
     CassError::CASS_OK
@@ -373,6 +399,17 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
 
     let statement_from_raw = ptr_to_ref_mut(statement);
     statement_from_raw.request_timeout_ms = Some(timeout_ms);
+
+    CassError::CASS_OK
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_statement_reset_parameters(
+    statement_raw: *mut CassStatement,
+    count: size_t,
+) -> CassError {
+    let statement = ptr_to_ref_mut(statement_raw);
+    statement.reset_bound_values(count as usize);
 
     CassError::CASS_OK
 }
@@ -460,6 +497,18 @@ make_binders!(
     cass_statement_bind_inet,
     cass_statement_bind_inet_by_name,
     cass_statement_bind_inet_by_name_n
+);
+make_binders!(
+    duration,
+    cass_statement_bind_duration,
+    cass_statement_bind_duration_by_name,
+    cass_statement_bind_duration_by_name_n
+);
+make_binders!(
+    decimal,
+    cass_statement_bind_decimal,
+    cass_statement_bind_decimal_by_name,
+    cass_statement_bind_decimal_by_name_n
 );
 make_binders!(
     collection,

@@ -146,84 +146,35 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
     </thead>
     <tbody>
         <tr>
-            <td colspan=2 align="center" style="font-weight:bold">Prepared</td>
-        </tr>
-        <tr>
-            <td>cass_prepared_parameter_name</td>
-            <td rowspan="2">Unimplemented</td>
-        </tr>
-        <tr>
-            <td>cass_prepared_parameter_data_type[by_name]</td>
-        </tr>
-        <tr>
             <td colspan=2 align="center" style="font-weight:bold">Statement</td>
         </tr>
         <tr>
             <td>cass_statement_bind_custom[by_name]</td>
-            <td rowspan="3">Binding is not implemented for custom types in the Rust driver. <br> Binding Decimal and Duration types requires encoding raw bytes into BigDecimal and CqlDuration types in the Rust driver. <br> <b>Note</b>: The driver does not validate the types of the values passed to queries.</td>
-        </tr>
-        <tr>
-            <td>cass_statement_bind_decimal[by_name]</td>
-        </tr>
-        <tr>
-            <td>cass_statement_bind_duration[by_name]</td>
+            <td>Binding is not implemented for custom types in the Rust driver.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Future</td>
         </tr>
         <tr>
-            <td>cass_future_wait_timed</td>
-            <td rowspan="3">Unimplemented</td>
-        </tr>
-        <tr>
             <td>cass_future_coordinator</td>
+            <td>Unimplemented</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Collection</td>
         </tr>
         <tr>
-            <td>cass_collection_new_from_data_type</td>
-            <td rowspan="2">Unimplemented</td>
-        </tr>
-        <tr>
-            <td>cass_collection_data_type</td>
-        </tr>
-        <tr>
             <td>cass_collection_append_custom[_n]</td>
-            <td rowspan="3">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the appended value is compatible with the type of the collection items.</td>
-        </tr>
-        <tr>
-            <td>cass_collection_append_decimal</td>
-        </tr>
-        <tr>
-            <td>cass_collection_append_duration</td>
+            <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the appended value is compatible with the type of the collection items.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">User Defined Type</td>
         </tr>
         <tr>
             <td>cass_user_type_set_custom[by_name]</td>
-            <td rowspan="3">Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
-        </tr>
-        <tr>
-            <td>cass_user_type_set_decimal[by_name]</td>
-        </tr>
-        <tr>
-            <td>cass_user_type_set_duration[by_name]</td>
+            <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
         </tr>
         <tr>
             <td colspan=2 align="center" style="font-weight:bold">Value</td>
-        </tr>
-        <tr>
-            <td>cass_value_is_duration</td>
-            <td>Unimplemented</td>
-        </tr>
-        <tr>
-            <td>cass_value_get_decimal</td>
-            <td rowspan="2">Getting raw bytes of Decimal and Duration values requires lazy deserialization feature in the Rust driver.</td>
-        </tr>
-        <tr>
-            <td>cass_value_get_duration</td>
         </tr>
         <tr>
             <td>cass_value_get_bytes</td>
@@ -343,11 +294,23 @@ To build deb package, run the following command:
 It will construct chrooted build environment of target distribution using
 pbuilder, and build deb in the environment.
 Target parameter should be debian/ubuntu codename.
-On Ubuntu targets, currently tested on focal (20.04), jammy (22.04), mantic (23.10), noble (24.04).
+On Ubuntu targets, currently tested on bionic (18.04), focal (20.04), jammy (22.04), mantic (23.10), noble (24.04).
 On Debian targets, currently tested on buster (10), bullseye (11), bookworm (12), trixie (13), sid (unstable).
 Build environment should be Fedora, Ubuntu or Debian, since these distribution
 provides pbuilder package.
 Built result will placed under build/debian/debs.
+
+# Build & install HomeBrew package (macOS)
+
+---
+
+To build HomeBrew pacakge, run the following command:
+```shell
+cd dist/homebrew
+brew install --HEAD ./scylla-cpp-rust-driver.rb
+```
+It will run build & install the driver in HomeBrew environment.
+Tested on macOS 14.5.
 
 # Getting Help
 ___

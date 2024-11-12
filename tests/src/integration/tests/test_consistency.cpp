@@ -14,7 +14,9 @@
   limitations under the License.
 */
 
+#include "cassandra.h"
 #include "integration.hpp"
+#include "options.hpp"
 
 /**
  * Consistency integration tests; two node cluster
@@ -217,7 +219,7 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleLocalQuorum) 
  */
 CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleEachQuorum) {
   CHECK_FAILURE;
-  CHECK_VERSION(3.0.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(3.0.0);
 
   // Assign the consistency level for the test
   insert_.set_consistency(CASS_CONSISTENCY_EACH_QUORUM);
@@ -227,7 +229,9 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleEachQuorum) {
   session_.execute(insert_);
   // Handle `EACH_QUORUM` read support; added to C* v3.0.0
   // https://issues.apache.org/jira/browse/CASSANDRA-9602
-  if (server_version_ >= "3.0.0") {
+  //
+  // Scylla supports `EACH_QUORUM` for writes only.
+  if (!Options::is_scylla() && server_version_ >= "3.0.0") {
     session_.execute(select_);
   } else {
     ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, session_.execute(select_, false).error_code());
@@ -259,7 +263,7 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, OneNodeDecommissi
   session_.execute(select_);
 
   // Decommission node two
-  force_decommission_node(2);
+  decommission_node(2);
 
   // Perform a check using consistency `QUORUM` (N=2, RF=3)
   insert_.set_consistency(CASS_CONSISTENCY_QUORUM);
@@ -317,8 +321,8 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, TwoNodesDecommiss
   session_.execute(select_);
 
   // Decommission node two and three
-  force_decommission_node(2);
-  force_decommission_node(3);
+  decommission_node(2);
+  decommission_node(3);
 
   // Perform a check using consistency `ONE` (N=1, RF=3)
   insert_.set_consistency(CASS_CONSISTENCY_ONE);
@@ -422,6 +426,17 @@ CASSANDRA_INTEGRATION_TEST_F(SerialConsistencyTests, Simple) {
 CASSANDRA_INTEGRATION_TEST_F(SerialConsistencyTests, Invalid) {
   CHECK_FAILURE;
 
-  Result result = insert_if_not_exists(CASS_CONSISTENCY_ONE); // Invalid serial consistency
-  EXPECT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+  // Original cpp-driver allows user to SET the invalid serial consistency.
+  // Then, the request is sent with an invalid serial consistency, resulting in a server error.
+  // However, rust-driver comes with a type safety in this matter, disallowing
+  // the user to set invalid serial consistency, thus we are not able to mimic this behaviour in cpp-rust-driver.
+  // We need to adjust this test, and assert that setting the invalid serial consistency fails with an error.
+  // Original test case logic:
+  //// Result result = insert_if_not_exists(CASS_CONSISTENCY_ONE); // Invalid serial consistency
+  //// EXPECT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+
+  Statement statement(format_string("INSERT INTO %s (key, value) VALUES (1, 99) IF NOT EXISTS",
+                                    table_name_.c_str()));
+  CassError result = cass_statement_set_serial_consistency(statement.get(), CASS_CONSISTENCY_ONE);
+  ASSERT_EQ(CASS_ERROR_LIB_BAD_PARAMS, result);
 }

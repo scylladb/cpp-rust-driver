@@ -1,4 +1,5 @@
 use crate::argconv::*;
+use crate::cass_column_types::CassColumnType;
 use crate::cass_types::get_column_type_from_cql_type;
 use crate::cass_types::CassDataType;
 use crate::types::*;
@@ -7,8 +8,6 @@ use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::sync::Weak;
-
-include!(concat!(env!("OUT_DIR"), "/cppdriver_column_type.rs"));
 
 pub struct CassSchemaMeta {
     pub keyspaces: HashMap<String, CassKeyspaceMeta>,

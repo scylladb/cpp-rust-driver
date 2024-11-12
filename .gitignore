@@ -6,3 +6,4 @@ cmake-build-debug/
 .cache/
 version
 docs/_build
+log/

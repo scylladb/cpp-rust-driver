@@ -7,18 +7,19 @@ use crate::query_result::CassResult;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use crate::RUNTIME;
-use scylla::prepared_statement::PreparedStatement;
+use futures::future;
 use std::future::Future;
 use std::mem;
 use std::os::raw::c_void;
 use std::sync::{Arc, Condvar, Mutex};
 use tokio::task::JoinHandle;
+use tokio::time::Duration;
 
 pub enum CassResultValue {
     Empty,
     QueryResult(Arc<CassResult>),
     QueryError(Arc<CassErrorResult>),
-    Prepared(Arc<PreparedStatement>),
+    Prepared(Arc<CassPrepared>),
 }
 
 type CassFutureError = (CassError, String);
@@ -57,6 +58,16 @@ pub struct CassFuture {
     state: Mutex<CassFutureState>,
     wait_for_value: Condvar,
 }
+
+/// An error that can appear during `cass_future_wait_timed`.
+enum FutureError {
+    TimeoutError,
+    InvalidDuration,
+}
+
+/// The timeout appeared when we tried to await `JoinHandle`.
+/// This errors contains the original handle, so it can be awaited later again.
+struct JoinHandleTimeout(JoinHandle<()>);
 
 impl CassFuture {
     pub fn make_raw(
@@ -108,20 +119,140 @@ impl CassFuture {
         self.with_waited_state(|s| f(s.value.as_mut().unwrap()))
     }
 
-    pub(self) fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
+    /// Awaits the future until completion.
+    ///
+    /// There are two possible cases:
+    /// - noone is currently working on the future -> we take the ownership
+    ///   of JoinHandle (future) and we poll it until completion.
+    /// - some other thread is working on the future -> we wait on the condition
+    ///   variable to get an access to the future's state. Once we are notified,
+    ///   there are two cases:
+    ///     - JoinHandle is consumed -> some other thread already resolved the future.
+    ///       We can return.
+    ///     - JoinHandle is Some -> some other thread was working on the future, but
+    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       take the ownership of the handle, and complete the work.
+    fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
         let mut guard = self.state.lock().unwrap();
-        let handle = guard.join_handle.take();
-        if let Some(handle) = handle {
-            mem::drop(guard);
-            RUNTIME.block_on(handle).unwrap();
-            guard = self.state.lock().unwrap();
-        } else {
-            guard = self
-                .wait_for_value
-                .wait_while(guard, |state| state.value.is_none())
-                .unwrap();
+        loop {
+            let handle = guard.join_handle.take();
+            if let Some(handle) = handle {
+                mem::drop(guard);
+                // unwrap: JoinError appears only when future either panic'ed or canceled.
+                RUNTIME.block_on(handle).unwrap();
+                guard = self.state.lock().unwrap();
+            } else {
+                guard = self
+                    .wait_for_value
+                    .wait_while(guard, |state| {
+                        state.value.is_none() && state.join_handle.is_none()
+                    })
+                    // unwrap: Error appears only when mutex is poisoned.
+                    .unwrap();
+                if guard.join_handle.is_some() {
+                    // join_handle was none, and now it isn't - some other thread must
+                    // have timed out and returned the handle. We need to take over
+                    // the work of completing the future. To do that, we go into
+                    // another iteration so that we land in the branch with block_on.
+                    continue;
+                }
+            }
+            return f(&mut guard);
         }
-        f(&mut guard)
+    }
+
+    fn with_waited_result_timed<T>(
+        &self,
+        f: impl FnOnce(&mut CassFutureResult) -> T,
+        timeout_duration: Duration,
+    ) -> Result<T, FutureError> {
+        self.with_waited_state_timed(|s| f(s.value.as_mut().unwrap()), timeout_duration)
+    }
+
+    /// Tries to await the future with a given timeout.
+    ///
+    /// There are two possible cases:
+    /// - noone is currently working on the future -> we take the ownership
+    ///   of JoinHandle (future) and we try to poll it with given timeout.
+    ///   If we timed out, we need to return the unfinished JoinHandle, so
+    ///   some other thread can complete the future later.
+    /// - some other thread is working on the future -> we wait on the condition
+    ///   variable to get an access to the future's state.
+    ///   Once we are notified (before the timeout), there are two cases.
+    ///     - JoinHandle is consumed -> some other thread already resolved the future.
+    ///       We can return.
+    ///     - JoinHandle is Some -> some other thread was working on the future, but
+    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       take the ownership of the handle, and continue the work.
+    fn with_waited_state_timed<T>(
+        &self,
+        f: impl FnOnce(&mut CassFutureState) -> T,
+        timeout_duration: Duration,
+    ) -> Result<T, FutureError> {
+        let mut guard = self.state.lock().unwrap();
+        let deadline = tokio::time::Instant::now()
+            .checked_add(timeout_duration)
+            .ok_or(FutureError::InvalidDuration)?;
+
+        loop {
+            let handle = guard.join_handle.take();
+            if let Some(handle) = handle {
+                mem::drop(guard);
+                // Need to wrap it with async{} block, so the timeout is lazily executed inside the runtime.
+                // See mention about panics: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html.
+                let timed = async {
+                    let sleep_future = tokio::time::sleep_until(deadline);
+                    tokio::pin!(sleep_future);
+                    let value = future::select(handle, sleep_future).await;
+                    match value {
+                        future::Either::Left((result, _)) => Ok(result),
+                        future::Either::Right((_, handle)) => Err(JoinHandleTimeout(handle)),
+                    }
+                };
+                match RUNTIME.block_on(timed) {
+                    Err(JoinHandleTimeout(returned_handle)) => {
+                        // We timed out. so we can't finish waiting for the future.
+                        // The problem is that if current thread executor is used,
+                        // then no one will run this future - other threads will
+                        // go into the branch with condvar and wait there.
+                        // To fix that:
+                        //  - Return the join handle, so that next thread can take it
+                        //  - Signal one thread, so that if all other consumers are
+                        //    already waiting on condvar, one of them wakes up and
+                        //    picks up the work.
+                        guard = self.state.lock().unwrap();
+                        guard.join_handle = Some(returned_handle);
+                        self.wait_for_value.notify_one();
+                        return Err(FutureError::TimeoutError);
+                    }
+                    // unwrap: JoinError appears only when future either panic'ed or canceled.
+                    Ok(result) => result.unwrap(),
+                };
+                guard = self.state.lock().unwrap();
+            } else {
+                let remaining_timeout = deadline.duration_since(tokio::time::Instant::now());
+                let (guard_result, timeout_result) = self
+                    .wait_for_value
+                    .wait_timeout_while(guard, remaining_timeout, |state| {
+                        state.value.is_none() && state.join_handle.is_none()
+                    })
+                    // unwrap: Error appears only when mutex is poisoned.
+                    .unwrap();
+                if timeout_result.timed_out() {
+                    return Err(FutureError::TimeoutError);
+                }
+                guard = guard_result;
+                if guard.join_handle.is_some() {
+                    // join_handle was none, and now it isn't - some other thread must
+                    // have timed out and returned the handle. We need to take over
+                    // the work of completing the future. To do that, we go into
+                    // another iteration so that we land in the branch with block_on.
+                    continue;
+                }
+            }
+
+            return Ok(f(&mut guard));
+        }
     }
 
     pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
@@ -165,6 +296,16 @@ pub unsafe extern "C" fn cass_future_set_callback(
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
     ptr_to_ref(future_raw).with_waited_result(|_| ());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_future_wait_timed(
+    future_raw: *const CassFuture,
+    timeout_us: cass_duration_t,
+) -> cass_bool_t {
+    ptr_to_ref(future_raw)
+        .with_waited_result_timed(|_| (), Duration::from_micros(timeout_us))
+        .is_ok() as cass_bool_t
 }
 
 #[no_mangle]
@@ -270,8 +411,14 @@ pub unsafe extern "C" fn cass_future_tracing_id(
 
 #[cfg(test)]
 mod tests {
+    use crate::testing::{assert_cass_error_eq, assert_cass_future_error_message_eq};
+
     use super::*;
-    use std::{os::raw::c_char, thread, time::Duration};
+    use std::{
+        os::raw::c_char,
+        thread::{self},
+        time::Duration,
+    };
 
     // This is not a particularly smart test, but if some thread is granted access the value
     // before it is truly computed, then weird things should happen, even a segfault.
@@ -292,20 +439,136 @@ mod tests {
         let wrapped_cass_fut = PtrWrapper(cass_fut);
         unsafe {
             let handle = thread::spawn(move || {
-                let PtrWrapper(cass_fut) = wrapped_cass_fut;
-                let mut message: *const c_char = std::ptr::null();
-                let mut msg_len: size_t = 0;
-                cass_future_error_message(cass_fut, &mut message, &mut msg_len);
-                assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+                let wrapper = wrapped_cass_fut;
+                let PtrWrapper(cass_fut) = wrapper;
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
             });
 
-            let mut message: *const c_char = std::ptr::null();
-            let mut msg_len: size_t = 0;
-            cass_future_error_message(cass_fut, &mut message, &mut msg_len);
-            assert_eq!(ptr_to_cstr_n(message, msg_len), Some(ERROR_MSG));
+            assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
 
             handle.join().unwrap();
             cass_future_free(cass_fut);
+        }
+    }
+
+    // This test makes sure that the future resolves even if timeout happens.
+    #[test]
+    #[ntest::timeout(200)]
+    fn cass_future_resolves_after_timeout() {
+        const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+        let fut = async move {
+            tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
+            Err((CassError::CASS_OK, ERROR_MSG.into()))
+        };
+        let cass_fut = CassFuture::make_raw(fut);
+
+        unsafe {
+            // This should timeout on tokio::time::timeout.
+            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            assert_eq!(0, timed_result);
+
+            // This should timeout as well.
+            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            assert_eq!(0, timed_result);
+
+            // Verify that future eventually resolves, even though timeouts occurred before.
+            assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+
+            cass_future_free(cass_fut);
+        }
+    }
+
+    // This test checks whether the future callback is executed correctly when:
+    // - a future is awaited indefinitely
+    // - a future is awaited, after the timeout appeared (_wait_timed)
+    // - a future is not awaited. We simply sleep, and let the tokio runtime resolve
+    //   the future, and execute its callback
+    #[test]
+    #[ntest::timeout(600)]
+    fn test_cass_future_callback() {
+        unsafe {
+            const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+            const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+
+            let create_future_and_flag = || {
+                unsafe extern "C" fn mark_flag_cb(_fut: *const CassFuture, data: *mut c_void) {
+                    let flag = data as *mut bool;
+                    *flag = true;
+                }
+
+                let fut = async move {
+                    tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
+                    Err((CassError::CASS_OK, ERROR_MSG.into()))
+                };
+                let cass_fut = CassFuture::make_raw(fut);
+                let flag = Box::new(false);
+                let flag_ptr = Box::into_raw(flag);
+
+                assert_cass_error_eq!(
+                    cass_future_set_callback(cass_fut, Some(mark_flag_cb), flag_ptr as *mut c_void),
+                    CassError::CASS_OK
+                );
+
+                (cass_fut, flag_ptr)
+            };
+
+            // Callback executed after awaiting.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+                cass_future_wait(cass_fut);
+
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
+
+            // Future awaited via `assert_cass_future_error_message_eq`.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
+
+            // Callback executed after timeouts.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+
+                // This should timeout on tokio::time::timeout.
+                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                assert_eq!(0, timed_result);
+                // This should timeout as well.
+                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                assert_eq!(0, timed_result);
+
+                // Await and check result.
+                assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
+
+            // Don't await the future. Just sleep.
+            {
+                let (cass_fut, flag_ptr) = create_future_and_flag();
+
+                RUNTIME.block_on(async {
+                    tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS + 10 * 1000))
+                        .await
+                });
+
+                assert!(*flag_ptr);
+
+                cass_future_free(cass_fut);
+                let _ = Box::from_raw(flag_ptr);
+            }
         }
     }
 }

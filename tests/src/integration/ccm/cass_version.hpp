@@ -281,7 +281,7 @@ private:
     std::string scylla_version_prefix = "release:";
     std::string version(version_string);
     if (version.compare(0, scylla_version_prefix.size(), scylla_version_prefix) == 0) {
-      version = "3.0.8";
+      version.replace(0, scylla_version_prefix.size(), "");
     }
     std::replace(version.begin(), version.end(), '.', ' ');
     std::size_t found = version.find("-");

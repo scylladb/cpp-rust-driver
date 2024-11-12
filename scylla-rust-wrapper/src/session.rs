@@ -1,23 +1,26 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{get_column_type, CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, MapDataType, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
+use crate::prepared::CassPrepared;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::query_result::{CassResult, CassResultData, CassRow, CassValue, Collection, Value};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
+use crate::uuid::CassUuid;
 use scylla::frame::response::result::{CqlValue, Row};
 use scylla::frame::types::Consistency;
 use scylla::query::Query;
 use scylla::transport::errors::QueryError;
 use scylla::transport::execution_profile::ExecutionProfileHandle;
+use scylla::transport::PagingStateResponse;
 use scylla::{QueryResult, Session, SessionBuilder};
 use std::collections::HashMap;
 use std::future::Future;
@@ -30,6 +33,7 @@ use tokio::sync::RwLock;
 pub struct CassSessionInner {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
+    client_id: uuid::Uuid,
 }
 
 impl CassSessionInner {
@@ -81,6 +85,10 @@ impl CassSessionInner {
             session_opt,
             session_builder,
             exec_profile_map,
+            cluster
+                .get_client_id()
+                // If user did not set a client id, generate a random uuid v4.
+                .unwrap_or_else(uuid::Uuid::new_v4),
             keyspace,
         ))
     }
@@ -89,6 +97,7 @@ impl CassSessionInner {
         session_opt: &RwLock<Option<CassSessionInner>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
+        client_id: uuid::Uuid,
         keyspace: Option<String>,
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
@@ -118,6 +127,7 @@ impl CassSessionInner {
         *session_guard = Some(CassSessionInner {
             session,
             exec_profile_map,
+            client_id,
         });
         Ok(CassResultValue::Empty)
     }
@@ -204,11 +214,12 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
-                metadata: Arc::new(CassResultData {
-                    paging_state: None,
-                    col_specs: vec![],
-                    tracing_id: None,
-                }),
+                metadata: Arc::new(CassResultData::from_result_payload(
+                    PagingStateResponse::NoMorePages,
+                    vec![],
+                    None,
+                    None,
+                )),
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
@@ -244,6 +255,7 @@ pub unsafe extern "C" fn cass_session_execute(
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = ptr_to_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
+    let paging_enabled = statement_opt.paging_enabled;
     let bound_values = statement_opt.bound_values.clone();
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
@@ -269,32 +281,85 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match &mut statement {
             Statement::Simple(query) => query.query.set_execution_profile_handle(handle),
-            Statement::Prepared(prepared) => {
-                Arc::make_mut(prepared).set_execution_profile_handle(handle)
-            }
+            Statement::Prepared(prepared) => Arc::make_mut(prepared)
+                .statement
+                .set_execution_profile_handle(handle),
         }
 
-        let query_res: Result<QueryResult, QueryError> = match statement {
+        // Creating a type alias here to fix clippy lints.
+        // I want this type to be explicit, so future developers can understand
+        // what's going on here (and why we include some weird Option of data types).
+        type QueryRes = Result<
+            (
+                QueryResult,
+                PagingStateResponse,
+                // We unfortunately have to retrieve the metadata here.
+                // Since `query.query` is consumed, we cannot match the statement
+                // after execution, to retrieve the cached metadata in case
+                // of prepared statements.
+                Option<Arc<Vec<Arc<CassDataType>>>>,
+            ),
+            QueryError,
+        >;
+        let query_res: QueryRes = match statement {
             Statement::Simple(query) => {
-                session
-                    .query_paged(query.query, bound_values, paging_state)
-                    .await
+                // We don't store result metadata for Queries - return None.
+                let maybe_result_col_data_types = None;
+
+                if paging_enabled {
+                    session
+                        .query_single_page(query.query, bound_values, paging_state)
+                        .await
+                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
+                } else {
+                    session
+                        .query_unpaged(query.query, bound_values)
+                        .await
+                        .map(|result| {
+                            (
+                                result,
+                                PagingStateResponse::NoMorePages,
+                                maybe_result_col_data_types,
+                            )
+                        })
+                }
             }
             Statement::Prepared(prepared) => {
-                session
-                    .execute_paged(&prepared, bound_values, paging_state)
-                    .await
+                // Clone vector of the Arc<CassDataType>, so we don't do additional allocations when constructing
+                // CassDataTypes in `CassResultData::from_result_payload`.
+                let maybe_result_col_data_types = Some(prepared.result_col_data_types.clone());
+
+                if paging_enabled {
+                    session
+                        .execute_single_page(&prepared.statement, bound_values, paging_state)
+                        .await
+                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
+                } else {
+                    session
+                        .execute_unpaged(&prepared.statement, bound_values)
+                        .await
+                        .map(|result| {
+                            (
+                                result,
+                                PagingStateResponse::NoMorePages,
+                                maybe_result_col_data_types,
+                            )
+                        })
+                }
             }
         };
 
         match query_res {
-            Ok(result) => {
-                let metadata = Arc::new(CassResultData {
-                    paging_state: result.paging_state,
-                    col_specs: result.col_specs,
-                    tracing_id: result.tracing_id,
-                });
-                let cass_rows = create_cass_rows_from_rows(result.rows, &metadata);
+            Ok((result, paging_state_response, maybe_col_data_types)) => {
+                let metadata = Arc::new(CassResultData::from_result_payload(
+                    paging_state_response,
+                    result.col_specs().to_vec(),
+                    maybe_col_data_types,
+                    result.tracing_id,
+                ));
+                let cass_rows = result
+                    .rows
+                    .map(|rows| create_cass_rows_from_rows(rows, &metadata));
                 let cass_result = Arc::new(CassResult {
                     rows: cass_rows,
                     metadata,
@@ -314,28 +379,24 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-fn create_cass_rows_from_rows(
-    rows: Option<Vec<Row>>,
+pub(crate) fn create_cass_rows_from_rows(
+    rows: Vec<Row>,
     metadata: &Arc<CassResultData>,
-) -> Option<Vec<CassRow>> {
-    let rows = rows?;
-    let cass_rows = rows
-        .into_iter()
+) -> Vec<CassRow> {
+    rows.into_iter()
         .map(|r| CassRow {
             columns: create_cass_row_columns(r, metadata),
             result_metadata: metadata.clone(),
         })
-        .collect();
-
-    Some(cass_rows)
+        .collect()
 }
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {
     row.columns
         .into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(val, col)| {
-            let column_type = Arc::new(get_column_type(&col.typ));
+        .zip(metadata.col_data_types.iter())
+        .map(|(val, col_data_type)| {
+            let column_type = Arc::clone(col_data_type);
             CassValue {
                 value: val.map(|col_val| get_column_value(col_val, &column_type)),
                 value_type: column_type,
@@ -346,44 +407,56 @@ fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<Cass
 
 fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
     match (column, column_type.as_ref()) {
-        (CqlValue::List(list), CassDataType::List(Some(list_type))) => {
-            CollectionValue(Collection::List(
-                list.into_iter()
-                    .map(|val| CassValue {
-                        value_type: list_type.clone(),
-                        value: Some(get_column_value(val, list_type)),
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Map(map), CassDataType::Map(Some(key_type), Some(value_type))) => {
-            CollectionValue(Collection::Map(
-                map.into_iter()
-                    .map(|(key, val)| {
-                        (
-                            CassValue {
-                                value_type: key_type.clone(),
-                                value: Some(get_column_value(key, key_type)),
-                            },
-                            CassValue {
-                                value_type: value_type.clone(),
-                                value: Some(get_column_value(val, value_type)),
-                            },
-                        )
-                    })
-                    .collect(),
-            ))
-        }
-        (CqlValue::Set(set), CassDataType::Set(Some(set_type))) => {
-            CollectionValue(Collection::Set(
-                set.into_iter()
-                    .map(|val| CassValue {
-                        value_type: set_type.clone(),
-                        value: Some(get_column_value(val, set_type)),
-                    })
-                    .collect(),
-            ))
-        }
+        (
+            CqlValue::List(list),
+            CassDataType::List {
+                typ: Some(list_type),
+                ..
+            },
+        ) => CollectionValue(Collection::List(
+            list.into_iter()
+                .map(|val| CassValue {
+                    value_type: list_type.clone(),
+                    value: Some(get_column_value(val, list_type)),
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Map(map),
+            CassDataType::Map {
+                typ: MapDataType::KeyAndValue(key_type, value_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Map(
+            map.into_iter()
+                .map(|(key, val)| {
+                    (
+                        CassValue {
+                            value_type: key_type.clone(),
+                            value: Some(get_column_value(key, key_type)),
+                        },
+                        CassValue {
+                            value_type: value_type.clone(),
+                            value: Some(get_column_value(val, value_type)),
+                        },
+                    )
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Set(set),
+            CassDataType::Set {
+                typ: Some(set_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Set(
+            set.into_iter()
+                .map(|val| CassValue {
+                    value_type: set_type.clone(),
+                    value: Some(get_column_value(val, set_type)),
+                })
+                .collect(),
+        )),
         (
             CqlValue::UserDefinedType {
                 keyspace,
@@ -462,7 +535,9 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
             .await
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
-        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+        Ok(CassResultValue::Prepared(Arc::new(
+            CassPrepared::new_from_prepared_statement(prepared),
+        )))
     })
 }
 
@@ -480,10 +555,12 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     query: *const c_char,
     query_length: size_t,
 ) -> *const CassFuture {
-    let query_str = match ptr_to_cstr_n(query, query_length) {
-        Some(v) => v,
-        None => return std::ptr::null(),
-    };
+    let query_str = ptr_to_cstr_n(query, query_length)
+        // Apparently nullptr denotes an empty statement string.
+        // It seems to be intended (for some weird reason, why not save a round-trip???)
+        // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
+        // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
+        .unwrap_or_default();
     let query = Query::new(query_str.to_string());
     let cass_session: &CassSession = ptr_to_ref(cass_session_raw);
 
@@ -503,10 +580,11 @@ pub unsafe extern "C" fn cass_session_prepare_n(
             .map_err(|err| (CassError::from(&err), err.msg()))?;
 
         // Set Cpp Driver default configuration for queries:
-        prepared.disable_paging();
         prepared.set_consistency(Consistency::One);
 
-        Ok(CassResultValue::Prepared(Arc::new(prepared)))
+        Ok(CassResultValue::Prepared(Arc::new(
+            CassPrepared::new_from_prepared_statement(prepared),
+        )))
     })
 }
 
@@ -535,6 +613,14 @@ pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn cass_session_get_client_id(session: *const CassSession) -> CassUuid {
+    let cass_session = ptr_to_ref(session);
+
+    let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
+    client_id.into()
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: *const CassSession,
 ) -> *const CassSchemaMeta {
@@ -560,6 +646,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,
+                    false,
                 ))),
             );
         }
@@ -617,7 +704,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 #[cfg(test)]
 mod tests {
     use rusty_fork::rusty_fork_test;
-    use scylla::{frame::types::LegacyConsistency, transport::errors::DbError};
+    use scylla::transport::errors::DbError;
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,
@@ -703,7 +790,7 @@ mod tests {
             Condition::RequestOpcode(RequestOpcode::Query),
             // We won't respond to any queries (including metadata fetch),
             // but the driver will manage to continue with dummy metadata.
-            RequestReaction::drop_connection(),
+            RequestReaction::forge().server_error(),
         )]
     }
 
@@ -1070,7 +1157,7 @@ mod tests {
                 // We don't use the example ReadTimeout error that is included in proxy,
                 // because in order to trigger a retry we need data_present=false.
                 RequestReaction::forge_with_error(DbError::ReadTimeout {
-                    consistency: LegacyConsistency::Regular(Consistency::All),
+                    consistency: Consistency::All,
                     received: 1,
                     required: 1,
                     data_present: false,

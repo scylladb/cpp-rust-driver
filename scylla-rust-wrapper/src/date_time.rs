@@ -1,22 +1,4 @@
-#![allow(non_camel_case_types)]
-
-// Definition for size_t (and possibly other types in the future)
-include!(concat!(env!("OUT_DIR"), "/basic_types.rs"));
-
-pub type cass_bool_t = ::std::os::raw::c_uint;
-pub type cass_float_t = f32;
-pub type cass_double_t = f64;
-pub type cass_int8_t = i8;
-pub type cass_uint8_t = u8;
-pub type cass_int16_t = i16;
-pub type cass_uint16_t = u16;
-pub type cass_int32_t = i32;
-pub type cass_uint32_t = u32;
-pub type cass_int64_t = i64;
-pub type cass_uint64_t = u64;
-pub type cass_byte_t = cass_uint8_t;
-pub type cass_duration_t = cass_uint64_t;
-pub type size_t = cass_uint64_t;
+use crate::types::{cass_int64_t, cass_uint32_t};
 
 // Implementation directly ported from Cpp Driver implementation:
 
@@ -45,8 +27,3 @@ pub unsafe extern "C" fn cass_date_time_to_epoch(
     (((date as u64) - CASS_DATE_EPOCH) * (NUM_SECONDS_PER_DAY as u64)
         + ((time / CASS_TIME_NANOSECONDS_PER_SECOND) as u64)) as i64
 }
-
-#[allow(non_upper_case_globals)]
-pub const cass_false: cass_bool_t = 0;
-#[allow(non_upper_case_globals)]
-pub const cass_true: cass_bool_t = 1;

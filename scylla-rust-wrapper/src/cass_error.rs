@@ -1,20 +1,33 @@
 use scylla::transport::errors::*;
 
-include!(concat!(env!("OUT_DIR"), "/cppdriver_data_errors.rs"));
+// Re-export error types.
+pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
 
 impl From<&QueryError> for CassError {
     fn from(error: &QueryError) -> Self {
         match error {
             QueryError::DbError(db_error, _string) => CassError::from(db_error),
             QueryError::BadQuery(bad_query) => CassError::from(bad_query),
-            QueryError::IoError(_io_error) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
             QueryError::ProtocolError(_str) => CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR,
-            QueryError::InvalidMessage(_string) => CassError::CASS_ERROR_SERVER_INVALID_QUERY,
             QueryError::TimeoutError => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT, // This may be either read or write timeout error
-            QueryError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
             QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
-            QueryError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
+            QueryError::CqlRequestSerialization(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            QueryError::BodyExtensionsParseError(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
+            QueryError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            QueryError::CqlResultParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
+            QueryError::CqlErrorParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
+            QueryError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
+            // is hidden under the ConnectionPoolError.
+            // However, we still have a lot work to do when it comes to error conversion.
+            // I will address it, once we start resolving all issues related to error conversion.
+            QueryError::ConnectionPoolError(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            QueryError::BrokenConnection(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            // QueryError is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -58,6 +71,12 @@ impl From<&BadQuery> for CassError {
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::SerializationError(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            // BadQuery is non_exhaustive
+            // For now, since all other variants return LAST_ENTRY,
+            // let's do it here as well.
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -71,16 +90,29 @@ impl From<&NewSessionError> for CassError {
             NewSessionError::EmptyKnownNodesList => CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
             NewSessionError::DbError(_db_error, _string) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::BadQuery(_bad_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::IoError(_io_error) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::ProtocolError(_str) => {
                 CassError::CASS_ERROR_LIB_UNABLE_TO_DETERMINE_PROTOCOL
             }
-            NewSessionError::InvalidMessage(_string) => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::TimeoutError => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::TooManyOrphanedStreamIds(_) => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
             NewSessionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
-            NewSessionError::TranslationError(_) => CassError::CASS_ERROR_LIB_HOST_RESOLUTION,
+            NewSessionError::CqlRequestSerialization(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
+            NewSessionError::BodyExtensionsParseError(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
+            NewSessionError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            NewSessionError::CqlResultParseError(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
+            NewSessionError::CqlErrorParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
+            NewSessionError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
+            // is hidden under the ConnectionPoolError.
+            // However, we still have a lot work to do when it comes to error conversion.
+            // I will address it, once we start resolving all issues related to error conversion.
+            NewSessionError::ConnectionPoolError(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            NewSessionError::BrokenConnection(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            // NS error is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -91,6 +123,8 @@ impl From<&BadKeyspaceName> for CassError {
             BadKeyspaceName::Empty => CassError::CASS_ERROR_LAST_ENTRY,
             BadKeyspaceName::TooLong(_string, _usize) => CassError::CASS_ERROR_LAST_ENTRY,
             BadKeyspaceName::IllegalCharacter(_string, _char) => CassError::CASS_ERROR_LAST_ENTRY,
+            // non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }

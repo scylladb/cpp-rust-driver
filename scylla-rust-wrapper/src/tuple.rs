@@ -1,18 +1,17 @@
 use crate::argconv::*;
-use crate::binding;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
-use std::convert::TryFrom;
+use crate::value;
+use crate::value::CassCqlValue;
 use std::sync::Arc;
 
-static EMPTY_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
+static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
 
 #[derive(Clone)]
 pub struct CassTuple {
     pub data_type: Option<Arc<CassDataType>>,
-    pub items: Vec<Option<CqlValue>>,
+    pub items: Vec<Option<CassCqlValue>>,
 }
 
 impl CassTuple {
@@ -32,13 +31,13 @@ impl CassTuple {
     // not bind items with too high index.
     // If it was created using `cass_tuple_new_from_data_type` we additionally check if
     // value has correct type.
-    fn bind_value(&mut self, index: usize, v: Option<CqlValue>) -> CassError {
+    fn bind_value(&mut self, index: usize, v: Option<CassCqlValue>) -> CassError {
         if index >= self.items.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
 
         if let Some(inner_types) = self.get_types() {
-            if !binding::is_compatible_type(&inner_types[index], &v) {
+            if !value::is_type_compatible(&v, &inner_types[index]) {
                 return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
             }
         }
@@ -49,10 +48,12 @@ impl CassTuple {
     }
 }
 
-impl TryFrom<&CassTuple> for CqlValue {
-    type Error = CassError;
-    fn try_from(tuple: &CassTuple) -> Result<Self, Self::Error> {
-        Ok(CqlValue::Tuple(tuple.items.clone()))
+impl From<&CassTuple> for CassCqlValue {
+    fn from(tuple: &CassTuple) -> Self {
+        CassCqlValue::Tuple {
+            data_type: tuple.data_type.clone(),
+            fields: tuple.items.clone(),
+        }
     }
 }
 
@@ -88,7 +89,7 @@ unsafe extern "C" fn cass_tuple_free(tuple: *mut CassTuple) {
 unsafe extern "C" fn cass_tuple_data_type(tuple: *const CassTuple) -> *const CassDataType {
     match &ptr_to_ref(tuple).data_type {
         Some(t) => Arc::as_ptr(t),
-        None => &EMPTY_TUPLE_TYPE,
+        None => &UNTYPED_TUPLE_TYPE,
     }
 }
 
@@ -107,6 +108,8 @@ make_binders!(string_n, cass_tuple_set_string_n);
 make_binders!(bytes, cass_tuple_set_bytes);
 make_binders!(uuid, cass_tuple_set_uuid);
 make_binders!(inet, cass_tuple_set_inet);
+make_binders!(duration, cass_tuple_set_duration);
+make_binders!(decimal, cass_tuple_set_decimal);
 make_binders!(collection, cass_tuple_set_collection);
 make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);

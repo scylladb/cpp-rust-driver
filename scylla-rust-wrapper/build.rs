@@ -3,9 +3,11 @@ extern crate bindgen;
 use std::env;
 use std::path::{Path, PathBuf};
 
+const RELATIVE_PATH_TO_CASSANDRA_H: &str = "../include/cassandra.h";
+
 fn prepare_full_bindings(out_path: &Path) {
     let bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(false)
         .generate_comments(false)
@@ -23,11 +25,29 @@ fn prepare_full_bindings(out_path: &Path) {
 
 fn prepare_basic_types(out_path: &Path) {
     let basic_bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
+        .allowlist_type("cass_bool_t")
+        // cass_bool_t enum variants represented as constants.
+        .constified_enum("cass_bool_t")
+        // cass_[false/true] instead of cass_bool_t_cass_[*].
+        .prepend_enum_name(false)
+        .allowlist_type("cass_float_t")
+        .allowlist_type("cass_double_t")
+        .allowlist_type("cass_int8_t")
+        .allowlist_type("cass_uint8_t")
+        .allowlist_type("cass_int16_t")
+        .allowlist_type("cass_uint16_t")
+        .allowlist_type("cass_int32_t")
+        .allowlist_type("cass_uint32_t")
+        .allowlist_type("cass_int64_t")
+        .allowlist_type("cass_uint64_t")
+        .allowlist_type("cass_byte_t")
+        .allowlist_type("cass_duration_t")
         .allowlist_type("size_t")
+        .size_t_is_usize(false)
         .generate()
         .expect("Unable to generate bindings");
 
@@ -38,7 +58,7 @@ fn prepare_basic_types(out_path: &Path) {
 
 fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path) {
     let mut type_bindings = bindgen::Builder::default()
-        .header("extern/cassandra.h")
+        .header(RELATIVE_PATH_TO_CASSANDRA_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .layout_tests(true)
         .generate_comments(false)
@@ -61,19 +81,26 @@ fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=extern/cassandra.h");
+    println!("cargo:rerun-if-changed={}", RELATIVE_PATH_TO_CASSANDRA_H);
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     prepare_full_bindings(&out_path);
     prepare_basic_types(&out_path);
 
     prepare_cppdriver_data(
-        "cppdriver_data_errors.rs",
+        "cppdriver_error_types.rs",
         &[
             "CassErrorSource_",
             "CassErrorSource",
             "CassError_",
             "CassError",
+            "CassWriteType",
+            "CassWriteType_",
         ],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_consistency_types.rs",
+        &["CassConsistency_", "CassConsistency"],
         &out_path,
     );
     prepare_cppdriver_data(
@@ -82,7 +109,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_collection.rs",
+        "cppdriver_collection_types.rs",
         &["CassCollectionType_", "CassCollectionType"],
         &out_path,
     );
@@ -92,12 +119,12 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_inet.rs",
+        "cppdriver_inet_types.rs",
         &["CassInet_", "CassInet"],
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_log.rs",
+        "cppdriver_log_types.rs",
         &[
             "CassLogLevel_",
             "CassLogLevel",
@@ -107,17 +134,7 @@ fn main() {
         &out_path,
     );
     prepare_cppdriver_data(
-        "cppdriver_data_query_error.rs",
-        &[
-            "CassConsistency_",
-            "CassConsistency",
-            "CassWriteType",
-            "CassWriteType_",
-        ],
-        &out_path,
-    );
-    prepare_cppdriver_data(
-        "cppdriver_data_uuid.rs",
+        "cppdriver_uuid_types.rs",
         &["CassUuid_", "CassUuid"],
         &out_path,
     );

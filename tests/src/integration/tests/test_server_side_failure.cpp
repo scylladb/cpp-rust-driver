@@ -78,7 +78,7 @@ private:
  */
 CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, Warning) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2);
 
   logger_.add_critera("Server-side warning: Aggregation query used without partition key");
   session_.execute("SELECT sum(gossip_generation) FROM system.local");
@@ -97,7 +97,7 @@ CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, Warning) {
  */
 CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, ErrorFunctionFailure) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2);
 
   // Create the table and associated failing function
   session_.execute("CREATE TABLE server_function_failures (id int PRIMARY KEY, value double)");
@@ -149,7 +149,7 @@ CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, ErrorTableAlreadyExists) {
  */
 CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, ErrorFunctionAlreadyExists) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.2);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.2);
 
   std::string create_function_query =
       "CREATE FUNCTION already_exists_function(value double) RETURNS NULL ON NULL INPUT "

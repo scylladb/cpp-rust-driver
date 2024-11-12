@@ -95,7 +95,7 @@ private:
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementInOrder) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement();
   insert_statement.bind<Integer>("named_key", key_);
@@ -120,7 +120,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementInOrder) {
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementAnyOrder) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement();
   insert_statement.bind<Blob>("named_blob", value_blob_);
@@ -145,7 +145,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementAnyOrder) {
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, PreparedStatementInOrder) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement(true);
   insert_statement.bind<Integer>("named_key", key_);
@@ -170,7 +170,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, PreparedStatementInOrder) {
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, PreparedStatementAnyOrder) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement(true);
   insert_statement.bind<Blob>("named_blob", value_blob_);
@@ -196,7 +196,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, PreparedStatementAnyOrder) {
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementInvalidName) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement();
   insert_statement.bind<Integer>("invalid_named_key", key_);
@@ -218,7 +218,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementInvalidName) {
  */
 CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, PreparedStatementInvalidName) {
   CHECK_FAILURE;
-  CHECK_VERSION(2.1.0);
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
 
   Statement insert_statement = create_insert_statement(true);
   EXPECT_EQ(

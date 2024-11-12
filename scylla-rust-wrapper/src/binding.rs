@@ -47,13 +47,6 @@
 //!     It can be used for binding named parameter in CassStatement or field by name in CassUserType.
 //!  * Functions from make_appender don't take any extra argument, as they are for use by CassCollection
 //!     functions - values are appended to collection.
-use crate::cass_types::CassDataType;
-use scylla::frame::response::result::CqlValue;
-
-pub fn is_compatible_type(_data_type: &CassDataType, _value: &Option<CqlValue>) -> bool {
-    // TODO: cppdriver actually checks types.
-    true
-}
 
 macro_rules! make_index_binder {
     ($this:ty, $consume_v:expr, $fn_by_idx:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
@@ -66,7 +59,7 @@ macro_rules! make_index_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), index as usize, v),
                 Err(e) => e,
@@ -86,7 +79,7 @@ macro_rules! make_name_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr(name).unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), name, v),
@@ -108,7 +101,7 @@ macro_rules! make_name_n_binder {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr_n(name, name_length).unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), name, v),
@@ -128,7 +121,7 @@ macro_rules! make_appender {
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
-            use scylla::frame::response::result::CqlValue::*;
+            use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(ptr_to_ref_mut(this), v),
                 Err(e) => e,
@@ -137,10 +130,8 @@ macro_rules! make_appender {
     }
 }
 
-// TODO: Types for which binding is not implemented yet:
-// custom - Not implemented in Rust driver?
-// decimal
-// duration - DURATION not implemented in Rust Driver
+// Types for which binding is not implemented:
+// custom - Not implemented in Rust driver
 
 macro_rules! invoke_binder_maker_macro_with_type {
     (null, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -178,7 +169,10 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |v| Ok(Some(Date(v))),
+            |v| {
+                use scylla::frame::value::CqlDate;
+                Ok(Some(Date(CqlDate(v))))
+            },
             [v @ cass_uint32_t]
         );
     };
@@ -275,6 +269,34 @@ macro_rules! invoke_binder_maker_macro_with_type {
             [v @ crate::inet::CassInet]
         );
     };
+    (duration, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |m, d, n| {
+                Ok(Some(Duration(scylla::frame::value::CqlDuration {
+                    months: m,
+                    days: d,
+                    nanoseconds: n
+                })))
+            },
+            [m @ cass_int32_t, d @ cass_int32_t, n @ cass_int64_t]
+        );
+    };
+    (decimal, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
+        $macro_name!(
+            $this,
+            $consume_v,
+            $fn,
+            |v, v_size, scale| {
+                use scylla::frame::value::CqlDecimal;
+                let varint = std::slice::from_raw_parts(v, v_size as usize);
+                Ok(Some(Decimal(CqlDecimal::from_signed_be_bytes_slice_and_exponent(varint, scale))))
+            },
+            [v @ *const cass_byte_t, v_size @ size_t, scale @ cass_int32_t]
+        );
+    };
     (collection, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
         $macro_name!(
             $this,
@@ -295,7 +317,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |p: *const crate::tuple::CassTuple| {
-                std::convert::TryInto::try_into(ptr_to_ref(p)).map(Some)
+                Ok(Some(ptr_to_ref(p).into()))
             },
             [p @ *const crate::tuple::CassTuple]
         );
@@ -346,8 +368,8 @@ macro_rules! invoke_binder_maker_macro_with_type {
 ///         In the function, value will be consumed using `$consume_v_name`.
 ///  * `@name_n` - accepts type and function name, declares this function using `make_name_n_binder` macro.
 ///         In the function, value will be consumed using `$consume_v_name`.
-/// There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
-/// binding the same type by index, name and name_n):
+///         There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
+///         binding the same type by index, name and name_n):
 ///  * `make_binders!(type, fn_idx, fn_name, fn_name_n)` - is equivalent to:
 ///     ```
 ///     make_binders!(@index type, fn_idx);

@@ -1,9 +1,8 @@
-use crate::argconv::*;
-use crate::binding::is_compatible_type;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::frame::response::result::CqlValue;
+use crate::value::CassCqlValue;
+use crate::{argconv::*, value};
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -12,23 +11,22 @@ pub struct CassUserType {
     pub data_type: Arc<CassDataType>,
 
     // Vec to preserve the order of fields
-    pub field_values: Vec<Option<CqlValue>>,
+    pub field_values: Vec<Option<CassCqlValue>>,
 }
 
 impl CassUserType {
-    fn set_option_by_index(&mut self, index: usize, value: Option<CqlValue>) -> CassError {
+    fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.field_values.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
-        if !is_compatible_type(&self.data_type.get_udt_type().field_types[index].1, &value) {
+        if !value::is_type_compatible(&value, &self.data_type.get_udt_type().field_types[index].1) {
             return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
         }
         self.field_values[index] = value;
         CassError::CASS_OK
     }
 
-    //TODO: some hashtable for name lookup?
-    fn set_option_by_name(&mut self, name: &str, value: Option<CqlValue>) -> CassError {
+    fn set_field_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut found_field: bool = false;
         for (index, (field_name, field_type)) in
             self.data_type.get_udt_type().field_types.iter().enumerate()
@@ -38,7 +36,7 @@ impl CassUserType {
                 if index >= self.field_values.len() {
                     return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
                 }
-                if !is_compatible_type(field_type, &value) {
+                if !value::is_type_compatible(&value, field_type) {
                     return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
                 }
                 self.field_values[index].clone_from(&value);
@@ -53,11 +51,10 @@ impl CassUserType {
     }
 }
 
-impl From<&CassUserType> for CqlValue {
+impl From<&CassUserType> for CassCqlValue {
     fn from(user_type: &CassUserType) -> Self {
-        CqlValue::UserDefinedType {
-            keyspace: user_type.data_type.get_udt_type().keyspace.clone(),
-            type_name: user_type.data_type.get_udt_type().name.clone(),
+        CassCqlValue::UserDefinedType {
+            data_type: user_type.data_type.clone(),
             fields: user_type
                 .field_values
                 .iter()
@@ -98,8 +95,8 @@ pub unsafe extern "C" fn cass_user_type_data_type(
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,
-    |udt: &mut CassUserType, index, v| udt.set_option_by_index(index, v),
-    |udt: &mut CassUserType, name, v| udt.set_option_by_name(name, v));
+    |udt: &mut CassUserType, index, v| udt.set_field_by_index(index, v),
+    |udt: &mut CassUserType, name, v| udt.set_field_by_name(name, v));
 
 make_binders!(
     null,
@@ -181,6 +178,18 @@ make_binders!(
     cass_user_type_set_inet,
     cass_user_type_set_inet_by_name,
     cass_user_type_set_inet_by_name_n
+);
+make_binders!(
+    duration,
+    cass_user_type_set_duration,
+    cass_user_type_set_duration_by_name,
+    cass_user_type_set_duration_by_name_n
+);
+make_binders!(
+    decimal,
+    cass_user_type_set_decimal,
+    cass_user_type_set_decimal_by_name,
+    cass_user_type_set_decimal_by_name_n
 );
 make_binders!(
     collection,
