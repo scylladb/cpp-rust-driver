@@ -109,12 +109,18 @@ impl CassSessionInner {
                 "Already connecting, closing, or connected".msg(),
             ));
         }
-        let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
-        for (name, builder) in exec_profile_builder_map {
-            exec_profile_map.insert(name, builder.build().await.into_handle());
-        }
 
         let mut session_builder = session_builder_fut.await;
+        let default_profile = session_builder
+            .config
+            .default_execution_profile_handle
+            .to_profile();
+
+        let mut exec_profile_map = HashMap::with_capacity(exec_profile_builder_map.len());
+        for (name, builder) in exec_profile_builder_map {
+            exec_profile_map.insert(name, builder.build(&default_profile).await.into_handle());
+        }
+
         if let Some(keyspace) = keyspace {
             session_builder = session_builder.use_keyspace(keyspace, false);
         }
