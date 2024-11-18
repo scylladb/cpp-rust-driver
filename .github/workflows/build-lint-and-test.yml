@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      
+      - name: Update apt cache
+        run: sudo apt-get update -y
 
       - name: Install dependencies
         run: make install-build-dependencies
@@ -65,6 +68,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Update apt cache
+        run: sudo apt-get update -y
 
       - name: Install CCM
         run: |
@@ -165,6 +171,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          
+      - name: Update apt cache
+        run: sudo apt-get update -y
 
       - name: Install CCM
         run: make install-ccm-if-missing
