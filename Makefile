@@ -77,6 +77,8 @@ clean:
 
 update-apt-cache-if-needed:
 	@{\
+		# It searches for a file that is at most one day old.\
+		# If there is no such file, executes apt update.\
 		@sudo find /var/cache/apt -type f -mtime -1 2>/dev/null | grep -c "" 2>/dev/null | grep 0 >/dev/null 2>&1 || (\
 			echo "Apt cache is outdated, update it.";\
 			sudo apt-get update || true;\
