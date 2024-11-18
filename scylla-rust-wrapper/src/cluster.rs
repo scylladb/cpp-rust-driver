@@ -35,6 +35,11 @@ const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_millis(12000);
 // - fetching schema metadata is true
 const DEFAULT_DO_FETCH_SCHEMA_METADATA: bool = true;
+// - schema agreement timeout is 10000 millis,
+const DEFAULT_MAX_SCHEMA_WAIT_TIME: Duration = Duration::from_millis(10000);
+// - schema agreement interval is 200 millis.
+// This default is taken from rust-driver, since this option is an extension to cpp-rust-driver.
+const DEFAULT_SCHEMA_AGREEMENT_INTERVAL: Duration = Duration::from_millis(200);
 // - setting TCP_NODELAY is true
 const DEFAULT_SET_TCP_NO_DELAY: bool = true;
 // - connect timeout is 5000 millis
@@ -179,6 +184,8 @@ pub unsafe extern "C" fn cass_cluster_new() -> *mut CassCluster {
         SessionBuilder::new()
             .custom_identity(custom_identity)
             .fetch_schema_metadata(DEFAULT_DO_FETCH_SCHEMA_METADATA)
+            .schema_agreement_timeout(DEFAULT_MAX_SCHEMA_WAIT_TIME)
+            .schema_agreement_interval(DEFAULT_SCHEMA_AGREEMENT_INTERVAL)
             .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
@@ -406,6 +413,28 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
         // 0 -> no timeout
         builder.request_timeout((timeout_ms > 0).then(|| Duration::from_millis(timeout_ms.into())))
     })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_max_schema_wait_time(
+    cluster_raw: *mut CassCluster,
+    wait_time_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster.session_builder.config.schema_agreement_timeout =
+        Duration::from_millis(wait_time_ms.into());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_cluster_set_schema_agreement_interval(
+    cluster_raw: *mut CassCluster,
+    interval_ms: c_uint,
+) {
+    let cluster = ptr_to_ref_mut(cluster_raw);
+
+    cluster.session_builder.config.schema_agreement_interval =
+        Duration::from_millis(interval_ms.into());
 }
 
 #[no_mangle]
