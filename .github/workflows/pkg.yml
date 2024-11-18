@@ -60,5 +60,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      - name: Update apt cache
+        run: sudo apt-get update -y
+      
       - name: Build deb package for ${{ matrix.dist-version }}
         run: ./dist/debian/build_deb.sh --target ${{ matrix.dist-version }}
