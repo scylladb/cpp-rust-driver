@@ -9,6 +9,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
 :SerialConsistencyTests.*\
+:HeartbeatTests.*\
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
@@ -22,6 +23,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
+:HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
@@ -36,6 +38,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ConsistencyTwoNodeClusterTests.*\
 :ConsistencyThreeNodeClusterTests.*\
 :SerialConsistencyTests.*\
+:HeartbeatTests.*\
 :PreparedTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ErrorTests.*\
@@ -49,6 +52,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
+:HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\

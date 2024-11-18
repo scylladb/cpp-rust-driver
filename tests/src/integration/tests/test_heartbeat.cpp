@@ -36,7 +36,7 @@ public:
 CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatEnabled) {
   CHECK_FAILURE;
 
-  logger_.add_critera("Heartbeat completed on host " + ccm_->get_ip_prefix());
+  logger_.add_critera("Keepalive request successful on connection to node " + ccm_->get_ip_prefix());
   Cluster cluster = default_cluster().with_connection_heartbeat_interval(1); // Quick heartbeat
   connect(cluster);
 
@@ -59,7 +59,7 @@ CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatEnabled) {
 CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatDisabled) {
   CHECK_FAILURE;
 
-  logger_.add_critera("Heartbeat completed on host " + ccm_->get_ip_prefix());
+  logger_.add_critera("Keepalive request successful on connection to node " + ccm_->get_ip_prefix());
   Cluster cluster = default_cluster().with_connection_heartbeat_interval(0);
   connect(cluster);
 
