@@ -220,7 +220,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
-                metadata: Arc::new(CassResultData::from_result_payload(&[], None)),
+                metadata: Arc::new(CassResultData::from_column_specs(&[])),
                 tracing_id: None,
                 paging_state_response: PagingStateResponse::NoMorePages,
             }))),
@@ -353,11 +353,8 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok((result, paging_state_response, maybe_col_data_types)) => {
-                let metadata = Arc::new(CassResultData::from_result_payload(
-                    result.col_specs(),
-                    maybe_col_data_types,
-                ));
+            Ok((result, paging_state_response, _maybe_col_data_types)) => {
+                let metadata = Arc::new(CassResultData::from_column_specs(result.col_specs()));
                 let cass_rows = result
                     .rows
                     .map(|rows| create_cass_rows_from_rows(rows, &metadata));
@@ -397,9 +394,9 @@ pub(crate) fn create_cass_rows_from_rows(
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultData>) -> Vec<CassValue> {
     row.columns
         .into_iter()
-        .zip(metadata.col_data_types.iter())
-        .map(|(val, col_data_type)| {
-            let column_type = Arc::clone(col_data_type);
+        .zip(metadata.col_specs.iter())
+        .map(|(val, col_spec)| {
+            let column_type = Arc::clone(&col_spec.data_type);
             CassValue {
                 value: val.map(|col_val| get_column_value(col_val, &column_type)),
                 value_type: column_type,
