@@ -220,12 +220,9 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 rows: None,
-                metadata: Arc::new(CassResultData::from_result_payload(
-                    PagingStateResponse::NoMorePages,
-                    vec![],
-                    None,
-                )),
+                metadata: Arc::new(CassResultData::from_result_payload(vec![], None)),
                 tracing_id: None,
+                paging_state_response: PagingStateResponse::NoMorePages,
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
         }
@@ -358,7 +355,6 @@ pub unsafe extern "C" fn cass_session_execute(
         match query_res {
             Ok((result, paging_state_response, maybe_col_data_types)) => {
                 let metadata = Arc::new(CassResultData::from_result_payload(
-                    paging_state_response,
                     result.col_specs().to_vec(),
                     maybe_col_data_types,
                 ));
@@ -369,6 +365,7 @@ pub unsafe extern "C" fn cass_session_execute(
                     rows: cass_rows,
                     metadata,
                     tracing_id: result.tracing_id,
+                    paging_state_response,
                 });
 
                 Ok(CassResultValue::QueryResult(cass_result))

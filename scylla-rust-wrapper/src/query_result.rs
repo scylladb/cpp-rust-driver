@@ -20,17 +20,16 @@ pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
     pub metadata: Arc<CassResultData>,
     pub tracing_id: Option<Uuid>,
+    pub paging_state_response: PagingStateResponse,
 }
 
 pub struct CassResultData {
-    pub paging_state_response: PagingStateResponse,
     pub col_specs: Vec<ColumnSpec<'static>>,
     pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
 }
 
 impl CassResultData {
     pub fn from_result_payload(
-        paging_state_response: PagingStateResponse,
         col_specs: Vec<ColumnSpec<'static>>,
         maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
     ) -> CassResultData {
@@ -48,7 +47,6 @@ impl CassResultData {
         });
 
         CassResultData {
-            paging_state_response,
             col_specs,
             col_data_types,
         }
@@ -849,7 +847,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    (!result.metadata.paging_state_response.finished()) as cass_bool_t
+    (!result.paging_state_response.finished()) as cass_bool_t
 }
 
 #[no_mangle]
@@ -1363,7 +1361,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
     let result_from_raw = ptr_to_ref(result);
 
-    match &result_from_raw.metadata.paging_state_response {
+    match &result_from_raw.paging_state_response {
         PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
             Some(result_paging_state) => {
                 *paging_state_size = result_paging_state.len() as u64;
@@ -1413,7 +1411,6 @@ mod tests {
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
         let metadata = Arc::new(CassResultData::from_result_payload(
-            PagingStateResponse::NoMorePages,
             vec![
                 col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
                 col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
@@ -1444,6 +1441,7 @@ mod tests {
             rows: Some(rows),
             metadata,
             tracing_id: None,
+            paging_state_response: PagingStateResponse::NoMorePages,
         }
     }
 
@@ -1530,15 +1528,12 @@ mod tests {
     }
 
     fn create_non_rows_cass_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_result_payload(
-            PagingStateResponse::NoMorePages,
-            vec![],
-            None,
-        ));
+        let metadata = Arc::new(CassResultData::from_result_payload(vec![], None));
         CassResult {
             rows: None,
             metadata,
             tracing_id: None,
+            paging_state_response: PagingStateResponse::NoMorePages,
         }
     }
 

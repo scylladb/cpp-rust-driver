@@ -245,7 +245,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     let statement = ptr_to_ref_mut(statement);
     let result = ptr_to_ref(result);
 
-    match &result.metadata.paging_state_response {
+    match &result.paging_state_response {
         PagingStateResponse::HasMorePages { state } => statement.paging_state.clone_from(state),
         PagingStateResponse::NoMorePages => statement.paging_state = PagingState::start(),
     }
