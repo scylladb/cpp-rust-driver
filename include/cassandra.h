@@ -1087,6 +1087,50 @@ cass_execution_profile_set_load_balance_dc_aware_n(CassExecProfile* profile,
                                                    unsigned used_hosts_per_remote_dc,
                                                    cass_bool_t allow_remote_dcs_for_local_cl);
 
+
+/**
+ * Configures the execution profile to use Rack-aware load balancing.
+ * For each query, all live nodes in a primary 'local' rack are tried first,
+ * followed by nodes from local DC and then nodes from other DCs.
+ *
+ * <b>Note:</b> Profile-based load balancing policy is disabled by default.
+ * cluster load balancing policy is used when profile does not contain a policy.
+ *
+ * @public @memberof CassExecProfile
+ *
+ * @param[in] profile
+ * @param[in] local_dc The primary data center to try first
+ * @param[in] local_rack The primary rack to try first
+ * @return CASS_OK if successful, otherwise an error occurred
+ */
+CASS_EXPORT CassError
+cass_execution_profile_set_load_balance_rack_aware(CassExecProfile* profile,
+                                                   const char* local_dc,
+                                                   const char* local_rack);
+
+
+/**
+ * Same as cass_execution_profile_set_load_balance_rack_aware(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassExecProfile
+ *
+ * @param[in] profile
+ * @param[in] local_dc
+ * @param[in] local_dc_length
+ * @return same cass_execution_profile_set_load_balance_rack_aware()
+ *
+ * @see cass_execution_profile_set_load_balance_rack_aware()
+ * @see cass_cluster_set_load_balance_rack_aware_n()
+ */
+CASS_EXPORT CassError
+cass_execution_profile_set_load_balance_rack_aware_n(CassExecProfile* profile,
+                                                     const char* local_dc,
+                                                     size_t local_dc_length,
+                                                     const char* local_rack,
+                                                     size_t local_rack_length);
+
+
 /**
  * Configures the execution profile to use token-aware request routing or not.
  *
@@ -2176,13 +2220,6 @@ cass_cluster_set_load_balance_round_robin(CassCluster* cluster);
  * For each query, all live nodes in a primary 'local' DC are tried first,
  * followed by any node from other DCs.
  *
- * <b>Note:</b> This is the default, and does not need to be called unless
- * switching an existing from another policy or changing settings.
- * Without further configuration, a default local_dc is chosen from the
- * first connected contact point, and no remote hosts are considered in
- * query plans. If relying on this mechanism, be sure to use only contact
- * points from the local DC.
- *
  * @deprecated The remote DC settings for DC-aware are not suitable for most
  * scenarios that require DC failover. There is also unhandled gap between
  * replication factor number of nodes failing and the full cluster failing. Only
@@ -2232,6 +2269,46 @@ cass_cluster_set_load_balance_dc_aware_n(CassCluster* cluster,
                                          size_t local_dc_length,
                                          unsigned used_hosts_per_remote_dc,
                                          cass_bool_t allow_remote_dcs_for_local_cl);
+
+
+/**
+ * Configures the cluster to use Rack-aware load balancing.
+ * For each query, all live nodes in a primary 'local' rack are tried first,
+ * followed by nodes from local DC and then nodes from other DCs.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] local_dc The primary data center to try first
+ * @param[in] local_rack The primary rack to try first
+ * @return CASS_OK if successful, otherwise an error occurred
+ */
+CASS_EXPORT CassError
+cass_cluster_set_load_balance_rack_aware(CassCluster* cluster,
+                                       const char* local_dc,
+                                       const char* local_rack);
+
+
+/**
+ * Same as cass_cluster_set_load_balance_rack_aware(), but with lengths for string
+ * parameters.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] local_dc
+ * @param[in] local_dc_length
+ * @return same as cass_cluster_set_load_balance_dc_aware()
+ *
+ * @see cass_cluster_set_load_balance_dc_aware()
+ */
+CASS_EXPORT CassError
+cass_cluster_set_load_balance_rack_aware_n(CassCluster* cluster,
+                                         const char* local_dc,
+                                         size_t local_dc_length,
+                                         const char* local_rack,
+                                         size_t local_rack_length);
+
 
 /**
  * Configures the cluster to use token-aware request routing or not.
