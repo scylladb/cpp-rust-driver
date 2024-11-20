@@ -27,6 +27,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
+:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
 endif
 
@@ -57,6 +58,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
+:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
 endif
 
