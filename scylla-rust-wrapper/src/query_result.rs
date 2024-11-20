@@ -24,13 +24,13 @@ pub struct CassResult {
 }
 
 pub struct CassResultData {
-    pub col_specs: Vec<ColumnSpec<'static>>,
+    pub col_names: Vec<String>,
     pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
 }
 
 impl CassResultData {
     pub fn from_result_payload(
-        col_specs: Vec<ColumnSpec<'static>>,
+        col_specs: &[ColumnSpec<'_>],
         maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
     ) -> CassResultData {
         // `maybe_col_data_types` is:
@@ -46,8 +46,13 @@ impl CassResultData {
             )
         });
 
+        let col_names = col_specs
+            .iter()
+            .map(|col_spec| col_spec.name().to_owned())
+            .collect();
+
         CassResultData {
-            col_specs,
+            col_names,
             col_data_types,
         }
     }
@@ -895,12 +900,12 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
 
     return row_from_raw
         .result_metadata
-        .col_specs
+        .col_names
         .iter()
         .enumerate()
-        .find(|(_, spec)| {
-            is_case_sensitive && spec.name() == name_str
-                || !is_case_sensitive && spec.name().eq_ignore_ascii_case(name_str)
+        .find(|(_, col_name)| {
+            is_case_sensitive && *col_name == name_str
+                || !is_case_sensitive && col_name.eq_ignore_ascii_case(name_str)
         })
         .map(|(index, _)| {
             return match row_from_raw.columns.get(index) {
@@ -921,12 +926,11 @@ pub unsafe extern "C" fn cass_result_column_name(
     let result_from_raw = ptr_to_ref(result);
     let index_usize: usize = index.try_into().unwrap();
 
-    if index_usize >= result_from_raw.metadata.col_specs.len() {
+    if index_usize >= result_from_raw.metadata.col_data_types.len() {
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     }
 
-    let column_spec: &ColumnSpec = result_from_raw.metadata.col_specs.get(index_usize).unwrap();
-    let column_name = column_spec.name();
+    let column_name = result_from_raw.metadata.col_names.get(index_usize).unwrap();
 
     write_str_to_c(column_name, name, name_length);
 
@@ -1334,7 +1338,7 @@ pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) ->
 pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    result.metadata.col_specs.len() as size_t
+    result.metadata.col_data_types.len() as size_t
 }
 
 #[no_mangle]
@@ -1411,7 +1415,7 @@ mod tests {
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
         let metadata = Arc::new(CassResultData::from_result_payload(
-            vec![
+            &[
                 col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
                 col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
                 col_spec(
@@ -1528,7 +1532,7 @@ mod tests {
     }
 
     fn create_non_rows_cass_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_result_payload(vec![], None));
+        let metadata = Arc::new(CassResultData::from_result_payload(&[], None));
         CassResult {
             rows: None,
             metadata,
