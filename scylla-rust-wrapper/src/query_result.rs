@@ -19,13 +19,13 @@ use uuid::Uuid;
 pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
     pub metadata: Arc<CassResultData>,
+    pub tracing_id: Option<Uuid>,
 }
 
 pub struct CassResultData {
     pub paging_state_response: PagingStateResponse,
     pub col_specs: Vec<ColumnSpec<'static>>,
     pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
-    pub tracing_id: Option<Uuid>,
 }
 
 impl CassResultData {
@@ -33,7 +33,6 @@ impl CassResultData {
         paging_state_response: PagingStateResponse,
         col_specs: Vec<ColumnSpec<'static>>,
         maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
-        tracing_id: Option<Uuid>,
     ) -> CassResultData {
         // `maybe_col_data_types` is:
         // - Some(_) for prepared statements executions
@@ -52,7 +51,6 @@ impl CassResultData {
             paging_state_response,
             col_specs,
             col_data_types,
-            tracing_id,
         }
     }
 }
@@ -1425,7 +1423,6 @@ mod tests {
                 ),
             ],
             None,
-            None,
         ));
 
         let rows = create_cass_rows_from_rows(
@@ -1446,6 +1443,7 @@ mod tests {
         CassResult {
             rows: Some(rows),
             metadata,
+            tracing_id: None,
         }
     }
 
@@ -1536,11 +1534,11 @@ mod tests {
             PagingStateResponse::NoMorePages,
             vec![],
             None,
-            None,
         ));
         CassResult {
             rows: None,
             metadata,
+            tracing_id: None,
         }
     }
 
