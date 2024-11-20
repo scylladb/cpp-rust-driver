@@ -23,6 +23,7 @@ pub struct CassResult {
     pub paging_state_response: PagingStateResponse,
 }
 
+#[derive(Debug)]
 pub struct CassResultData {
     pub col_specs: Vec<CassColumnSpec>,
 }

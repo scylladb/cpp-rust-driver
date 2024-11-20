@@ -300,20 +300,20 @@ pub unsafe extern "C" fn cass_session_execute(
                 // Since `query.query` is consumed, we cannot match the statement
                 // after execution, to retrieve the cached metadata in case
                 // of prepared statements.
-                Option<Arc<Vec<Arc<CassDataType>>>>,
+                Option<Arc<CassResultData>>,
             ),
             QueryError,
         >;
         let query_res: QueryRes = match statement {
             Statement::Simple(query) => {
                 // We don't store result metadata for Queries - return None.
-                let maybe_result_col_data_types = None;
+                let maybe_result_metadata = None;
 
                 if paging_enabled {
                     session
                         .query_single_page(query.query, bound_values, paging_state)
                         .await
-                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
+                        .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
                 } else {
                     session
                         .query_unpaged(query.query, bound_values)
@@ -322,21 +322,21 @@ pub unsafe extern "C" fn cass_session_execute(
                             (
                                 result,
                                 PagingStateResponse::NoMorePages,
-                                maybe_result_col_data_types,
+                                maybe_result_metadata,
                             )
                         })
                 }
             }
             Statement::Prepared(prepared) => {
-                // Clone vector of the Arc<CassDataType>, so we don't do additional allocations when constructing
-                // CassDataTypes in `CassResultData::from_result_payload`.
-                let maybe_result_col_data_types = Some(prepared.result_col_data_types.clone());
+                // Clone result metadata, so we don't need to construct it from scratch in
+                // `CassResultData::from_column_specs` - it requires a lot of allocations for complex types.
+                let maybe_result_metadata = Some(Arc::clone(&prepared.result_metadata));
 
                 if paging_enabled {
                     session
                         .execute_single_page(&prepared.statement, bound_values, paging_state)
                         .await
-                        .map(|(qr, psr)| (qr, psr, maybe_result_col_data_types))
+                        .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
                 } else {
                     session
                         .execute_unpaged(&prepared.statement, bound_values)
@@ -345,7 +345,7 @@ pub unsafe extern "C" fn cass_session_execute(
                             (
                                 result,
                                 PagingStateResponse::NoMorePages,
-                                maybe_result_col_data_types,
+                                maybe_result_metadata,
                             )
                         })
                 }
@@ -353,8 +353,13 @@ pub unsafe extern "C" fn cass_session_execute(
         };
 
         match query_res {
-            Ok((result, paging_state_response, _maybe_col_data_types)) => {
-                let metadata = Arc::new(CassResultData::from_column_specs(result.col_specs()));
+            Ok((result, paging_state_response, maybe_result_metadata)) => {
+                // maybe_result_metadata is:
+                // - Some(_) for prepared statements
+                // - None for unprepared statements
+                let metadata = maybe_result_metadata.unwrap_or_else(|| {
+                    Arc::new(CassResultData::from_column_specs(result.col_specs()))
+                });
                 let cass_rows = result
                     .rows
                     .map(|rows| create_cass_rows_from_rows(rows, &metadata));
