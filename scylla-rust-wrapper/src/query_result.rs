@@ -7,10 +7,12 @@ use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
+use crate::query_error::CassErrorResult;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::frame::response::result::{ColumnSpec, CqlValue, Row};
+use scylla::transport::query_result::{ColumnSpecs, IntoRowsResultError};
 use scylla::transport::PagingStateResponse;
 use scylla::QueryResult;
 use std::convert::TryInto;
@@ -18,11 +20,20 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct CassResult {
-    pub rows: Option<Vec<CassRow>>,
+pub enum CassResultKind {
+    NonRows,
+    Rows(CassRowsResult),
+}
+
+pub struct CassRowsResult {
+    pub rows: Vec<CassRow>,
     pub metadata: Arc<CassResultMetadata>,
+}
+
+pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
+    pub kind: CassResultKind,
 }
 
 impl CassResult {
@@ -34,21 +45,51 @@ impl CassResult {
         result: QueryResult,
         paging_state_response: PagingStateResponse,
         maybe_result_metadata: Option<Arc<CassResultMetadata>>,
-    ) -> Self {
-        // maybe_result_metadata is:
-        // - Some(_) for prepared statements
-        // - None for unprepared statements
-        let metadata = maybe_result_metadata
-            .unwrap_or_else(|| Arc::new(CassResultMetadata::from_column_specs(result.col_specs())));
-        let cass_rows = result
-            .rows
-            .map(|rows| create_cass_rows_from_rows(rows, &metadata));
+    ) -> Result<Self, CassErrorResult> {
+        match result.into_rows_result() {
+            Ok(rows_result) => {
+                // maybe_result_metadata is:
+                // - Some(_) for prepared statements
+                // - None for unprepared statements
+                let metadata = maybe_result_metadata.unwrap_or_else(|| {
+                    Arc::new(CassResultMetadata::from_column_spec_views(
+                        rows_result.column_specs(),
+                    ))
+                });
 
-        CassResult {
-            rows: cass_rows,
-            metadata,
-            tracing_id: result.tracing_id,
-            paging_state_response,
+                // For now, let's eagerly deserialize rows into type-erased CqlValues.
+                // Lazy deserialization requires a non-trivial refactor that needs to be discussed.
+                let rows: Vec<Row> = rows_result
+                    .rows::<Row>()
+                    // SAFETY: this unwrap is safe, because `Row` always
+                    // passes the typecheck, no matter the type of the columns.
+                    .unwrap()
+                    .collect::<Result<_, _>>()?;
+                let cass_rows = create_cass_rows_from_rows(rows, &metadata);
+
+                let cass_result = CassResult {
+                    tracing_id: rows_result.tracing_id(),
+                    paging_state_response,
+                    kind: CassResultKind::Rows(CassRowsResult {
+                        rows: cass_rows,
+                        metadata,
+                    }),
+                };
+
+                Ok(cass_result)
+            }
+            Err(IntoRowsResultError::ResultNotRows(result)) => {
+                let cass_result = CassResult {
+                    tracing_id: result.tracing_id(),
+                    paging_state_response,
+                    kind: CassResultKind::NonRows,
+                };
+
+                Ok(cass_result)
+            }
+            Err(IntoRowsResultError::ResultMetadataLazyDeserializationError(err)) => {
+                Err(err.into())
+            }
         }
     }
 }
@@ -60,6 +101,30 @@ pub struct CassResultMetadata {
 
 impl CassResultMetadata {
     pub fn from_column_specs(col_specs: &[ColumnSpec<'_>]) -> CassResultMetadata {
+        let col_specs = col_specs
+            .iter()
+            .map(|col_spec| {
+                let name = col_spec.name().to_owned();
+                let data_type = Arc::new(get_column_type(col_spec.typ()));
+
+                CassColumnSpec { name, data_type }
+            })
+            .collect();
+
+        CassResultMetadata { col_specs }
+    }
+
+    // I don't like introducing this method, but there is a discrepancy
+    // between the types representing column specs returned from
+    // `QueryRowsResult::column_specs()` (returns ColumnSpecs<'_>) and
+    // `PreparedStatement::get_result_set_col_specs()` (returns &[ColumnSpec<'_>).
+    //
+    // I tried to workaround it with accepting a generic type, such as iterator,
+    // but then again, types of items we are iterating over differ as well -
+    // ColumnSpecView<'_> vs ColumnSpec<'_>.
+    //
+    // This should probably be adjusted on rust-driver side.
+    pub fn from_column_spec_views(col_specs: ColumnSpecs<'_>) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
             .map(|col_spec| {
@@ -311,9 +376,11 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             result_iterator.position = Some(new_pos);
 
-            match &result_iterator.result.rows {
-                Some(rs) => (new_pos < rs.len()) as cass_bool_t,
-                None => false as cass_bool_t,
+            match &result_iterator.result.kind {
+                CassResultKind::Rows(rows_result) => {
+                    (new_pos < rows_result.rows.len()) as cass_bool_t
+                }
+                CassResultKind::NonRows => false as cass_bool_t,
             }
         }
         CassIterator::CassRowIterator(row_iterator) => {
@@ -410,12 +477,11 @@ pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) ->
             None => return std::ptr::null(),
         };
 
-        let row: &CassRow = match result_iterator
-            .result
-            .rows
-            .as_ref()
-            .and_then(|rs| rs.get(iter_position))
-        {
+        let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result_iterator.result.kind else {
+            return std::ptr::null();
+        };
+
+        let row: &CassRow = match rows.get(iter_position) {
             Some(row) => row,
             None => return std::ptr::null(),
         };
@@ -1068,16 +1134,15 @@ pub unsafe extern "C" fn cass_result_column_name(
     let result_from_raw = ptr_to_ref(result);
     let index_usize: usize = index.try_into().unwrap();
 
-    if index_usize >= result_from_raw.metadata.col_specs.len() {
+    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
+        return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
+    };
+
+    if index_usize >= metadata.col_specs.len() {
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     }
 
-    let column_name = &result_from_raw
-        .metadata
-        .col_specs
-        .get(index_usize)
-        .unwrap()
-        .name;
+    let column_name = &metadata.col_specs.get(index_usize).unwrap().name;
 
     write_str_to_c(column_name, name, name_length);
 
@@ -1106,8 +1171,11 @@ pub unsafe extern "C" fn cass_result_column_data_type(
         .try_into()
         .expect("Provided index is out of bounds. Max possible value is usize::MAX");
 
-    result_from_raw
-        .metadata
+    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
+        return std::ptr::null();
+    };
+
+    metadata
         .col_specs
         .get(index_usize)
         .map(|col_spec| Arc::as_ptr(&col_spec.data_type))
@@ -1474,28 +1542,33 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    if result.rows.as_ref().is_none() {
+    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
         return 0;
-    }
+    };
 
-    result.rows.as_ref().unwrap().len() as size_t
+    rows.len() as size_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
     let result = ptr_to_ref(result_raw);
 
-    result.metadata.col_specs.len() as size_t
+    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result.kind else {
+        return 0;
+    };
+
+    metadata.col_specs.len() as size_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
     let result = ptr_to_ref(result_raw);
 
-    result
-        .rows
-        .as_ref()
-        .and_then(|rows| rows.first())
+    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
+        return std::ptr::null();
+    };
+
+    rows.first()
         .map(|row| row as *const CassRow)
         .unwrap_or(std::ptr::null())
 }
@@ -1552,7 +1625,7 @@ mod tests {
 
     use super::{
         cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows, CassResult,
-        CassResultMetadata,
+        CassResultKind, CassResultMetadata, CassRowsResult,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
@@ -1588,10 +1661,9 @@ mod tests {
         );
 
         CassResult {
-            rows: Some(rows),
-            metadata,
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
+            kind: CassResultKind::Rows(CassRowsResult { rows, metadata }),
         }
     }
 
@@ -1678,12 +1750,10 @@ mod tests {
     }
 
     fn create_non_rows_cass_result() -> CassResult {
-        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[]));
         CassResult {
-            rows: None,
-            metadata,
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
+            kind: CassResultKind::NonRows,
         }
     }
 

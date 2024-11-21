@@ -12,6 +12,16 @@ impl ToCassError for CassErrorResult {
     fn to_cass_error(&self) -> CassError {
         match self {
             CassErrorResult::Query(query_error) => query_error.to_cass_error(),
+
+            // TODO:
+            // For now let's leave these as LIB_INVALID_DATA.
+            // I don't see any variants that would make more sense.
+            // TBH, I'm almost sure that we should introduce additional enum variants
+            // of CassError in the future ~ muzarski.
+            CassErrorResult::ResultMetadataLazyDeserialization(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_DATA
+            }
+            CassErrorResult::Deserialization(_) => CassError::CASS_ERROR_LIB_INVALID_DATA,
         }
     }
 }

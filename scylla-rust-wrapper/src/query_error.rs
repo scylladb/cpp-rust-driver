@@ -3,6 +3,8 @@ use crate::cass_error::*;
 use crate::cass_error_types::CassWriteType;
 use crate::cass_types::CassConsistency;
 use crate::types::*;
+use scylla::deserialize::DeserializationError;
+use scylla::frame::frame_errors::ResultMetadataAndRowsCountParseError;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
 use thiserror::Error;
@@ -11,6 +13,10 @@ use thiserror::Error;
 pub enum CassErrorResult {
     #[error(transparent)]
     Query(#[from] QueryError),
+    #[error(transparent)]
+    ResultMetadataLazyDeserialization(#[from] ResultMetadataAndRowsCountParseError),
+    #[error("Failed to deserialize rows: {0}")]
+    Deserialization(#[from] DeserializationError),
 }
 
 impl From<Consistency> for CassConsistency {

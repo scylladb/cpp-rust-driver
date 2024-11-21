@@ -9,7 +9,7 @@ use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
 use crate::prepared::CassPrepared;
-use crate::query_result::{CassResult, CassResultMetadata};
+use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
 use crate::statement::CassStatement;
 use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
@@ -217,10 +217,9 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
             Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
-                rows: None,
-                metadata: Arc::new(CassResultMetadata::from_column_specs(&[])),
                 tracing_id: None,
                 paging_state_response: PagingStateResponse::NoMorePages,
+                kind: CassResultKind::NonRows,
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
         }
@@ -352,13 +351,14 @@ pub unsafe extern "C" fn cass_session_execute(
 
         match query_res {
             Ok((result, paging_state_response, maybe_result_metadata)) => {
-                let cass_result = Arc::new(CassResult::from_result_payload(
+                match CassResult::from_result_payload(
                     result,
                     paging_state_response,
                     maybe_result_metadata,
-                ));
-
-                Ok(CassResultValue::QueryResult(cass_result))
+                ) {
+                    Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+                    Err(e) => Ok(CassResultValue::QueryError(Arc::new(e))),
+                }
             }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
         }
