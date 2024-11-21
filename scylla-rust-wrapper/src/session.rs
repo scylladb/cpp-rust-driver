@@ -224,7 +224,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
                 tracing_id: None,
                 paging_state_response: PagingStateResponse::NoMorePages,
             }))),
-            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
+            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
         }
     };
 
@@ -243,7 +243,7 @@ async fn request_with_timeout(
     match tokio::time::timeout(Duration::from_millis(request_timeout_ms), future).await {
         Ok(result) => result,
         Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
-            QueryError::TimeoutError,
+            QueryError::TimeoutError.into(),
         ))),
     }
 }
@@ -372,7 +372,7 @@ pub unsafe extern "C" fn cass_session_execute(
 
                 Ok(CassResultValue::QueryResult(cass_result))
             }
-            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err))),
+            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
         }
     };
 

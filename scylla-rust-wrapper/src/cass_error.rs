@@ -2,6 +2,16 @@ use scylla::transport::errors::*;
 
 // Re-export error types.
 pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
+use crate::query_error::CassErrorResult;
+
+// TODO: From<ref> is bad practice. Will be replaced in the next commit.
+impl From<&CassErrorResult> for CassError {
+    fn from(error: &CassErrorResult) -> Self {
+        match error {
+            CassErrorResult::Query(query_error) => CassError::from(query_error),
+        }
+    }
+}
 
 impl From<&QueryError> for CassError {
     fn from(error: &QueryError) -> Self {
@@ -131,6 +141,12 @@ impl From<&BadKeyspaceName> for CassError {
 
 pub trait CassErrorMessage {
     fn msg(&self) -> String;
+}
+
+impl CassErrorMessage for CassErrorResult {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
 }
 
 impl CassErrorMessage for QueryError {
