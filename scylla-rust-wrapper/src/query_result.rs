@@ -7,10 +7,12 @@ use crate::inet::CassInet;
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
+use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
-use scylla::frame::response::result::{ColumnSpec, CqlValue};
+use scylla::frame::response::result::{ColumnSpec, CqlValue, Row};
 use scylla::transport::PagingStateResponse;
+use scylla::QueryResult;
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -21,6 +23,34 @@ pub struct CassResult {
     pub metadata: Arc<CassResultMetadata>,
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
+}
+
+impl CassResult {
+    /// It creates CassResult object based on the:
+    /// - query result
+    /// - paging state response
+    /// - optional cached result metadata - it's provided for prepared statements
+    pub fn from_result_payload(
+        result: QueryResult,
+        paging_state_response: PagingStateResponse,
+        maybe_result_metadata: Option<Arc<CassResultMetadata>>,
+    ) -> Self {
+        // maybe_result_metadata is:
+        // - Some(_) for prepared statements
+        // - None for unprepared statements
+        let metadata = maybe_result_metadata
+            .unwrap_or_else(|| Arc::new(CassResultMetadata::from_column_specs(result.col_specs())));
+        let cass_rows = result
+            .rows
+            .map(|rows| create_cass_rows_from_rows(rows, &metadata));
+
+        CassResult {
+            rows: cass_rows,
+            metadata,
+            tracing_id: result.tracing_id,
+            paging_state_response,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -51,6 +81,18 @@ pub struct CassRow {
     pub result_metadata: Arc<CassResultMetadata>,
 }
 
+pub fn create_cass_rows_from_rows(
+    rows: Vec<Row>,
+    metadata: &Arc<CassResultMetadata>,
+) -> Vec<CassRow> {
+    rows.into_iter()
+        .map(|r| CassRow {
+            columns: create_cass_row_columns(r, metadata),
+            result_metadata: metadata.clone(),
+        })
+        .collect()
+}
+
 pub enum Value {
     RegularValue(CqlValue),
     CollectionValue(Collection),
@@ -71,6 +113,120 @@ pub enum Collection {
 pub struct CassValue {
     pub value: Option<Value>,
     pub value_type: Arc<CassDataType>,
+}
+
+fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
+    row.columns
+        .into_iter()
+        .zip(metadata.col_specs.iter())
+        .map(|(val, col_spec)| {
+            let column_type = Arc::clone(&col_spec.data_type);
+            CassValue {
+                value: val.map(|col_val| get_column_value(col_val, &column_type)),
+                value_type: column_type,
+            }
+        })
+        .collect()
+}
+
+fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
+    match (column, column_type.as_ref()) {
+        (
+            CqlValue::List(list),
+            CassDataType::List {
+                typ: Some(list_type),
+                ..
+            },
+        ) => CollectionValue(Collection::List(
+            list.into_iter()
+                .map(|val| CassValue {
+                    value_type: list_type.clone(),
+                    value: Some(get_column_value(val, list_type)),
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Map(map),
+            CassDataType::Map {
+                typ: MapDataType::KeyAndValue(key_type, value_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Map(
+            map.into_iter()
+                .map(|(key, val)| {
+                    (
+                        CassValue {
+                            value_type: key_type.clone(),
+                            value: Some(get_column_value(key, key_type)),
+                        },
+                        CassValue {
+                            value_type: value_type.clone(),
+                            value: Some(get_column_value(val, value_type)),
+                        },
+                    )
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::Set(set),
+            CassDataType::Set {
+                typ: Some(set_type),
+                ..
+            },
+        ) => CollectionValue(Collection::Set(
+            set.into_iter()
+                .map(|val| CassValue {
+                    value_type: set_type.clone(),
+                    value: Some(get_column_value(val, set_type)),
+                })
+                .collect(),
+        )),
+        (
+            CqlValue::UserDefinedType {
+                keyspace,
+                type_name,
+                fields,
+            },
+            CassDataType::UDT(udt_type),
+        ) => CollectionValue(Collection::UserDefinedType {
+            keyspace,
+            type_name,
+            fields: fields
+                .into_iter()
+                .enumerate()
+                .map(|(index, (name, val_opt))| {
+                    let udt_field_type_opt = udt_type.get_field_by_index(index);
+                    if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
+                        return (
+                            name,
+                            Some(CassValue {
+                                value_type: udt_field_type.clone(),
+                                value: Some(get_column_value(val, udt_field_type)),
+                            }),
+                        );
+                    }
+                    (name, None)
+                })
+                .collect(),
+        }),
+        (CqlValue::Tuple(tuple), CassDataType::Tuple(tuple_types)) => {
+            CollectionValue(Collection::Tuple(
+                tuple
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, val_opt)| {
+                        val_opt
+                            .zip(tuple_types.get(index))
+                            .map(|(val, tuple_field_type)| CassValue {
+                                value_type: tuple_field_type.clone(),
+                                value: Some(get_column_value(val, tuple_field_type)),
+                            })
+                    })
+                    .collect(),
+            ))
+        }
+        (regular_value, _) => RegularValue(regular_value),
+    }
 }
 
 pub struct CassResultIterator {
@@ -1392,11 +1548,11 @@ mod tests {
             cass_result_column_data_type, cass_result_column_name, cass_result_first_row,
             ptr_to_cstr_n, ptr_to_ref, size_t,
         },
-        session::create_cass_rows_from_rows,
     };
 
     use super::{
-        cass_result_column_count, cass_result_column_type, CassResult, CassResultMetadata,
+        cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows, CassResult,
+        CassResultMetadata,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
