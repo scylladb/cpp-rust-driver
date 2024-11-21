@@ -5,6 +5,7 @@ use crate::{
     argconv::*,
     cass_error::CassError,
     cass_types::{get_column_type, CassDataType},
+    query_result::CassResultMetadata,
     statement::{CassStatement, Statement},
     types::size_t,
 };
@@ -14,11 +15,10 @@ use scylla::prepared_statement::PreparedStatement;
 pub struct CassPrepared {
     // Data types of columns from PreparedMetadata.
     pub variable_col_data_types: Vec<Arc<CassDataType>>,
-    // Data types of columns from ResultMetadata.
-    //
-    // Arc<CassDataType> -> to share each data type with other structs such as `CassValue`
-    // Arc<Vec<...>> -> to share the whole vector with `CassResultData`.
-    pub result_col_data_types: Arc<Vec<Arc<CassDataType>>>,
+
+    // Cached result metadata. Arc'ed since we want to share it
+    // with result metadata after execution.
+    pub result_metadata: Arc<CassResultMetadata>,
     pub statement: PreparedStatement,
 }
 
@@ -30,17 +30,13 @@ impl CassPrepared {
             .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
             .collect();
 
-        let result_col_data_types: Arc<Vec<Arc<CassDataType>>> = Arc::new(
-            statement
-                .get_result_set_col_specs()
-                .iter()
-                .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
-                .collect(),
-        );
+        let result_metadata = Arc::new(CassResultMetadata::from_column_specs(
+            statement.get_result_set_col_specs(),
+        ));
 
         Self {
             variable_col_data_types,
-            result_col_data_types,
+            result_metadata,
             statement,
         }
     }

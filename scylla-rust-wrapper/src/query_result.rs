@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::{
-    cass_data_type_type, get_column_type, CassDataType, CassValueType, MapDataType,
+    cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassValueType, MapDataType,
 };
 use crate::inet::CassInet;
 use crate::metadata::{
@@ -18,42 +18,29 @@ use uuid::Uuid;
 
 pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
-    pub metadata: Arc<CassResultData>,
-}
-
-pub struct CassResultData {
-    pub paging_state_response: PagingStateResponse,
-    pub col_specs: Vec<ColumnSpec<'static>>,
-    pub col_data_types: Arc<Vec<Arc<CassDataType>>>,
+    pub metadata: Arc<CassResultMetadata>,
     pub tracing_id: Option<Uuid>,
+    pub paging_state_response: PagingStateResponse,
 }
 
-impl CassResultData {
-    pub fn from_result_payload(
-        paging_state_response: PagingStateResponse,
-        col_specs: Vec<ColumnSpec<'static>>,
-        maybe_col_data_types: Option<Arc<Vec<Arc<CassDataType>>>>,
-        tracing_id: Option<Uuid>,
-    ) -> CassResultData {
-        // `maybe_col_data_types` is:
-        // - Some(_) for prepared statements executions
-        // - None for unprepared (simple) queries executions
-        let col_data_types = maybe_col_data_types.unwrap_or_else(|| {
-            // This allocation is unfortunately necessary, because of the type of CassResultData::col_data_types.
-            Arc::new(
-                col_specs
-                    .iter()
-                    .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
-                    .collect(),
-            )
-        });
+#[derive(Debug)]
+pub struct CassResultMetadata {
+    pub col_specs: Vec<CassColumnSpec>,
+}
 
-        CassResultData {
-            paging_state_response,
-            col_specs,
-            col_data_types,
-            tracing_id,
-        }
+impl CassResultMetadata {
+    pub fn from_column_specs(col_specs: &[ColumnSpec<'_>]) -> CassResultMetadata {
+        let col_specs = col_specs
+            .iter()
+            .map(|col_spec| {
+                let name = col_spec.name().to_owned();
+                let data_type = Arc::new(get_column_type(col_spec.typ()));
+
+                CassColumnSpec { name, data_type }
+            })
+            .collect();
+
+        CassResultMetadata { col_specs }
     }
 }
 
@@ -61,7 +48,7 @@ impl CassResultData {
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow {
     pub columns: Vec<CassValue>,
-    pub result_metadata: Arc<CassResultData>,
+    pub result_metadata: Arc<CassResultMetadata>,
 }
 
 pub enum Value {
@@ -851,7 +838,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
     let result = ptr_to_ref(result);
-    (!result.metadata.paging_state_response.finished()) as cass_bool_t
+    (!result.paging_state_response.finished()) as cass_bool_t
 }
 
 #[no_mangle]
@@ -902,9 +889,9 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
         .col_specs
         .iter()
         .enumerate()
-        .find(|(_, spec)| {
-            is_case_sensitive && spec.name() == name_str
-                || !is_case_sensitive && spec.name().eq_ignore_ascii_case(name_str)
+        .find(|(_, col_spec)| {
+            is_case_sensitive && col_spec.name == name_str
+                || !is_case_sensitive && col_spec.name.eq_ignore_ascii_case(name_str)
         })
         .map(|(index, _)| {
             return match row_from_raw.columns.get(index) {
@@ -929,8 +916,12 @@ pub unsafe extern "C" fn cass_result_column_name(
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     }
 
-    let column_spec: &ColumnSpec = result_from_raw.metadata.col_specs.get(index_usize).unwrap();
-    let column_name = column_spec.name();
+    let column_name = &result_from_raw
+        .metadata
+        .col_specs
+        .get(index_usize)
+        .unwrap()
+        .name;
 
     write_str_to_c(column_name, name, name_length);
 
@@ -961,9 +952,9 @@ pub unsafe extern "C" fn cass_result_column_data_type(
 
     result_from_raw
         .metadata
-        .col_data_types
+        .col_specs
         .get(index_usize)
-        .map(Arc::as_ptr)
+        .map(|col_spec| Arc::as_ptr(&col_spec.data_type))
         .unwrap_or(std::ptr::null())
 }
 
@@ -1365,7 +1356,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
     let result_from_raw = ptr_to_ref(result);
 
-    match &result_from_raw.metadata.paging_state_response {
+    match &result_from_raw.paging_state_response {
         PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
             Some(result_paging_state) => {
                 *paging_state_size = result_paging_state.len() as u64;
@@ -1404,7 +1395,9 @@ mod tests {
         session::create_cass_rows_from_rows,
     };
 
-    use super::{cass_result_column_count, cass_result_column_type, CassResult, CassResultData};
+    use super::{
+        cass_result_column_count, cass_result_column_type, CassResult, CassResultMetadata,
+    };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
         ColumnSpec::borrowed(name, typ, TableSpec::borrowed("ks", "tbl"))
@@ -1414,19 +1407,14 @@ mod tests {
     const SECOND_COLUMN_NAME: &str = "varint_col";
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_result_payload(
-            PagingStateResponse::NoMorePages,
-            vec![
-                col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
-                col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
-                col_spec(
-                    THIRD_COLUMN_NAME,
-                    ColumnType::List(Box::new(ColumnType::Double)),
-                ),
-            ],
-            None,
-            None,
-        ));
+        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[
+            col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
+            col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
+            col_spec(
+                THIRD_COLUMN_NAME,
+                ColumnType::List(Box::new(ColumnType::Double)),
+            ),
+        ]));
 
         let rows = create_cass_rows_from_rows(
             vec![Row {
@@ -1446,6 +1434,8 @@ mod tests {
         CassResult {
             rows: Some(rows),
             metadata,
+            tracing_id: None,
+            paging_state_response: PagingStateResponse::NoMorePages,
         }
     }
 
@@ -1532,15 +1522,12 @@ mod tests {
     }
 
     fn create_non_rows_cass_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_result_payload(
-            PagingStateResponse::NoMorePages,
-            vec![],
-            None,
-            None,
-        ));
+        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[]));
         CassResult {
             rows: None,
             metadata,
+            tracing_id: None,
+            paging_state_response: PagingStateResponse::NoMorePages,
         }
     }
 

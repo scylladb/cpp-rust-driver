@@ -138,6 +138,12 @@ pub enum MapDataType {
     KeyAndValue(Arc<CassDataType>, Arc<CassDataType>),
 }
 
+#[derive(Debug)]
+pub struct CassColumnSpec {
+    pub name: String,
+    pub data_type: Arc<CassDataType>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CassDataType {
     Value(CassValueType),
