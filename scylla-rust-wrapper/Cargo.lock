@@ -1077,6 +1077,7 @@ dependencies = [
  "rusty-fork",
  "scylla",
  "scylla-proxy",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
