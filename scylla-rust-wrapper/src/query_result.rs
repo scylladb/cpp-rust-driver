@@ -18,18 +18,18 @@ use uuid::Uuid;
 
 pub struct CassResult {
     pub rows: Option<Vec<CassRow>>,
-    pub metadata: Arc<CassResultData>,
+    pub metadata: Arc<CassResultMetadata>,
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
 }
 
 #[derive(Debug)]
-pub struct CassResultData {
+pub struct CassResultMetadata {
     pub col_specs: Vec<CassColumnSpec>,
 }
 
-impl CassResultData {
-    pub fn from_column_specs(col_specs: &[ColumnSpec<'_>]) -> CassResultData {
+impl CassResultMetadata {
+    pub fn from_column_specs(col_specs: &[ColumnSpec<'_>]) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
             .map(|col_spec| {
@@ -40,7 +40,7 @@ impl CassResultData {
             })
             .collect();
 
-        CassResultData { col_specs }
+        CassResultMetadata { col_specs }
     }
 }
 
@@ -48,7 +48,7 @@ impl CassResultData {
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow {
     pub columns: Vec<CassValue>,
-    pub result_metadata: Arc<CassResultData>,
+    pub result_metadata: Arc<CassResultMetadata>,
 }
 
 pub enum Value {
@@ -1395,7 +1395,9 @@ mod tests {
         session::create_cass_rows_from_rows,
     };
 
-    use super::{cass_result_column_count, cass_result_column_type, CassResult, CassResultData};
+    use super::{
+        cass_result_column_count, cass_result_column_type, CassResult, CassResultMetadata,
+    };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
         ColumnSpec::borrowed(name, typ, TableSpec::borrowed("ks", "tbl"))
@@ -1405,7 +1407,7 @@ mod tests {
     const SECOND_COLUMN_NAME: &str = "varint_col";
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_column_specs(&[
+        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[
             col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
             col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
             col_spec(
@@ -1520,7 +1522,7 @@ mod tests {
     }
 
     fn create_non_rows_cass_result() -> CassResult {
-        let metadata = Arc::new(CassResultData::from_column_specs(&[]));
+        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[]));
         CassResult {
             rows: None,
             metadata,

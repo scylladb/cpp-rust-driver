@@ -5,7 +5,7 @@ use crate::{
     argconv::*,
     cass_error::CassError,
     cass_types::{get_column_type, CassDataType},
-    query_result::CassResultData,
+    query_result::CassResultMetadata,
     statement::{CassStatement, Statement},
     types::size_t,
 };
@@ -18,7 +18,7 @@ pub struct CassPrepared {
 
     // Cached result metadata. Arc'ed since we want to share it
     // with result metadata after execution.
-    pub result_metadata: Arc<CassResultData>,
+    pub result_metadata: Arc<CassResultMetadata>,
     pub statement: PreparedStatement,
 }
 
@@ -30,7 +30,7 @@ impl CassPrepared {
             .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
             .collect();
 
-        let result_metadata = Arc::new(CassResultData::from_column_specs(
+        let result_metadata = Arc::new(CassResultMetadata::from_column_specs(
             statement.get_result_set_col_specs(),
         ));
 
