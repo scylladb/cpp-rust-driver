@@ -128,7 +128,7 @@ impl CassSessionInner {
         let session = session_builder
             .build()
             .await
-            .map_err(|err| (CassError::from(&err), err.msg()))?;
+            .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
         *session_guard = Some(CassSessionInner {
             session,
@@ -538,7 +538,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         let prepared = session
             .prepare(query.query.clone())
             .await
-            .map_err(|err| (CassError::from(&err), err.msg()))?;
+            .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
         Ok(CassResultValue::Prepared(Arc::new(
             CassPrepared::new_from_prepared_statement(prepared),
@@ -582,7 +582,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         let mut prepared = session
             .prepare(query)
             .await
-            .map_err(|err| (CassError::from(&err), err.msg()))?;
+            .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
         // Set Cpp Driver default configuration for queries:
         prepared.set_consistency(Consistency::One);

@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_error::CassErrorMessage;
+use crate::cass_error::ToCassError;
 use crate::prepared::CassPrepared;
 use crate::query_error::CassErrorResult;
 use crate::query_result::CassResult;
@@ -320,7 +321,7 @@ pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cas
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_error_code(future_raw: *const CassFuture) -> CassError {
     ptr_to_ref(future_raw).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(CassResultValue::QueryError(err)) => CassError::from(err.as_ref()),
+        Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
         Err((err, _)) => *err,
         _ => CassError::CASS_OK,
     })

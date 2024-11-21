@@ -55,7 +55,7 @@ pub unsafe extern "C" fn cass_error_result_free(error_result: *const CassErrorRe
 #[no_mangle]
 pub unsafe extern "C" fn cass_error_result_code(error_result: *const CassErrorResult) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
-    CassError::from(error_result)
+    error_result.to_cass_error()
 }
 
 #[no_mangle]
