@@ -2,12 +2,35 @@ use scylla::transport::errors::*;
 
 // Re-export error types.
 pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
+use crate::query_error::CassErrorResult;
 
-impl From<&QueryError> for CassError {
-    fn from(error: &QueryError) -> Self {
-        match error {
-            QueryError::DbError(db_error, _string) => CassError::from(db_error),
-            QueryError::BadQuery(bad_query) => CassError::from(bad_query),
+pub trait ToCassError {
+    fn to_cass_error(&self) -> CassError;
+}
+
+impl ToCassError for CassErrorResult {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            CassErrorResult::Query(query_error) => query_error.to_cass_error(),
+
+            // TODO:
+            // For now let's leave these as LIB_INVALID_DATA.
+            // I don't see any variants that would make more sense.
+            // TBH, I'm almost sure that we should introduce additional enum variants
+            // of CassError in the future ~ muzarski.
+            CassErrorResult::ResultMetadataLazyDeserialization(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_DATA
+            }
+            CassErrorResult::Deserialization(_) => CassError::CASS_ERROR_LIB_INVALID_DATA,
+        }
+    }
+}
+
+impl ToCassError for QueryError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            QueryError::DbError(db_error, _string) => db_error.to_cass_error(),
+            QueryError::BadQuery(bad_query) => bad_query.to_cass_error(),
             QueryError::ProtocolError(_str) => CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR,
             QueryError::TimeoutError => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT, // This may be either read or write timeout error
             QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
@@ -32,9 +55,9 @@ impl From<&QueryError> for CassError {
     }
 }
 
-impl From<&DbError> for CassError {
-    fn from(error: &DbError) -> Self {
-        match error {
+impl ToCassError for DbError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
             DbError::ServerError => CassError::CASS_ERROR_SERVER_SERVER_ERROR,
             DbError::ProtocolError => CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR,
             DbError::AuthenticationError => CassError::CASS_ERROR_SERVER_BAD_CREDENTIALS,
@@ -62,9 +85,9 @@ impl From<&DbError> for CassError {
     }
 }
 
-impl From<&BadQuery> for CassError {
-    fn from(error: &BadQuery) -> Self {
-        match error {
+impl ToCassError for BadQuery {
+    fn to_cass_error(&self) -> CassError {
+        match self {
             BadQuery::SerializeValuesError(_serialize_values_error) => {
                 CassError::CASS_ERROR_LAST_ENTRY
             }
@@ -81,9 +104,9 @@ impl From<&BadQuery> for CassError {
     }
 }
 
-impl From<&NewSessionError> for CassError {
-    fn from(error: &NewSessionError) -> Self {
-        match error {
+impl ToCassError for NewSessionError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
             NewSessionError::FailedToResolveAnyHostname(_hostnames) => {
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
@@ -117,9 +140,9 @@ impl From<&NewSessionError> for CassError {
     }
 }
 
-impl From<&BadKeyspaceName> for CassError {
-    fn from(error: &BadKeyspaceName) -> Self {
-        match error {
+impl ToCassError for BadKeyspaceName {
+    fn to_cass_error(&self) -> CassError {
+        match self {
             BadKeyspaceName::Empty => CassError::CASS_ERROR_LAST_ENTRY,
             BadKeyspaceName::TooLong(_string, _usize) => CassError::CASS_ERROR_LAST_ENTRY,
             BadKeyspaceName::IllegalCharacter(_string, _char) => CassError::CASS_ERROR_LAST_ENTRY,
@@ -131,6 +154,12 @@ impl From<&BadKeyspaceName> for CassError {
 
 pub trait CassErrorMessage {
     fn msg(&self) -> String;
+}
+
+impl CassErrorMessage for CassErrorResult {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
 }
 
 impl CassErrorMessage for QueryError {

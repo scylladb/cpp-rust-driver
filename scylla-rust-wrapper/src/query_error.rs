@@ -3,10 +3,21 @@ use crate::cass_error::*;
 use crate::cass_error_types::CassWriteType;
 use crate::cass_types::CassConsistency;
 use crate::types::*;
+use scylla::deserialize::DeserializationError;
+use scylla::frame::frame_errors::ResultMetadataAndRowsCountParseError;
 use scylla::statement::Consistency;
 use scylla::transport::errors::*;
+use thiserror::Error;
 
-pub type CassErrorResult = QueryError;
+#[derive(Error, Debug)]
+pub enum CassErrorResult {
+    #[error(transparent)]
+    Query(#[from] QueryError),
+    #[error(transparent)]
+    ResultMetadataLazyDeserialization(#[from] ResultMetadataAndRowsCountParseError),
+    #[error("Failed to deserialize rows: {0}")]
+    Deserialization(#[from] DeserializationError),
+}
 
 impl From<Consistency> for CassConsistency {
     fn from(c: Consistency) -> CassConsistency {
@@ -50,7 +61,7 @@ pub unsafe extern "C" fn cass_error_result_free(error_result: *const CassErrorRe
 #[no_mangle]
 pub unsafe extern "C" fn cass_error_result_code(error_result: *const CassErrorResult) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
-    CassError::from(error_result)
+    error_result.to_cass_error()
 }
 
 #[no_mangle]
@@ -59,21 +70,26 @@ pub unsafe extern "C" fn cass_error_result_consistency(
 ) -> CassConsistency {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::Unavailable { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
-        }
-        QueryError::DbError(DbError::ReadTimeout { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
-        }
-        QueryError::DbError(DbError::WriteTimeout { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
-        }
-        QueryError::DbError(DbError::ReadFailure { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
-        }
-        QueryError::DbError(DbError::WriteFailure { consistency, .. }, _) => {
-            CassConsistency::from(*consistency)
-        }
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::Unavailable { consistency, .. },
+            _,
+        )) => CassConsistency::from(*consistency),
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::ReadTimeout { consistency, .. },
+            _,
+        )) => CassConsistency::from(*consistency),
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::WriteTimeout { consistency, .. },
+            _,
+        )) => CassConsistency::from(*consistency),
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::ReadFailure { consistency, .. },
+            _,
+        )) => CassConsistency::from(*consistency),
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::WriteFailure { consistency, .. },
+            _,
+        )) => CassConsistency::from(*consistency),
         _ => CassConsistency::CASS_CONSISTENCY_UNKNOWN,
     }
 }
@@ -84,11 +100,21 @@ pub unsafe extern "C" fn cass_error_result_responses_received(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::Unavailable { alive, .. }, _) => *alive,
-        QueryError::DbError(DbError::ReadTimeout { received, .. }, _) => *received,
-        QueryError::DbError(DbError::WriteTimeout { received, .. }, _) => *received,
-        QueryError::DbError(DbError::ReadFailure { received, .. }, _) => *received,
-        QueryError::DbError(DbError::WriteFailure { received, .. }, _) => *received,
+        CassErrorResult::Query(QueryError::DbError(DbError::Unavailable { alive, .. }, _)) => {
+            *alive
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::ReadTimeout { received, .. }, _)) => {
+            *received
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::WriteTimeout { received, .. }, _)) => {
+            *received
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::ReadFailure { received, .. }, _)) => {
+            *received
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::WriteFailure { received, .. }, _)) => {
+            *received
+        }
         _ => -1,
     }
 }
@@ -99,11 +125,21 @@ pub unsafe extern "C" fn cass_error_result_responses_required(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::Unavailable { required, .. }, _) => *required,
-        QueryError::DbError(DbError::ReadTimeout { required, .. }, _) => *required,
-        QueryError::DbError(DbError::WriteTimeout { required, .. }, _) => *required,
-        QueryError::DbError(DbError::ReadFailure { required, .. }, _) => *required,
-        QueryError::DbError(DbError::WriteFailure { required, .. }, _) => *required,
+        CassErrorResult::Query(QueryError::DbError(DbError::Unavailable { required, .. }, _)) => {
+            *required
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::ReadTimeout { required, .. }, _)) => {
+            *required
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::WriteTimeout { required, .. }, _)) => {
+            *required
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::ReadFailure { required, .. }, _)) => {
+            *required
+        }
+        CassErrorResult::Query(QueryError::DbError(DbError::WriteFailure { required, .. }, _)) => {
+            *required
+        }
         _ => -1,
     }
 }
@@ -114,8 +150,14 @@ pub unsafe extern "C" fn cass_error_result_num_failures(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::ReadFailure { numfailures, .. }, _) => *numfailures,
-        QueryError::DbError(DbError::WriteFailure { numfailures, .. }, _) => *numfailures,
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::ReadFailure { numfailures, .. },
+            _,
+        )) => *numfailures,
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::WriteFailure { numfailures, .. },
+            _,
+        )) => *numfailures,
         _ => -1,
     }
 }
@@ -126,14 +168,20 @@ pub unsafe extern "C" fn cass_error_result_data_present(
 ) -> cass_bool_t {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::ReadTimeout { data_present, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::ReadTimeout { data_present, .. },
+            _,
+        )) => {
             if *data_present {
                 cass_true
             } else {
                 cass_false
             }
         }
-        QueryError::DbError(DbError::ReadFailure { data_present, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::ReadFailure { data_present, .. },
+            _,
+        )) => {
             if *data_present {
                 cass_true
             } else {
@@ -150,12 +198,14 @@ pub unsafe extern "C" fn cass_error_result_write_type(
 ) -> CassWriteType {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::WriteTimeout { write_type, .. }, _) => {
-            CassWriteType::from(write_type)
-        }
-        QueryError::DbError(DbError::WriteFailure { write_type, .. }, _) => {
-            CassWriteType::from(write_type)
-        }
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::WriteTimeout { write_type, .. },
+            _,
+        )) => CassWriteType::from(write_type),
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::WriteFailure { write_type, .. },
+            _,
+        )) => CassWriteType::from(write_type),
         _ => CassWriteType::CASS_WRITE_TYPE_UNKNOWN,
     }
 }
@@ -168,11 +218,14 @@ pub unsafe extern "C" fn cass_error_result_keyspace(
 ) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::AlreadyExists { keyspace, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(DbError::AlreadyExists { keyspace, .. }, _)) => {
             write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len);
             CassError::CASS_OK
         }
-        QueryError::DbError(DbError::FunctionFailure { keyspace, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::FunctionFailure { keyspace, .. },
+            _,
+        )) => {
             write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len);
             CassError::CASS_OK
         }
@@ -188,7 +241,7 @@ pub unsafe extern "C" fn cass_error_result_table(
 ) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::AlreadyExists { table, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(DbError::AlreadyExists { table, .. }, _)) => {
             write_str_to_c(table.as_str(), c_table, c_table_len);
             CassError::CASS_OK
         }
@@ -204,7 +257,10 @@ pub unsafe extern "C" fn cass_error_result_function(
 ) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::FunctionFailure { function, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::FunctionFailure { function, .. },
+            _,
+        )) => {
             write_str_to_c(function.as_str(), c_function, c_function_len);
             CassError::CASS_OK
         }
@@ -216,9 +272,10 @@ pub unsafe extern "C" fn cass_error_result_function(
 pub unsafe extern "C" fn cass_error_num_arg_types(error_result: *const CassErrorResult) -> size_t {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::FunctionFailure { arg_types, .. }, _) => {
-            arg_types.len() as size_t
-        }
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::FunctionFailure { arg_types, .. },
+            _,
+        )) => arg_types.len() as size_t,
         _ => 0,
     }
 }
@@ -232,7 +289,10 @@ pub unsafe extern "C" fn cass_error_result_arg_type(
 ) -> CassError {
     let error_result: &CassErrorResult = ptr_to_ref(error_result);
     match error_result {
-        QueryError::DbError(DbError::FunctionFailure { arg_types, .. }, _) => {
+        CassErrorResult::Query(QueryError::DbError(
+            DbError::FunctionFailure { arg_types, .. },
+            _,
+        )) => {
             if index >= arg_types.len() as size_t {
                 return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
             }
