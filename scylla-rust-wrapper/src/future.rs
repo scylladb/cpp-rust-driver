@@ -75,8 +75,8 @@ struct JoinHandleTimeout(JoinHandle<()>);
 impl CassFuture {
     pub fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
-    ) -> *mut CassFuture {
-        Self::new_from_future(fut).into_raw() as *mut _
+    ) -> CassSharedOwnedPtr<CassFuture> {
+        Self::new_from_future(fut).into_raw()
     }
 
     pub fn new_from_future(
@@ -97,7 +97,7 @@ impl CassFuture {
             };
             if let Some(bound_cb) = maybe_cb {
                 let fut_ptr = ArcFFI::as_ptr(&cass_fut_clone);
-                bound_cb.invoke(fut_ptr);
+                bound_cb.invoke(ArcFFI::to_raw(&fut_ptr));
             }
 
             cass_fut_clone.wait_for_value.notify_all();
@@ -282,7 +282,7 @@ impl CassFuture {
         CassError::CASS_OK
     }
 
-    fn into_raw(self: Arc<Self>) -> *const Self {
+    fn into_raw(self: Arc<Self>) -> CassSharedOwnedPtr<Self> {
         ArcFFI::into_ptr(self)
     }
 }
@@ -295,31 +295,38 @@ impl CheckSendSync for CassFuture {}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_set_callback(
-    future_raw: *const CassFuture,
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
     callback: CassFutureCallback,
     data: *mut ::std::os::raw::c_void,
 ) -> CassError {
-    ArcFFI::as_ref(future_raw).set_callback(future_raw, callback, data)
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
+        .set_callback(ArcFFI::to_raw(&future_raw), callback, data)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
-    ArcFFI::as_ref(future_raw).with_waited_result(|_| ());
+pub unsafe extern "C" fn cass_future_wait(future_raw: CassSharedBorrowedPtr<CassFuture>) {
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
+        .with_waited_result(|_| ());
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_wait_timed(
-    future_raw: *const CassFuture,
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
     timeout_us: cass_duration_t,
 ) -> cass_bool_t {
-    ArcFFI::as_ref(future_raw)
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
         .with_waited_result_timed(|_| (), Duration::from_micros(timeout_us))
         .is_ok() as cass_bool_t
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cass_bool_t {
-    let state_guard = ArcFFI::as_ref(future_raw).state.lock().unwrap();
+pub unsafe extern "C" fn cass_future_ready(
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
+) -> cass_bool_t {
+    let state_guard = ArcFFI::as_ref(&future_raw).unwrap().state.lock().unwrap();
     match state_guard.value {
         None => cass_false,
         Some(_) => cass_true,
@@ -327,95 +334,106 @@ pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cas
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_error_code(future_raw: *const CassFuture) -> CassError {
-    ArcFFI::as_ref(future_raw).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
-        Err((err, _)) => *err,
-        _ => CassError::CASS_OK,
-    })
+pub unsafe extern "C" fn cass_future_error_code(
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
+) -> CassError {
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
+        .with_waited_result(|r: &mut CassFutureResult| match r {
+            Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
+            Err((err, _)) => *err,
+            _ => CassError::CASS_OK,
+        })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_error_message(
-    future: *mut CassFuture,
+    future: CassSharedBorrowedPtr<CassFuture>,
     message: *mut *const ::std::os::raw::c_char,
     message_length: *mut size_t,
 ) {
-    ArcFFI::as_ref(future).with_waited_state(|state: &mut CassFutureState| {
-        let value = &state.value;
-        let msg = state
-            .err_string
-            .get_or_insert_with(|| match value.as_ref().unwrap() {
-                Ok(CassResultValue::QueryError(err)) => err.msg(),
-                Err((_, s)) => s.msg(),
-                _ => "".to_string(),
-            });
-        write_str_to_c(msg.as_str(), message, message_length);
-    });
+    ArcFFI::as_ref(&future)
+        .unwrap()
+        .with_waited_state(|state: &mut CassFutureState| {
+            let value = &state.value;
+            let msg = state
+                .err_string
+                .get_or_insert_with(|| match value.as_ref().unwrap() {
+                    Ok(CassResultValue::QueryError(err)) => err.msg(),
+                    Err((_, s)) => s.msg(),
+                    _ => "".to_string(),
+                });
+            write_str_to_c(msg.as_str(), message, message_length);
+        });
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_free(future_raw: *const CassFuture) {
+pub unsafe extern "C" fn cass_future_free(future_raw: CassSharedOwnedPtr<CassFuture>) {
     ArcFFI::free(future_raw);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_get_result(
-    future_raw: *const CassFuture,
-) -> *const CassResult {
-    ArcFFI::as_ref(future_raw)
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
+) -> CassSharedOwnedPtr<CassResult> {
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(qr.clone()),
                 _ => None,
             }
         })
-        .map_or(std::ptr::null(), ArcFFI::into_ptr)
+        .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_get_error_result(
-    future_raw: *const CassFuture,
-) -> *const CassErrorResult {
-    ArcFFI::as_ref(future_raw)
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
+) -> CassSharedOwnedPtr<CassErrorResult> {
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryError(qr) => Some(qr.clone()),
                 _ => None,
             }
         })
-        .map_or(std::ptr::null(), ArcFFI::into_ptr)
+        .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_get_prepared(
-    future_raw: *mut CassFuture,
-) -> *const CassPrepared {
-    ArcFFI::as_ref(future_raw)
+    future_raw: CassSharedBorrowedPtr<CassFuture>,
+) -> CassSharedOwnedPtr<CassPrepared> {
+    ArcFFI::as_ref(&future_raw)
+        .unwrap()
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassPrepared>> {
             match r.as_ref().ok()? {
                 CassResultValue::Prepared(p) => Some(p.clone()),
                 _ => None,
             }
         })
-        .map_or(std::ptr::null(), ArcFFI::into_ptr)
+        .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_tracing_id(
-    future: *const CassFuture,
+    future: CassSharedBorrowedPtr<CassFuture>,
     tracing_id: *mut CassUuid,
 ) -> CassError {
-    ArcFFI::as_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
-        Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
-            Some(id) => {
-                *tracing_id = CassUuid::from(id);
-                CassError::CASS_OK
-            }
-            None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
-        },
-        _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
-    })
+    ArcFFI::as_ref(&future)
+        .unwrap()
+        .with_waited_result(|r: &mut CassFutureResult| match r {
+            Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
+                Some(id) => {
+                    *tracing_id = CassUuid::from(id);
+                    CassError::CASS_OK
+                }
+                None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
+            },
+            _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
+        })
 }
 
 #[cfg(test)]
@@ -443,9 +461,9 @@ mod tests {
         };
         let cass_fut = CassFuture::make_raw(fut);
 
-        struct PtrWrapper(*mut CassFuture);
+        struct PtrWrapper(CassSharedOwnedPtr<CassFuture>);
         unsafe impl Send for PtrWrapper {}
-        let wrapped_cass_fut = PtrWrapper(cass_fut);
+        let wrapped_cass_fut = PtrWrapper(unsafe { cass_fut.clone() });
         unsafe {
             let handle = thread::spawn(move || {
                 let wrapper = wrapped_cass_fut;
@@ -473,12 +491,16 @@ mod tests {
         let cass_fut = CassFuture::make_raw(fut);
 
         unsafe {
+            let cass_fut_borrowed = cass_fut.clone().into_borrowed();
+
             // This should timeout on tokio::time::timeout.
-            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            let timed_result =
+                cass_future_wait_timed(cass_fut_borrowed.clone(), HUNDRED_MILLIS_IN_MICROS / 5);
             assert_eq!(0, timed_result);
 
             // This should timeout as well.
-            let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+            let timed_result =
+                cass_future_wait_timed(cass_fut_borrowed.clone(), HUNDRED_MILLIS_IN_MICROS / 5);
             assert_eq!(0, timed_result);
 
             // Verify that future eventually resolves, even though timeouts occurred before.
@@ -516,7 +538,11 @@ mod tests {
                 let flag_ptr = Box::into_raw(flag);
 
                 assert_cass_error_eq!(
-                    cass_future_set_callback(cass_fut, Some(mark_flag_cb), flag_ptr as *mut c_void),
+                    cass_future_set_callback(
+                        cass_fut.clone().into_borrowed(),
+                        Some(mark_flag_cb),
+                        flag_ptr as *mut c_void
+                    ),
                     CassError::CASS_OK
                 );
 
@@ -526,7 +552,7 @@ mod tests {
             // Callback executed after awaiting.
             {
                 let (cass_fut, flag_ptr) = create_future_and_flag();
-                cass_future_wait(cass_fut);
+                cass_future_wait(cass_fut.clone().into_borrowed());
 
                 assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
                 assert!(*flag_ptr);
@@ -551,10 +577,16 @@ mod tests {
                 let (cass_fut, flag_ptr) = create_future_and_flag();
 
                 // This should timeout on tokio::time::timeout.
-                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                let timed_result = cass_future_wait_timed(
+                    cass_fut.clone().into_borrowed(),
+                    HUNDRED_MILLIS_IN_MICROS / 5,
+                );
                 assert_eq!(0, timed_result);
                 // This should timeout as well.
-                let timed_result = cass_future_wait_timed(cass_fut, HUNDRED_MILLIS_IN_MICROS / 5);
+                let timed_result = cass_future_wait_timed(
+                    cass_fut.clone().into_borrowed(),
+                    HUNDRED_MILLIS_IN_MICROS / 5,
+                );
                 assert_eq!(0, timed_result);
 
                 // Await and check result.

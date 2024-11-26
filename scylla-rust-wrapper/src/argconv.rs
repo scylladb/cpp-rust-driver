@@ -503,29 +503,46 @@ impl<T: Sized> CassBorrowedPtr<T> {
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI {
-    fn into_ptr(self: Box<Self>) -> *mut Self {
-        #[allow(clippy::disallowed_methods)]
-        Box::into_raw(self)
+pub trait BoxFFI: Sized {
+    /// Consumes the Box and returns a pointer with exclusive ownership.
+    fn into_ptr<M: Mutability>(self: Box<Self>) -> CassExclusivePtr<Self, M> {
+        CassExclusivePtr::from_box(self)
     }
-    unsafe fn from_ptr(ptr: *mut Self) -> Box<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Box::from_raw(ptr)
+
+    /// Consumes the pointer with exclusive ownership back to the Box.
+    fn from_ptr<M: Mutability>(ptr: CassExclusivePtr<Self, M>) -> Option<Box<Self>> {
+        ptr.into_box()
     }
-    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
-        #[allow(clippy::disallowed_methods)]
+
+    /// Creates a reference from an exclusive pointer.
+    /// Reference inherits the lifetime of the pointer's borrow.
+    fn as_ref<M: Mutability>(ptr: &CassExclusivePtr<Self, M>) -> Option<&Self> {
         ptr.as_ref()
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
+
+    /// Creates a lifetime-erased (thus, unsafe) reference from an exclusive pointer.
+    unsafe fn into_ref<'a, M: Mutability>(ptr: CassExclusivePtr<Self, M>) -> Option<&'a Self> {
+        ptr.into_ref()
     }
-    unsafe fn as_mut_ref<'a>(ptr: *mut Self) -> &'a mut Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_mut().unwrap()
+
+    /// Creates a mutable from an exlusive pointer.
+    /// Reference inherits the lifetime of the pointer's mutable borrow.
+    fn as_mut_ref(ptr: &mut CassExclusiveMutPtr<Self>) -> Option<&mut Self> {
+        ptr.as_mut_ref()
     }
-    unsafe fn free(ptr: *mut Self) {
+
+    /// Frees the pointee.
+    fn free(ptr: CassExclusiveMutPtr<Self>) {
         std::mem::drop(BoxFFI::from_ptr(ptr));
+    }
+
+    #[cfg(test)]
+    fn null() -> CassExclusiveConstPtr<Self> {
+        CassExclusiveConstPtr::null()
+    }
+
+    fn null_mut() -> CassExclusiveMutPtr<Self> {
+        CassExclusiveMutPtr::null_mut()
     }
 }
 
@@ -535,35 +552,61 @@ pub trait BoxFFI {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI {
-    fn as_ptr(self: &Arc<Self>) -> *const Self {
-        #[allow(clippy::disallowed_methods)]
-        Arc::as_ptr(self)
+pub trait ArcFFI: Sized {
+    /// Creates a pointer from a valid reference to Arc-allocated data.
+    /// The pointer is [`Borrowed`].
+    fn as_ptr(self: &Arc<Self>) -> CassSharedBorrowedPtr<Self> {
+        CassSharedBorrowedPtr::from_ref(self)
     }
-    fn into_ptr(self: Arc<Self>) -> *const Self {
-        #[allow(clippy::disallowed_methods)]
-        Arc::into_raw(self)
+
+    /// Creates a pointer from a valid Arc allocation.
+    /// The pointer is [`Owned`].
+    fn into_ptr(self: Arc<Self>) -> CassSharedOwnedPtr<Self> {
+        CassSharedOwnedPtr::from_arc(self)
     }
-    unsafe fn from_ptr(ptr: *const Self) -> Arc<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Arc::from_raw(ptr)
+
+    /// Converts shared owned pointer back to owned Arc.
+    fn from_ptr(ptr: CassSharedOwnedPtr<Self>) -> Option<Arc<Self>> {
+        ptr.into_arc()
     }
-    unsafe fn cloned_from_ptr(ptr: *const Self) -> Arc<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Arc::increment_strong_count(ptr);
-        #[allow(clippy::disallowed_methods)]
-        Arc::from_raw(ptr)
+
+    /// Increases the reference count of the pointer, and returns an owned Arc.
+    /// User needs to ensure that owner of the borrowed pointee is alive, thus unsafe.
+    unsafe fn cloned_from_ptr(ptr: CassSharedBorrowedPtr<Self>) -> Option<Arc<Self>> {
+        ptr.clone_arced()
     }
-    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
-        #[allow(clippy::disallowed_methods)]
+
+    /// Converts a shared borrowed pointer to reference.
+    /// The reference inherits the lifetime of pointer's borrow.
+    /// User needs to ensure that owner of the borrowed pointee is alive, thus unsafe.
+    unsafe fn as_ref(ptr: &CassSharedBorrowedPtr<Self>) -> Option<&Self> {
         ptr.as_ref()
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
+
+    /// Converts a shared borrowed pointer to reference.
+    /// The reference is lifetime-erased and user needs to
+    /// ensure that owner of the borrowed pointee is alive, thus unsafe.
+    unsafe fn into_ref<'a>(ptr: CassSharedBorrowedPtr<Self>) -> Option<&'a Self> {
+        ptr.into_ref()
     }
-    unsafe fn free(ptr: *const Self) {
+
+    /// Converts the shared owned pointer to raw pointer.
+    fn to_raw<Own: Ownership>(ptr: &CassSharedPtr<Self, Own>) -> *const Self {
+        ptr.as_raw()
+    }
+
+    /// Decreases the reference count (and potentially frees) of the
+    /// [`Owned`] shared pointer.
+    fn free(ptr: CassSharedOwnedPtr<Self>) {
         std::mem::drop(ArcFFI::from_ptr(ptr));
+    }
+
+    fn null<Own: Ownership>() -> CassSharedPtr<Self, Own> {
+        CassSharedPtr::null()
+    }
+
+    fn is_null<Own: Ownership>(ptr: &CassSharedPtr<Self, Own>) -> bool {
+        ptr.is_null()
     }
 }
 
@@ -575,12 +618,31 @@ pub trait ArcFFI {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI {
-    fn as_ptr(&self) -> *const Self {
-        self as *const Self
+pub trait RefFFI: Sized {
+    /// Creates a borrowed pointer from a valid reference.
+    fn as_ptr(&self) -> CassBorrowedPtr<Self> {
+        CassBorrowedPtr::from_ref(self)
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
+
+    /// Converts a borrowed pointer to reference.
+    /// The reference inherits the lifetime of pointer's borrow.
+    /// User needs to ensure that owner of the borrowed pointee is alive, thus unsafe.
+    unsafe fn as_ref(ptr: &CassBorrowedPtr<Self>) -> Option<&Self> {
+        ptr.as_ref()
+    }
+
+    /// Converts a borrowed pointer to reference.
+    /// The reference is lifetime-erased and user needs to
+    /// ensure that owner of the borrowed pointee is alive, thus unsafe.
+    unsafe fn into_ref<'a>(ptr: CassBorrowedPtr<Self>) -> Option<&'a Self> {
+        ptr.into_ref()
+    }
+
+    fn null() -> CassBorrowedPtr<Self> {
+        CassBorrowedPtr::null()
+    }
+
+    fn is_null(ptr: &CassBorrowedPtr<Self>) -> bool {
+        ptr.is_null()
     }
 }
