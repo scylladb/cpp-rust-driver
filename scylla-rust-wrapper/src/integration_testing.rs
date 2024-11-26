@@ -1,34 +1,34 @@
 use std::ffi::{c_char, CString};
 
-use crate::{
-    argconv::BoxFFI,
-    cluster::CassCluster,
-    types::{cass_int32_t, cass_uint16_t, size_t},
-};
+use crate::argconv::{BoxFFI, CMut, CassBorrowedExclusivePtr};
+use crate::cluster::CassCluster;
+use crate::types::{cass_int32_t, cass_uint16_t, size_t};
 
 #[no_mangle]
 pub unsafe extern "C" fn testing_cluster_get_connect_timeout(
-    cluster_raw: *const CassCluster,
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) -> cass_uint16_t {
-    let cluster = BoxFFI::as_ref(cluster_raw);
+    let cluster = BoxFFI::as_ref(cluster_raw).unwrap();
 
     cluster.get_session_config().connect_timeout.as_millis() as cass_uint16_t
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn testing_cluster_get_port(cluster_raw: *const CassCluster) -> cass_int32_t {
-    let cluster = BoxFFI::as_ref(cluster_raw);
+pub unsafe extern "C" fn testing_cluster_get_port(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+) -> cass_int32_t {
+    let cluster = BoxFFI::as_ref(cluster_raw).unwrap();
 
     cluster.get_port() as cass_int32_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn testing_cluster_get_contact_points(
-    cluster_raw: *const CassCluster,
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     contact_points: *mut *mut c_char,
     contact_points_length: *mut size_t,
 ) {
-    let cluster = BoxFFI::as_ref(cluster_raw);
+    let cluster = BoxFFI::as_ref(cluster_raw).unwrap();
 
     let contact_points_string = cluster.get_contact_points().join(",");
     let length = contact_points_string.len();
