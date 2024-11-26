@@ -427,7 +427,14 @@ pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
     view_meta: *const CassMaterializedViewMeta,
 ) -> *const CassTableMeta {
     let view_meta = RefFFI::as_ref(view_meta);
-    view_meta.base_table.as_ptr()
+
+    match view_meta.base_table.upgrade() {
+        Some(arc) => RefFFI::as_ptr(&arc),
+        None => {
+            tracing::error!("Failed to upgrade a weak reference to table metadata from materialized view metadata! This is a driver bug!");
+            std::ptr::null()
+        }
+    }
 }
 
 #[no_mangle]
