@@ -31,7 +31,8 @@ use crate::cass_types::{CassDataType, CassValueType};
 ///
 /// There is no such method as `cass_statement_bind_counter`, and so
 /// we need to serialize the counter value using `CassCqlValue::BigInt`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum CassCqlValue {
     TinyInt(i8),
     SmallInt(i16),

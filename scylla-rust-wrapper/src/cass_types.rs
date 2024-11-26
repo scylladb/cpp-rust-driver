@@ -16,7 +16,8 @@ pub(crate) use crate::cass_batch_types::CassBatchType;
 pub(crate) use crate::cass_consistency_types::CassConsistency;
 pub(crate) use crate::cass_data_types::CassValueType;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct UDTDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, Arc<CassDataType>)>,
@@ -137,7 +138,8 @@ impl Default for UDTDataType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum MapDataType {
     Untyped,
     Key(Arc<CassDataType>),
@@ -150,7 +152,8 @@ pub struct CassColumnSpec {
     pub data_type: Arc<CassDataType>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum CassDataTypeInner {
     Value(CassValueType),
     UDT(UDTDataType),
@@ -260,11 +263,13 @@ impl CassDataTypeInner {
 pub struct CassDataType(UnsafeCell<CassDataTypeInner>);
 
 /// PartialEq and Eq for test purposes.
+#[cfg(test)]
 impl PartialEq for CassDataType {
     fn eq(&self, other: &Self) -> bool {
         unsafe { self.get_unchecked() == other.get_unchecked() }
     }
 }
+#[cfg(test)]
 impl Eq for CassDataType {}
 
 unsafe impl Sync for CassDataType {}
