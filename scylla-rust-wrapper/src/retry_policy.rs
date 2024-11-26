@@ -3,7 +3,7 @@ use scylla::policies::retry::{
 };
 use std::sync::Arc;
 
-use crate::argconv::ArcFFI;
+use crate::argconv::{ArcFFI, CassOwnedPtr};
 
 pub enum RetryPolicy {
     DefaultRetryPolicy(Arc<DefaultRetryPolicy>),
@@ -16,27 +16,28 @@ pub type CassRetryPolicy = RetryPolicy;
 impl ArcFFI for CassRetryPolicy {}
 
 #[no_mangle]
-pub extern "C" fn cass_retry_policy_default_new() -> *const CassRetryPolicy {
+pub extern "C" fn cass_retry_policy_default_new() -> CassOwnedPtr<CassRetryPolicy> {
     ArcFFI::into_ptr(Arc::new(RetryPolicy::DefaultRetryPolicy(Arc::new(
         DefaultRetryPolicy,
     ))))
 }
 
 #[no_mangle]
-pub extern "C" fn cass_retry_policy_downgrading_consistency_new() -> *const CassRetryPolicy {
+pub extern "C" fn cass_retry_policy_downgrading_consistency_new(
+) -> CassOwnedPtr<CassRetryPolicy> {
     ArcFFI::into_ptr(Arc::new(RetryPolicy::DowngradingConsistencyRetryPolicy(
         Arc::new(DowngradingConsistencyRetryPolicy),
     )))
 }
 
 #[no_mangle]
-pub extern "C" fn cass_retry_policy_fallthrough_new() -> *const CassRetryPolicy {
+pub extern "C" fn cass_retry_policy_fallthrough_new() -> CassOwnedPtr<CassRetryPolicy> {
     ArcFFI::into_ptr(Arc::new(RetryPolicy::FallthroughRetryPolicy(Arc::new(
         FallthroughRetryPolicy,
     ))))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_retry_policy_free(retry_policy: *const CassRetryPolicy) {
+pub unsafe extern "C" fn cass_retry_policy_free(retry_policy: CassOwnedPtr<CassRetryPolicy>) {
     ArcFFI::free(retry_policy);
 }
