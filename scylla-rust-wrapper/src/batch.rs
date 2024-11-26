@@ -1,4 +1,4 @@
-use crate::argconv::{ArcFFI, BoxFFI};
+use crate::argconv::{ArcFFI, BoxFFI, CMut, CassBorrowedMutPtr, CassBorrowedPtr, CassOwnedMutPtr};
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cass_types::{make_batch_type, CassBatchType};
@@ -28,7 +28,7 @@ pub struct CassBatchState {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_batch_new(type_: CassBatchType) -> *mut CassBatch {
+pub unsafe extern "C" fn cass_batch_new(type_: CassBatchType) -> CassOwnedMutPtr<CassBatch, CMut> {
     if let Some(batch_type) = make_batch_type(type_) {
         BoxFFI::into_ptr(Box::new(CassBatch {
             state: Arc::new(CassBatchState {
@@ -39,21 +39,21 @@ pub unsafe extern "C" fn cass_batch_new(type_: CassBatchType) -> *mut CassBatch 
             exec_profile: None,
         }))
     } else {
-        std::ptr::null_mut()
+        BoxFFI::null_mut()
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_batch_free(batch: *mut CassBatch) {
+pub unsafe extern "C" fn cass_batch_free(batch: CassOwnedMutPtr<CassBatch, CMut>) {
     BoxFFI::free(batch);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_consistency(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     consistency: CassConsistency,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     let consistency = match consistency.try_into().ok() {
         Some(c) => c,
         None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -67,10 +67,10 @@ pub unsafe extern "C" fn cass_batch_set_consistency(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_serial_consistency(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     let serial_consistency = match serial_consistency.try_into().ok() {
         Some(c) => c,
         None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -84,13 +84,13 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_retry_policy(
-    batch: *mut CassBatch,
-    retry_policy: *const CassRetryPolicy,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
+    retry_policy: CassBorrowedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
 
     let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
-        ArcFFI::as_maybe_ref(retry_policy).map(|policy| match policy {
+        ArcFFI::as_ref(retry_policy).map(|policy| match policy {
             CassRetryPolicy::DefaultRetryPolicy(default) => {
                 default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
             }
@@ -107,10 +107,10 @@ pub unsafe extern "C" fn cass_batch_set_retry_policy(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_timestamp(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     timestamp: cass_int64_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
 
     Arc::make_mut(&mut batch.state)
         .batch
@@ -121,10 +121,10 @@ pub unsafe extern "C" fn cass_batch_set_timestamp(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_request_timeout(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     batch.batch_request_timeout_ms = Some(timeout_ms);
 
     CassError::CASS_OK
@@ -132,10 +132,10 @@ pub unsafe extern "C" fn cass_batch_set_request_timeout(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_is_idempotent(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     is_idempotent: cass_bool_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     Arc::make_mut(&mut batch.state)
         .batch
         .set_is_idempotent(is_idempotent != 0);
@@ -145,10 +145,10 @@ pub unsafe extern "C" fn cass_batch_set_is_idempotent(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_set_tracing(
-    batch: *mut CassBatch,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
     enabled: cass_bool_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     Arc::make_mut(&mut batch.state)
         .batch
         .set_tracing(enabled != 0);
@@ -158,12 +158,12 @@ pub unsafe extern "C" fn cass_batch_set_tracing(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_batch_add_statement(
-    batch: *mut CassBatch,
-    statement: *const CassStatement,
+    batch: CassBorrowedMutPtr<CassBatch, CMut>,
+    statement: CassBorrowedPtr<CassStatement, CMut>,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch);
+    let batch = BoxFFI::as_mut_ref(batch).unwrap();
     let state = Arc::make_mut(&mut batch.state);
-    let statement = BoxFFI::as_ref(statement);
+    let statement = BoxFFI::as_ref(statement).unwrap();
 
     match &statement.statement {
         BoundStatement::Simple(q) => {
