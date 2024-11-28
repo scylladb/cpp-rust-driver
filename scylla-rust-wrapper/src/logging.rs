@@ -113,7 +113,7 @@ where
             severity: (*event.metadata().level()).into(),
             file: target.as_ptr() as *const c_char,
             line: event.metadata().line().unwrap_or(0) as i32,
-            function: "\0".as_ptr() as *const c_char, // ignored, as cannot be fetched from event metadata
+            function: c"".as_ptr() as *const c_char, // ignored, as cannot be fetched from event metadata
             message: str_to_arr(message),
         };
 

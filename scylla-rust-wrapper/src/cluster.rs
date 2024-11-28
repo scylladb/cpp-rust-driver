@@ -1070,6 +1070,8 @@ mod tests {
                     );
 
                     // empty strings
+                    // Allow it, since c"" somehow clashes with #[ntest] proc macro...
+                    #[allow(clippy::manual_c_str_literals)]
                     let empty_str = "\0".as_ptr() as *const i8;
                     assert_cass_error_eq!(
                         cass_cluster_set_load_balance_dc_aware(cluster_raw, std::ptr::null(), 0, 0),

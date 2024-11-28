@@ -528,7 +528,7 @@ mod tests {
                     assert_cass_error_eq!(
                         cass_execution_profile_set_load_balance_dc_aware(
                             profile_raw,
-                            "eu\0".as_ptr() as *const i8,
+                            c"eu".as_ptr(),
                             0,
                             0
                         ),
@@ -562,7 +562,7 @@ mod tests {
                     assert_cass_error_eq!(
                         cass_execution_profile_set_load_balance_dc_aware(
                             profile_raw,
-                            "eu\0".as_ptr() as *const i8,
+                            c"eu".as_ptr(),
                             1,
                             0
                         ),
@@ -571,7 +571,7 @@ mod tests {
                     assert_cass_error_eq!(
                         cass_execution_profile_set_load_balance_dc_aware(
                             profile_raw,
-                            "eu\0".as_ptr() as *const i8,
+                            c"eu".as_ptr(),
                             0,
                             1
                         ),
