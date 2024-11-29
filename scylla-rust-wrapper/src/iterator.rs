@@ -1,6 +1,6 @@
 use crate::argconv::{
     write_str_to_c, ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
-    CassOwnedExclusivePtr, RefFFI,
+    CassOwnedExclusivePtr, FromBox, RefFFI, FFI,
 };
 use crate::cass_error::CassError;
 use crate::cass_types::{CassDataType, CassValueType};
@@ -117,7 +117,9 @@ pub enum CassIterator<'result_or_schema> {
     ColumnsMeta(CassColumnsMetaIterator<'result_or_schema>),
 }
 
-impl BoxFFI for CassIterator<'_> {}
+impl FFI for CassIterator<'_> {
+    type Origin = FromBox;
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: CassOwnedExclusivePtr<CassIterator, CMut>) {

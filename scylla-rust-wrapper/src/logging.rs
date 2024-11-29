@@ -1,4 +1,6 @@
-use crate::argconv::{arr_to_cstr, ptr_to_cstr, str_to_arr, CConst, CassBorrowedSharedPtr, RefFFI};
+use crate::argconv::{
+    arr_to_cstr, ptr_to_cstr, str_to_arr, CConst, CassBorrowedSharedPtr, FromRef, RefFFI, FFI,
+};
 use crate::cass_log_types::{CassLogLevel, CassLogMessage};
 use crate::types::size_t;
 use crate::LOGGER;
@@ -14,7 +16,9 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 
-impl RefFFI for CassLogMessage {}
+impl FFI for CassLogMessage {
+    type Origin = FromRef;
+}
 
 pub type CassLogCallback = Option<
     unsafe extern "C" fn(message: CassBorrowedSharedPtr<CassLogMessage, CConst>, data: *mut c_void),

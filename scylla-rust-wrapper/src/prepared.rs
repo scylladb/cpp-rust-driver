@@ -73,7 +73,9 @@ impl CassPrepared {
     }
 }
 
-impl ArcFFI for CassPrepared {}
+impl FFI for CassPrepared {
+    type Origin = FromArc;
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_free(

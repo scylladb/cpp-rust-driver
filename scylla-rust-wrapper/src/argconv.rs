@@ -326,12 +326,18 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
     }
 }
 
+mod origin_sealed {
+    pub trait FromBoxSealed {}
+    pub trait FromArcSealed {}
+    pub trait FromRefSealed {}
+}
+
 /// Defines a pointer manipulation API for non-shared heap-allocated data.
 ///
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI: Sized {
+pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
     /// Consumes the Box and returns a pointer with exclusive ownership.
     /// The pointer needs to be freed. See [`BoxFFI::free()`].
     fn into_ptr<CM: CMutability>(self: Box<Self>) -> CassPtr<'static, Self, (Exclusive, CM)> {
@@ -405,7 +411,7 @@ pub trait BoxFFI: Sized {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI: Sized {
+pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
     fn as_ptr<'a, CM: CMutability>(self: &'a Arc<Self>) -> CassPtr<'a, Self, (Shared, CM)> {
@@ -495,7 +501,7 @@ pub trait ArcFFI: Sized {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI: Sized {
+pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
     /// Creates a borrowed pointer from a valid reference.
     #[allow(clippy::needless_lifetimes)]
     fn as_ptr<'a, CM: CMutability>(&'a self) -> CassPtr<'a, Self, (Shared, CM)> {
@@ -514,11 +520,14 @@ pub trait RefFFI: Sized {
     ///
     /// ## Why this method is unsafe? - Example
     /// ```
-    /// # use scylla_cpp_driver::argconv::{RefFFI, CConst, CassBorrowedSharedPtr};
+    /// # use scylla_cpp_driver::argconv::{CConst, CassBorrowedSharedPtr};
+    /// # use scylla_cpp_driver::argconv::{FFI, FromRef, RefFFI};
     /// # use std::sync::{Arc, Weak};
     ///
     /// struct Foo;
-    /// impl RefFFI for Foo {}
+    /// impl FFI for Foo {
+    ///     type Origin = FromRef;
+    /// }
     ///
     /// let arc = Arc::new(Foo);
     /// let weak = Arc::downgrade(&arc);
@@ -558,11 +567,81 @@ pub trait RefFFI: Sized {
     }
 }
 
+/// This trait should be implemented for types that are passed between
+/// C and Rust API. We currently distinguish 3 kinds of implementors,
+/// wrt. the origin of the pointer. The implementor should pick one of the 3 ownership
+/// kinds as the associated type:
+/// - [`FromBox`]
+/// - [`FromArc`]
+/// - [`FromRef`]
+#[allow(clippy::upper_case_acronyms)]
+pub trait FFI {
+    type Origin;
+}
+
+/// Represents types with an exclusive ownership.
+///
+/// Use this associated type for implementors that require:
+/// - owned exclusive pointer manipulation via [`BoxFFI`]
+/// - exclusive ownership of the corresponding object
+/// - potential mutability of the corresponding object
+/// - manual memory freeing
+///
+/// C API user should be responsible for freeing associated memory manually
+/// via corresponding API call.
+///
+/// An example of such implementor would be [`CassCluster`](crate::cluster::CassCluster):
+/// - it is allocated on the heap via [`Box::new`]
+/// - user is the exclusive owner of the CassCluster object
+/// - there is no API to increase a reference count of CassCluster object
+/// - CassCluster is mutable via some API methods (`cass_cluster_set_*`)
+/// - user is responsible for freeing the associated memory (`cass_cluster_free`)
+pub struct FromBox;
+impl<T> origin_sealed::FromBoxSealed for T where T: FFI<Origin = FromBox> {}
+impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
+
+/// Represents types with a shared ownership.
+///
+/// Use this associated type for implementors that require:
+/// - pointer with shared ownership manipulation via [`ArcFFI`]
+/// - shared ownership of the corresponding object
+/// - manual memory freeing
+///
+/// C API user should be responsible for freeing (decreasing reference count of)
+/// associated memory manually via corresponding API call.
+///
+/// An example of such implementor would be [`CassDataType`](crate::cass_types::CassDataType):
+/// - it is allocated on the heap via [`Arc::new`]
+/// - there are multiple owners of the shared CassDataType object
+/// - some API functions require to increase a reference count of the object
+/// - user is responsible for freeing (decreasing RC of) the associated memory (`cass_data_type_free`)
+pub struct FromArc;
+impl<T> origin_sealed::FromArcSealed for T where T: FFI<Origin = FromArc> {}
+impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
+
+/// Represents borrowed types.
+///
+/// Use this associated type for implementors that do not require any assumptions
+/// about the pointer type (apart from validity).
+/// The implementation will enable [`CassBorrowedPtr`] manipulation via [`RefFFI`]
+///
+/// C API user is not responsible for freeing associated memory manually. The memory
+/// should be freed automatically, when the owner is being dropped.
+///
+/// An example of such implementor would be [`CassRow`](crate::query_result::CassRow):
+/// - its lifetime is tied to the lifetime of CassResult
+/// - user only "borrows" the pointer - he is not responsible for freeing the memory
+pub struct FromRef;
+impl<T> origin_sealed::FromRefSealed for T where T: FFI<Origin = FromRef> {}
+impl<T> RefFFI for T where T: FFI<Origin = FromRef> {}
+
 /// ```compile_fail,E0499
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedExclusivePtr, CMut};
-/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl BoxFFI for Foo {}
+/// impl FFI for Foo {
+///     type Origin = FromBox;
+/// }
 ///
 /// let mut ptr: CassOwnedExclusivePtr<Foo, CMut> = BoxFFI::into_ptr(Box::new(Foo));
 /// let borrowed_mut_ptr1: CassBorrowedExclusivePtr<Foo, CMut> = ptr.borrow_mut();
@@ -574,9 +653,11 @@ fn _test_box_ffi_cannot_have_two_mutable_references() {}
 
 /// ```compile_fail,E0502
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedSharedPtr, CassBorrowedExclusivePtr, CConst, CMut};
-/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl BoxFFI for Foo {}
+/// impl FFI for Foo {
+///     type Origin = FromBox;
+/// }
 ///
 /// let mut ptr: CassOwnedExclusivePtr<Foo, CMut> = BoxFFI::into_ptr(Box::new(Foo));
 /// let borrowed_mut_ptr: CassBorrowedExclusivePtr<Foo, CMut> = ptr.borrow_mut();
@@ -588,9 +669,11 @@ fn _test_box_ffi_cannot_have_mutable_and_immutable_references_at_the_same_time()
 
 /// ```compile_fail,E0505
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedSharedPtr, CMut};
-/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl BoxFFI for Foo {}
+/// impl FFI for Foo {
+///     type Origin = FromBox;
+/// }
 ///
 /// let ptr: CassOwnedExclusivePtr<Foo, CMut> = BoxFFI::into_ptr(Box::new(Foo));
 /// let borrowed_ptr: CassBorrowedSharedPtr<Foo, CMut> = ptr.borrow();
@@ -601,10 +684,12 @@ fn _test_box_ffi_cannot_free_while_having_borrowed_pointer() {}
 
 /// ```compile_fail,E0505
 /// # use scylla_cpp_driver::argconv::{CassOwnedSharedPtr, CassBorrowedSharedPtr, CConst};
-/// # use scylla_cpp_driver::argconv::ArcFFI;
+/// # use scylla_cpp_driver::argconv::{FFI, ArcFFI, FromArc};
 /// # use std::sync::Arc;
 /// struct Foo;
-/// impl ArcFFI for Foo {}
+/// impl FFI for Foo {
+///     type Origin = FromArc;
+/// }
 ///
 /// let ptr: CassOwnedSharedPtr<Foo, CConst> = ArcFFI::into_ptr(Arc::new(Foo));
 /// let borrowed_ptr: CassBorrowedSharedPtr<Foo, CConst> = ptr.borrow();
@@ -615,10 +700,12 @@ fn _test_arc_ffi_cannot_clone_after_free() {}
 
 /// ```compile_fail,E0505
 /// # use scylla_cpp_driver::argconv::{CassBorrowedSharedPtr, CConst};
-/// # use scylla_cpp_driver::argconv::ArcFFI;
+/// # use scylla_cpp_driver::argconv::{FFI, ArcFFI, FromArc};
 /// # use std::sync::Arc;
 /// struct Foo;
-/// impl ArcFFI for Foo {}
+/// impl FFI for Foo {
+///     type Origin = FromArc;
+/// }
 ///
 /// let arc = Arc::new(Foo);
 /// let borrowed_ptr: CassBorrowedSharedPtr<Foo, CConst> = ArcFFI::as_ptr(&arc);

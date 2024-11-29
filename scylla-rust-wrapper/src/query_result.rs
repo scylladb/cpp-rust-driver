@@ -92,7 +92,9 @@ impl CassResult {
     }
 }
 
-impl ArcFFI for CassResult {}
+impl FFI for CassResult {
+    type Origin = FromArc;
+}
 
 #[derive(Debug)]
 pub struct CassResultMetadata {
@@ -122,7 +124,9 @@ pub struct CassRow {
     pub result_metadata: Arc<CassResultMetadata>,
 }
 
-impl RefFFI for CassRow {}
+impl FFI for CassRow {
+    type Origin = FromRef;
+}
 
 pub fn create_cass_rows_from_rows(
     rows: Vec<Row>,
@@ -158,7 +162,9 @@ pub struct CassValue {
     pub value_type: Arc<CassDataType>,
 }
 
-impl RefFFI for CassValue {}
+impl FFI for CassValue {
+    type Origin = FromRef;
+}
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
     row.columns
