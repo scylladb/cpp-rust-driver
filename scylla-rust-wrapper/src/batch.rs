@@ -1,5 +1,6 @@
 use crate::argconv::{
     ArcFFI, BoxFFI, CassExclusiveConstPtr, CassExclusiveMutPtr, CassSharedBorrowedPtr,
+    OwnershipExclusive, FFI,
 };
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
@@ -21,7 +22,9 @@ pub struct CassBatch {
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
-impl BoxFFI for CassBatch {}
+impl FFI for CassBatch {
+    type Ownership = OwnershipExclusive;
+}
 
 #[derive(Clone)]
 pub struct CassBatchState {
