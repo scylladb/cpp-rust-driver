@@ -3,7 +3,7 @@ use scylla::policies::retry::{
 };
 use std::sync::Arc;
 
-use crate::argconv::{ArcFFI, CassOwnedPtr};
+use crate::argconv::{ArcFFI, CassOwnedPtr, FromArc, FFI};
 
 pub enum RetryPolicy {
     DefaultRetryPolicy(Arc<DefaultRetryPolicy>),
@@ -13,7 +13,9 @@ pub enum RetryPolicy {
 
 pub type CassRetryPolicy = RetryPolicy;
 
-impl ArcFFI for CassRetryPolicy {}
+impl FFI for CassRetryPolicy {
+    type Origin = FromArc;
+}
 
 #[no_mangle]
 pub extern "C" fn cass_retry_policy_default_new() -> CassOwnedPtr<CassRetryPolicy> {
@@ -23,8 +25,7 @@ pub extern "C" fn cass_retry_policy_default_new() -> CassOwnedPtr<CassRetryPolic
 }
 
 #[no_mangle]
-pub extern "C" fn cass_retry_policy_downgrading_consistency_new(
-) -> CassOwnedPtr<CassRetryPolicy> {
+pub extern "C" fn cass_retry_policy_downgrading_consistency_new() -> CassOwnedPtr<CassRetryPolicy> {
     ArcFFI::into_ptr(Arc::new(RetryPolicy::DowngradingConsistencyRetryPolicy(
         Arc::new(DowngradingConsistencyRetryPolicy),
     )))
