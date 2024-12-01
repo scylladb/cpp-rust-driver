@@ -1,7 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
-use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -14,10 +13,31 @@ pub(crate) use crate::cass_inet_types::CassInet;
 
 #[repr(u8)] // address_length field in CassInet is cass_uint8_t
 #[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone, FromPrimitive)]
+#[derive(Debug, Copy, Clone)]
 pub enum CassInetLength {
     CASS_INET_V4 = 4,
     CASS_INET_V6 = 16,
+}
+
+// Need to implement manually, because of the clippy 0.1.83 lints:
+// | `FromPrimitive` is not local
+// | move the `impl` block outside of this constant `_IMPL_NUM_FromPrimitive_FOR_CassInetLength`
+impl FromPrimitive for CassInetLength {
+    fn from_i64(n: i64) -> Option<Self> {
+        match n {
+            4 => Some(Self::CASS_INET_V4),
+            16 => Some(Self::CASS_INET_V6),
+            _ => None,
+        }
+    }
+
+    fn from_u64(n: u64) -> Option<Self> {
+        match n {
+            4 => Some(Self::CASS_INET_V4),
+            16 => Some(Self::CASS_INET_V6),
+            _ => None,
+        }
+    }
 }
 
 unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetLength) -> CassInet {

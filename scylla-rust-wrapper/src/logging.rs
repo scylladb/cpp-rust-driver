@@ -113,7 +113,7 @@ where
             severity: (*event.metadata().level()).into(),
             file: target.as_ptr() as *const c_char,
             line: event.metadata().line().unwrap_or(0) as i32,
-            function: "\0".as_ptr() as *const c_char, // ignored, as cannot be fetched from event metadata
+            function: c"".as_ptr() as *const c_char, // ignored, as cannot be fetched from event metadata
             message: str_to_arr(message),
         };
 
@@ -167,17 +167,17 @@ pub unsafe extern "C" fn cass_log_set_level(log_level: CassLogLevel) {
 #[no_mangle]
 pub unsafe extern "C" fn cass_log_level_string(log_level: CassLogLevel) -> *const c_char {
     let log_level_str = match log_level {
-        CassLogLevel::CASS_LOG_TRACE => "TRACE\0",
-        CassLogLevel::CASS_LOG_DEBUG => "DEBUG\0",
-        CassLogLevel::CASS_LOG_INFO => "INFO\0",
-        CassLogLevel::CASS_LOG_WARN => "WARN\0",
-        CassLogLevel::CASS_LOG_ERROR => "ERROR\0",
-        CassLogLevel::CASS_LOG_CRITICAL => "CRITICAL\0",
-        CassLogLevel::CASS_LOG_DISABLED => "DISABLED\0",
-        _ => "\0",
+        CassLogLevel::CASS_LOG_TRACE => c"TRACE",
+        CassLogLevel::CASS_LOG_DEBUG => c"DEBUG",
+        CassLogLevel::CASS_LOG_INFO => c"INFO",
+        CassLogLevel::CASS_LOG_WARN => c"WARN",
+        CassLogLevel::CASS_LOG_ERROR => c"ERROR",
+        CassLogLevel::CASS_LOG_CRITICAL => c"CRITICAL",
+        CassLogLevel::CASS_LOG_DISABLED => c"DISABLED",
+        _ => c"",
     };
 
-    log_level_str.as_ptr() as *const c_char
+    log_level_str.as_ptr()
 }
 
 #[no_mangle]

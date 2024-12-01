@@ -1106,7 +1106,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
         is_case_sensitive = true;
     }
 
-    return row_from_raw
+    row_from_raw
         .result_metadata
         .col_specs
         .iter()
@@ -1115,13 +1115,11 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
             is_case_sensitive && col_spec.name == name_str
                 || !is_case_sensitive && col_spec.name.eq_ignore_ascii_case(name_str)
         })
-        .map(|(index, _)| {
-            return match row_from_raw.columns.get(index) {
-                Some(value) => value as *const CassValue,
-                None => std::ptr::null(),
-            };
+        .map(|(index, _)| match row_from_raw.columns.get(index) {
+            Some(value) => value as *const CassValue,
+            None => std::ptr::null(),
         })
-        .unwrap_or(std::ptr::null());
+        .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
