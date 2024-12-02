@@ -23,7 +23,17 @@ pub struct CassPrepared {
 }
 
 impl CassPrepared {
-    pub fn new_from_prepared_statement(statement: PreparedStatement) -> Self {
+    pub fn new_from_prepared_statement(mut statement: PreparedStatement) -> Self {
+        // We already cache the metadata on cpp-rust-driver side (see CassPrepared::result_metadata field),
+        // thus we can enable the optimization on rust-driver side as well. This will prevent the server
+        // from sending redundant bytes representing a result metadata during EXECUTE.
+        //
+        // NOTE: We are aware that it makes cached metadata immutable. It is expected, though - there
+        // is an integration test for this for CQL protocol v4 (AlterDoesntUpdateColumnCount).
+        // This issue is addressed in CQL protocol v5, but Scylla doesn't support it yet, and probably
+        // won't support it in the near future.
+        statement.set_use_cached_result_metadata(true);
+
         let variable_col_data_types = statement
             .get_variable_col_specs()
             .iter()
