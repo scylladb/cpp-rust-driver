@@ -14,7 +14,6 @@ scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v0
     "ssl",
 ] }
 tokio = { version = "1.27.0", features = ["full"] }
-lazy_static = "1.4.0"
 uuid = "1.1.2"
 machine-uid = "0.2.0"
 rand = "0.8.4"
