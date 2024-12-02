@@ -2,7 +2,7 @@
 
 use crate::logging::stderr_log_callback;
 use crate::logging::Logger;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 use tokio::runtime::Runtime;
 
@@ -110,13 +110,13 @@ pub mod cass_uuid_types {
     include_bindgen_generated!("cppdriver_uuid_types.rs");
 }
 
-lazy_static! {
-    pub static ref RUNTIME: Runtime = Runtime::new().unwrap();
-    pub static ref LOGGER: RwLock<Logger> = RwLock::new(Logger {
+pub static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+pub static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
+    RwLock::new(Logger {
         cb: Some(stderr_log_callback),
         data: std::ptr::null_mut(),
-    });
-}
+    })
+});
 
 // To send a Rust object to C:
 
