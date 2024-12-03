@@ -1,3 +1,6 @@
+use scylla::deserialize::result::TypedRowIterator;
+use scylla::value::Row;
+
 use crate::argconv::{
     write_str_to_c, ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
     CassOwnedExclusivePtr, FromBox, RefFFI, FFI,
@@ -9,17 +12,19 @@ use crate::metadata::{
 };
 use crate::query_result::{
     cass_value_is_collection, cass_value_item_count, cass_value_type, CassResult, CassResultKind,
-    CassRow, CassRowsResult, CassValue, Collection, Value,
+    CassResultMetadata, CassRow, CassValue, Collection, Value,
 };
 use crate::types::{cass_bool_t, size_t};
 
 pub use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 pub struct CassRowsResultIterator<'result> {
-    result: &'result CassRowsResult,
-    position: Option<usize>,
+    iterator: TypedRowIterator<'result, 'result, Row>,
+    result_metadata: Arc<CassResultMetadata>,
+    current_row: Option<CassRow>,
 }
 
 pub enum CassResultIterator<'result> {
@@ -167,13 +172,25 @@ pub unsafe extern "C" fn cass_iterator_next(
                 return false as cass_bool_t;
             };
 
-            let new_pos: usize = rows_result_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
+            let new_row = rows_result_iterator
+                .iterator
+                .next()
+                .and_then(|res| match res {
+                    Ok(row) => Some(row),
+                    Err(e) => {
+                        // We have no way to propagate the error (return type is bool).
+                        // Let's at least log the deserialization error.
+                        tracing::error!("Failed to deserialize next row: {e}");
+                        None
+                    }
+                })
+                .map(|row| {
+                    CassRow::from_row_and_metadata(row, &rows_result_iterator.result_metadata)
+                });
 
-            rows_result_iterator.position = Some(new_pos);
+            rows_result_iterator.current_row = new_row;
 
-            (new_pos < rows_result_iterator.result.rows.len()) as cass_bool_t
+            rows_result_iterator.current_row.is_some() as cass_bool_t
         }
         CassIterator::Row(row_iterator) => {
             let new_pos: usize = row_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
@@ -266,7 +283,7 @@ pub unsafe extern "C" fn cass_iterator_next(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_row<'result>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
+    iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassRow, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
@@ -275,17 +292,11 @@ pub unsafe extern "C" fn cass_iterator_get_row<'result>(
         return RefFFI::null();
     };
 
-    let iter_position = match rows_result_iterator.position {
-        Some(pos) => pos,
-        None => return RefFFI::null(),
-    };
-
-    let row: &CassRow = match rows_result_iterator.result.rows.get(iter_position) {
-        Some(row) => row,
-        None => return RefFFI::null(),
-    };
-
-    RefFFI::as_ptr(row)
+    rows_result_iterator
+        .current_row
+        .as_ref()
+        .map(RefFFI::as_ptr)
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
@@ -648,10 +659,14 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
 
     let iterator = match &result_from_raw.kind {
         CassResultKind::NonRows => CassResultIterator::NonRows,
-        CassResultKind::Rows(rows_result) => CassResultIterator::Rows(CassRowsResultIterator {
-            result: rows_result,
-            position: None,
-        }),
+        CassResultKind::Rows(cass_rows_result) => {
+            CassResultIterator::Rows(CassRowsResultIterator {
+                // unwrap: Row always passes the typecheck.
+                iterator: cass_rows_result.raw_rows.rows_iter::<Row>().unwrap(),
+                result_metadata: Arc::clone(&cass_rows_result.metadata),
+                current_row: None,
+            })
+        }
     };
 
     BoxFFI::into_ptr(Box::new(CassIterator::Result(iterator)))

@@ -10,6 +10,7 @@ use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::errors::IntoRowsResultError;
+use scylla::frame::response::result::DeserializedMetadataAndRawRows;
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
 use scylla::value::{CqlValue, Row};
@@ -24,7 +25,8 @@ pub enum CassResultKind {
 }
 
 pub struct CassRowsResult {
-    pub rows: Vec<CassRow>,
+    pub raw_rows: DeserializedMetadataAndRawRows,
+    pub first_row: Option<CassRow>,
     pub metadata: Arc<CassResultMetadata>,
 }
 
@@ -55,21 +57,21 @@ impl CassResult {
                     ))
                 });
 
-                // For now, let's eagerly deserialize rows into type-erased CqlValues.
-                // Lazy deserialization requires a non-trivial refactor that needs to be discussed.
-                let rows: Vec<Row> = rows_result
-                    .rows::<Row>()
-                    // SAFETY: this unwrap is safe, because `Row` always
-                    // passes the typecheck, no matter the type of the columns.
+                let (raw_rows, tracing_id, _) = rows_result.into_inner();
+                let first_row = raw_rows
+                    .rows_iter::<Row>()
+                    // unwrap: Row always passes the typecheck.
                     .unwrap()
-                    .collect::<Result<_, _>>()?;
-                let cass_rows = create_cass_rows_from_rows(rows, &metadata);
+                    .next()
+                    .transpose()?
+                    .map(|row| CassRow::from_row_and_metadata(row, &metadata));
 
                 let cass_result = CassResult {
-                    tracing_id: rows_result.tracing_id(),
+                    tracing_id,
                     paging_state_response,
                     kind: CassResultKind::Rows(CassRowsResult {
-                        rows: cass_rows,
+                        raw_rows,
+                        first_row,
                         metadata,
                     }),
                 };
@@ -128,16 +130,13 @@ impl FFI for CassRow {
     type Origin = FromRef;
 }
 
-pub fn create_cass_rows_from_rows(
-    rows: Vec<Row>,
-    metadata: &Arc<CassResultMetadata>,
-) -> Vec<CassRow> {
-    rows.into_iter()
-        .map(|r| CassRow {
-            columns: create_cass_row_columns(r, metadata),
-            result_metadata: metadata.clone(),
-        })
-        .collect()
+impl CassRow {
+    pub fn from_row_and_metadata(row: Row, metadata: &Arc<CassResultMetadata>) -> Self {
+        Self {
+            columns: create_cass_row_columns(row, metadata),
+            result_metadata: Arc::clone(metadata),
+        }
+    }
 }
 
 pub enum Value {
@@ -799,11 +798,11 @@ pub unsafe extern "C" fn cass_result_row_count(
 ) -> size_t {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { raw_rows, .. }) = &result.kind else {
         return 0;
     };
 
-    rows.len() as size_t
+    raw_rows.rows_count() as size_t
 }
 
 #[no_mangle]
@@ -825,11 +824,14 @@ pub unsafe extern "C" fn cass_result_first_row(
 ) -> CassBorrowedSharedPtr<CassRow, CConst> {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { first_row, .. }) = &result.kind else {
         return RefFFI::null();
     };
 
-    rows.first().map(RefFFI::as_ptr).unwrap_or(RefFFI::null())
+    first_row
+        .as_ref()
+        .map(RefFFI::as_ptr)
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
@@ -867,7 +869,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 #[cfg(test)]
 mod tests {
     use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType};
-    use scylla::frame::response::result::{ColumnSpec, TableSpec};
+    use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows, TableSpec};
     use scylla::response::query_result::ColumnSpecs;
     use scylla::response::PagingStateResponse;
     use scylla::value::{CqlValue, Row};
@@ -885,8 +887,8 @@ mod tests {
     use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
 
     use super::{
-        cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows,
-        CassBorrowedSharedPtr, CassResult, CassResultKind, CassResultMetadata, CassRowsResult,
+        cass_result_column_count, cass_result_column_type, CassBorrowedSharedPtr, CassResult,
+        CassResultKind, CassResultMetadata, CassRow, CassRowsResult,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
@@ -909,8 +911,8 @@ mod tests {
             ),
         ])));
 
-        let rows = create_cass_rows_from_rows(
-            vec![Row {
+        let first_row = Some(CassRow::from_row_and_metadata(
+            Row {
                 columns: vec![
                     Some(CqlValue::BigInt(42)),
                     None,
@@ -920,14 +922,18 @@ mod tests {
                         CqlValue::Float(9999.9999),
                     ])),
                 ],
-            }],
+            },
             &metadata,
-        );
+        ));
 
         CassResult {
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
-            kind: CassResultKind::Rows(CassRowsResult { rows, metadata }),
+            kind: CassResultKind::Rows(CassRowsResult {
+                raw_rows: DeserializedMetadataAndRawRows::mock_empty(),
+                first_row,
+                metadata,
+            }),
         }
     }
 
