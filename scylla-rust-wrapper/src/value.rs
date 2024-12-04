@@ -31,7 +31,8 @@ use crate::cass_types::{CassDataType, CassValueType};
 ///
 /// There is no such method as `cass_statement_bind_counter`, and so
 /// we need to serialize the counter value using `CassCqlValue::BigInt`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum CassCqlValue {
     TinyInt(i8),
     SmallInt(i16),
@@ -83,87 +84,103 @@ pub fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> b
 impl CassCqlValue {
     pub fn is_type_compatible(&self, typ: &CassDataType) -> bool {
         match self {
-            CassCqlValue::TinyInt(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_TINY_INT
-            }
-            CassCqlValue::SmallInt(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_SMALL_INT
-            }
-            CassCqlValue::Int(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_INT,
-            CassCqlValue::BigInt(_) => {
+            CassCqlValue::TinyInt(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_TINY_INT
+            },
+            CassCqlValue::SmallInt(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_SMALL_INT
+            },
+            CassCqlValue::Int(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_INT
+            },
+            CassCqlValue::BigInt(_) => unsafe {
                 matches!(
-                    typ.get_value_type(),
+                    typ.get_unchecked().get_value_type(),
                     CassValueType::CASS_VALUE_TYPE_BIGINT
                         | CassValueType::CASS_VALUE_TYPE_COUNTER
                         | CassValueType::CASS_VALUE_TYPE_TIMESTAMP
                         | CassValueType::CASS_VALUE_TYPE_TIME
                 )
-            }
-            CassCqlValue::Float(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_FLOAT,
-            CassCqlValue::Double(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DOUBLE
-            }
-            CassCqlValue::Boolean(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_BOOLEAN
-            }
-            CassCqlValue::Text(_) => {
+            },
+            CassCqlValue::Float(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_FLOAT
+            },
+            CassCqlValue::Double(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DOUBLE
+            },
+            CassCqlValue::Boolean(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_BOOLEAN
+            },
+            CassCqlValue::Text(_) => unsafe {
                 matches!(
-                    typ.get_value_type(),
+                    typ.get_unchecked().get_value_type(),
                     CassValueType::CASS_VALUE_TYPE_TEXT
                         | CassValueType::CASS_VALUE_TYPE_VARCHAR
                         | CassValueType::CASS_VALUE_TYPE_ASCII
                         | CassValueType::CASS_VALUE_TYPE_BLOB
                         | CassValueType::CASS_VALUE_TYPE_VARINT
                 )
-            }
-            CassCqlValue::Blob(_) => matches!(
-                typ.get_value_type(),
-                CassValueType::CASS_VALUE_TYPE_BLOB | CassValueType::CASS_VALUE_TYPE_VARINT
-            ),
-            CassCqlValue::Uuid(_) => matches!(
-                typ.get_value_type(),
-                CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID
-            ),
-            CassCqlValue::Date(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DATE,
-            CassCqlValue::Inet(_) => typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_INET,
-            CassCqlValue::Duration(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION
-            }
-            CassCqlValue::Decimal(_) => {
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_DECIMAL
-            }
-            CassCqlValue::Tuple { data_type, .. } => {
+            },
+            CassCqlValue::Blob(_) => unsafe {
+                matches!(
+                    typ.get_unchecked().get_value_type(),
+                    CassValueType::CASS_VALUE_TYPE_BLOB | CassValueType::CASS_VALUE_TYPE_VARINT
+                )
+            },
+            CassCqlValue::Uuid(_) => unsafe {
+                matches!(
+                    typ.get_unchecked().get_value_type(),
+                    CassValueType::CASS_VALUE_TYPE_UUID | CassValueType::CASS_VALUE_TYPE_TIMEUUID
+                )
+            },
+            CassCqlValue::Date(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DATE
+            },
+            CassCqlValue::Inet(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_INET
+            },
+            CassCqlValue::Duration(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION
+            },
+            CassCqlValue::Decimal(_) => unsafe {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DECIMAL
+            },
+            CassCqlValue::Tuple { data_type, .. } => unsafe {
                 if let Some(dt) = data_type {
-                    return dt.typecheck_equals(typ);
+                    return dt.get_unchecked().typecheck_equals(typ.get_unchecked());
                 }
                 // Untyped tuple.
-                typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_TUPLE
-            }
-            CassCqlValue::List { data_type, .. } => {
+                typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_TUPLE
+            },
+            CassCqlValue::List { data_type, .. } => unsafe {
                 if let Some(dt) = data_type {
-                    dt.typecheck_equals(typ)
+                    dt.get_unchecked().typecheck_equals(typ.get_unchecked())
                 } else {
                     // Untyped list.
-                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_LIST
+                    typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_LIST
                 }
-            }
-            CassCqlValue::Map { data_type, .. } => {
+            },
+            CassCqlValue::Map { data_type, .. } => unsafe {
                 if let Some(dt) = data_type {
-                    dt.typecheck_equals(typ)
+                    dt.get_unchecked().typecheck_equals(typ.get_unchecked())
                 } else {
                     // Untyped map.
-                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_MAP
+                    typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_MAP
                 }
-            }
-            CassCqlValue::Set { data_type, .. } => {
+            },
+            CassCqlValue::Set { data_type, .. } => unsafe {
                 if let Some(dt) = data_type {
-                    dt.typecheck_equals(typ)
+                    dt.get_unchecked().typecheck_equals(typ.get_unchecked())
                 } else {
                     // Untyped set.
-                    typ.get_value_type() == CassValueType::CASS_VALUE_TYPE_SET
+                    typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_SET
                 }
-            }
-            CassCqlValue::UserDefinedType { data_type, .. } => data_type.typecheck_equals(typ),
+            },
+            CassCqlValue::UserDefinedType { data_type, .. } => unsafe {
+                data_type
+                    .get_unchecked()
+                    .typecheck_equals(typ.get_unchecked())
+            },
         }
     }
 }
@@ -402,14 +419,14 @@ mod tests {
     use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
-        cass_types::{CassDataType, CassValueType, MapDataType, UDTDataType},
+        cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType, UDTDataType},
         value::{is_type_compatible, CassCqlValue},
     };
 
-    fn all_value_data_types() -> [CassDataType; 26] {
-        let from = |v_typ: CassValueType| CassDataType::Value(v_typ);
+    fn all_value_data_types() -> Vec<CassDataType> {
+        let from = |v_typ: CassValueType| CassDataType::new(CassDataTypeInner::Value(v_typ));
 
-        [
+        vec![
             from(CassValueType::CASS_VALUE_TYPE_TINY_INT),
             from(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
             from(CassValueType::CASS_VALUE_TYPE_INT),
@@ -441,7 +458,7 @@ mod tests {
 
     #[test]
     fn typecheck_simple_test() {
-        let from = |v_typ: CassValueType| CassDataType::Value(v_typ);
+        let from = |v_typ: CassValueType| CassDataType::new(CassDataTypeInner::Value(v_typ));
         struct TestCase {
             value: Option<CassCqlValue>,
             compatible_types: Vec<CassDataType>,
@@ -451,7 +468,7 @@ mod tests {
             // Null -> all types
             TestCase {
                 value: None,
-                compatible_types: all_value_data_types().to_vec(),
+                compatible_types: all_value_data_types(),
             },
             // i8 -> tinyint
             TestCase {
@@ -594,10 +611,15 @@ mod tests {
 
         // Let's make some types accessible for all test cases.
         // To make sure that e.g. Tuple against UDT typecheck fails.
-        let data_type_float = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_FLOAT));
-        let data_type_int = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_INT));
-        let data_type_bool = Arc::new(CassDataType::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN));
-        let data_type_tuple = Arc::new(CassDataType::Tuple(vec![
+        let data_type_float = CassDataType::new_arced(CassDataTypeInner::Value(
+            CassValueType::CASS_VALUE_TYPE_FLOAT,
+        ));
+        let data_type_int =
+            CassDataType::new_arced(CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_INT));
+        let data_type_bool = CassDataType::new_arced(CassDataTypeInner::Value(
+            CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+        ));
+        let data_type_tuple = CassDataType::new_arced(CassDataTypeInner::Tuple(vec![
             data_type_float.clone(),
             data_type_int.clone(),
             data_type_bool.clone(),
@@ -612,42 +634,44 @@ mod tests {
         let user_udt_name = "user".to_owned();
         let empty_str = "".to_owned();
 
-        let data_type_udt_simple = Arc::new(CassDataType::UDT(UDTDataType {
+        let data_type_udt_simple = CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
             field_types: simple_fields.clone(),
             keyspace: ks_keyspace_name.clone(),
             name: user_udt_name.clone(),
             frozen: false,
         }));
 
-        let data_type_int_list = Arc::new(CassDataType::List {
+        let data_type_int_list = CassDataType::new_arced(CassDataTypeInner::List {
             typ: Some(data_type_int.clone()),
             frozen: false,
         });
 
-        let data_type_int_set = Arc::new(CassDataType::Set {
+        let data_type_int_set = CassDataType::new_arced(CassDataTypeInner::Set {
             typ: Some(data_type_int.clone()),
             frozen: false,
         });
 
-        let data_type_bool_float_map = Arc::new(CassDataType::Map {
+        let data_type_bool_float_map = CassDataType::new_arced(CassDataTypeInner::Map {
             typ: MapDataType::KeyAndValue(data_type_bool.clone(), data_type_float.clone()),
             frozen: false,
         });
 
         // TUPLES
         {
-            let data_type_untyped_tuple = Arc::new(CassDataType::Tuple(vec![]));
-            let data_type_small_tuple = Arc::new(CassDataType::Tuple(vec![data_type_bool.clone()]));
-            let data_type_nested_tuple = Arc::new(CassDataType::Tuple(vec![
+            let data_type_untyped_tuple = CassDataType::new_arced(CassDataTypeInner::Tuple(vec![]));
+            let data_type_small_tuple =
+                CassDataType::new_arced(CassDataTypeInner::Tuple(vec![data_type_bool.clone()]));
+            let data_type_nested_tuple = CassDataType::new_arced(CassDataTypeInner::Tuple(vec![
                 data_type_small_tuple.clone(),
                 data_type_int.clone(),
                 data_type_tuple.clone(),
             ]));
-            let data_type_nested_untyped_tuple = Arc::new(CassDataType::Tuple(vec![
-                data_type_untyped_tuple.clone(),
-                data_type_int.clone(),
-                data_type_untyped_tuple.clone(),
-            ]));
+            let data_type_nested_untyped_tuple =
+                CassDataType::new_arced(CassDataTypeInner::Tuple(vec![
+                    data_type_untyped_tuple.clone(),
+                    data_type_int.clone(),
+                    data_type_untyped_tuple.clone(),
+                ]));
 
             let test_cases = &[
                 // Untyped tuple -> created via `cass_tuple_new`
@@ -748,30 +772,33 @@ mod tests {
 
         // UDT
         {
-            let data_type_udt_simple_empty_keyspace = Arc::new(CassDataType::UDT(UDTDataType {
-                field_types: simple_fields.clone(),
-                keyspace: empty_str.to_owned(),
-                name: user_udt_name.clone(),
-                frozen: false,
-            }));
-            let data_type_udt_simple_empty_name = Arc::new(CassDataType::UDT(UDTDataType {
-                field_types: simple_fields.clone(),
-                keyspace: ks_keyspace_name.clone(),
-                name: empty_str.clone(),
-                frozen: false,
-            }));
+            let data_type_udt_simple_empty_keyspace =
+                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+                    field_types: simple_fields.clone(),
+                    keyspace: empty_str.to_owned(),
+                    name: user_udt_name.clone(),
+                    frozen: false,
+                }));
+            let data_type_udt_simple_empty_name =
+                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+                    field_types: simple_fields.clone(),
+                    keyspace: ks_keyspace_name.clone(),
+                    name: empty_str.clone(),
+                    frozen: false,
+                }));
 
             // A prefix of simple_fields.
             let small_fields = vec![
                 ("foo".to_owned(), data_type_float.clone()),
                 ("bar".to_owned(), data_type_bool.clone()),
             ];
-            let data_type_udt_small = Arc::new(CassDataType::UDT(UDTDataType {
-                field_types: small_fields.clone(),
-                keyspace: ks_keyspace_name.clone(),
-                name: user_udt_name.clone(),
-                frozen: false,
-            }));
+            let data_type_udt_small =
+                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+                    field_types: small_fields.clone(),
+                    keyspace: ks_keyspace_name.clone(),
+                    name: user_udt_name.clone(),
+                    frozen: false,
+                }));
 
             let test_cases = &[TestCase {
                 value: CassCqlValue::UserDefinedType {
@@ -800,34 +827,34 @@ mod tests {
 
         // COLLECTIONS
         {
-            let data_type_untyped_list = Arc::new(CassDataType::List {
+            let data_type_untyped_list = CassDataType::new_arced(CassDataTypeInner::List {
                 typ: None,
                 frozen: false,
             });
-            let data_type_float_list = Arc::new(CassDataType::List {
+            let data_type_float_list = CassDataType::new_arced(CassDataTypeInner::List {
                 typ: Some(data_type_float.clone()),
                 frozen: false,
             });
 
-            let data_type_untyped_set = Arc::new(CassDataType::Set {
+            let data_type_untyped_set = CassDataType::new_arced(CassDataTypeInner::Set {
                 typ: None,
                 frozen: false,
             });
-            let data_type_float_set = Arc::new(CassDataType::Set {
+            let data_type_float_set = CassDataType::new_arced(CassDataTypeInner::Set {
                 typ: Some(data_type_float.clone()),
                 frozen: false,
             });
 
-            let data_type_untyped_map = Arc::new(CassDataType::Map {
+            let data_type_untyped_map = CassDataType::new_arced(CassDataTypeInner::Map {
                 typ: MapDataType::Untyped,
                 frozen: false,
             });
-            let data_type_typed_key_float_map = Arc::new(CassDataType::Map {
+            let data_type_typed_key_float_map = CassDataType::new_arced(CassDataTypeInner::Map {
                 typ: MapDataType::Key(data_type_float.clone()),
 
                 frozen: false,
             });
-            let data_type_float_int_map = Arc::new(CassDataType::Map {
+            let data_type_float_int_map = CassDataType::new_arced(CassDataTypeInner::Map {
                 typ: MapDataType::KeyAndValue(data_type_float.clone(), data_type_int.clone()),
                 frozen: false,
             });

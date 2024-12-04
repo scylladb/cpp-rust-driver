@@ -72,23 +72,25 @@ impl CassPrepared {
     }
 }
 
+impl ArcFFI for CassPrepared {}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_free(prepared_raw: *const CassPrepared) {
-    free_arced(prepared_raw);
+    ArcFFI::free(prepared_raw);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: *const CassPrepared,
 ) -> *mut CassStatement {
-    let prepared: Arc<_> = clone_arced(prepared_raw);
+    let prepared: Arc<_> = ArcFFI::cloned_from_ptr(prepared_raw);
     let bound_values_size = prepared.statement.get_variable_col_specs().len();
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument
     let statement = Statement::Prepared(prepared);
 
-    Box::into_raw(Box::new(CassStatement {
+    BoxFFI::into_ptr(Box::new(CassStatement {
         statement,
         bound_values: vec![Unset; bound_values_size],
         paging_state: PagingState::start(),
@@ -106,7 +108,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let prepared = ptr_to_ref(prepared_raw);
+    let prepared = ArcFFI::as_ref(prepared_raw);
 
     match prepared
         .statement
@@ -126,10 +128,10 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type(
     prepared_raw: *const CassPrepared,
     index: size_t,
 ) -> *const CassDataType {
-    let prepared = ptr_to_ref(prepared_raw);
+    let prepared = ArcFFI::as_ref(prepared_raw);
 
     match prepared.variable_col_data_types.get(index as usize) {
-        Some(dt) => Arc::as_ptr(dt),
+        Some(dt) => ArcFFI::as_ptr(dt),
         None => std::ptr::null(),
     }
 }
@@ -148,13 +150,13 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
     name: *const c_char,
     name_length: size_t,
 ) -> *const CassDataType {
-    let prepared = ptr_to_ref(prepared_raw);
+    let prepared = ArcFFI::as_ref(prepared_raw);
     let parameter_name =
         ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8");
 
     let data_type = prepared.get_variable_data_type_by_name(parameter_name);
     match data_type {
-        Some(dt) => Arc::as_ptr(dt),
+        Some(dt) => ArcFFI::as_ptr(dt),
         None => std::ptr::null(),
     }
 }
