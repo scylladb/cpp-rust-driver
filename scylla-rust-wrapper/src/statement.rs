@@ -42,6 +42,10 @@ pub struct CassStatement {
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
+impl FFI for CassStatement {
+    type Ownership = OwnershipExclusive;
+}
+
 impl CassStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         let (bound_value, maybe_data_type) = match &self.statement {
@@ -160,7 +164,7 @@ impl CassStatement {
 pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
-) -> *mut CassStatement {
+) -> CassExclusiveMutPtr<CassStatement> {
     cass_statement_new_n(query, strlen(query), parameter_count)
 }
 
@@ -169,10 +173,10 @@ pub unsafe extern "C" fn cass_statement_new_n(
     query: *const c_char,
     query_length: size_t,
     parameter_count: size_t,
-) -> *mut CassStatement {
+) -> CassExclusiveMutPtr<CassStatement> {
     let query_str = match ptr_to_cstr_n(query, query_length) {
         Some(v) => v,
-        None => return std::ptr::null_mut(),
+        None => return BoxFFI::null_mut(),
     };
 
     let query = Query::new(query_str.to_string());
@@ -182,7 +186,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
     };
 
-    Box::into_raw(Box::new(CassStatement {
+    BoxFFI::into_ptr(Box::new(CassStatement {
         statement: Statement::Simple(simple_query),
         bound_values: vec![Unset; parameter_count as usize],
         paging_state: PagingState::start(),
@@ -194,19 +198,19 @@ pub unsafe extern "C" fn cass_statement_new_n(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_statement_free(statement_raw: *mut CassStatement) {
-    free_boxed(statement_raw);
+pub unsafe extern "C" fn cass_statement_free(statement_raw: CassExclusiveMutPtr<CassStatement>) {
+    BoxFFI::free(statement_raw);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_consistency(
-    statement: *mut CassStatement,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
     consistency: CassConsistency,
 ) -> CassError {
     let consistency_opt = get_consistency_from_cass_consistency(consistency);
 
     if let Some(consistency) = consistency_opt {
-        match &mut ptr_to_ref_mut(statement).statement {
+        match &mut BoxFFI::as_mut_ref(&mut statement).unwrap().statement {
             Statement::Simple(inner) => inner.query.set_consistency(consistency),
             Statement::Prepared(inner) => {
                 Arc::make_mut(inner).statement.set_consistency(consistency)
@@ -219,10 +223,10 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_paging_size(
-    statement_raw: *mut CassStatement,
+    mut statement_raw: CassExclusiveMutPtr<CassStatement>,
     page_size: c_int,
 ) -> CassError {
-    let statement = ptr_to_ref_mut(statement_raw);
+    let statement = BoxFFI::as_mut_ref(&mut statement_raw).unwrap();
     if page_size <= 0 {
         // Cpp driver sets the page size flag only for positive page size provided by user.
         statement.paging_enabled = false;
@@ -239,11 +243,11 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_paging_state(
-    statement: *mut CassStatement,
-    result: *const CassResult,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
+    result: CassSharedPtr<CassResult>,
 ) -> CassError {
-    let statement = ptr_to_ref_mut(statement);
-    let result = ptr_to_ref(result);
+    let statement = BoxFFI::as_mut_ref(&mut statement).unwrap();
+    let result = ArcFFI::as_ref(&result).unwrap();
 
     match &result.paging_state_response {
         PagingStateResponse::HasMorePages { state } => statement.paging_state.clone_from(state),
@@ -254,11 +258,11 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_paging_state_token(
-    statement: *mut CassStatement,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
     paging_state: *const c_char,
     paging_state_size: size_t,
 ) -> CassError {
-    let statement_from_raw = ptr_to_ref_mut(statement);
+    let statement_from_raw = BoxFFI::as_mut_ref(&mut statement).unwrap();
 
     if paging_state.is_null() {
         statement_from_raw.paging_state = PagingState::start();
@@ -273,10 +277,10 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_is_idempotent(
-    statement_raw: *mut CassStatement,
+    mut statement_raw: CassExclusiveMutPtr<CassStatement>,
     is_idempotent: cass_bool_t,
 ) -> CassError {
-    match &mut ptr_to_ref_mut(statement_raw).statement {
+    match &mut BoxFFI::as_mut_ref(&mut statement_raw).unwrap().statement {
         Statement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner)
             .statement
@@ -288,10 +292,10 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_tracing(
-    statement_raw: *mut CassStatement,
+    mut statement_raw: CassExclusiveMutPtr<CassStatement>,
     enabled: cass_bool_t,
 ) -> CassError {
-    match &mut ptr_to_ref_mut(statement_raw).statement {
+    match &mut BoxFFI::as_mut_ref(&mut statement_raw).unwrap().statement {
         Statement::Simple(inner) => inner.query.set_tracing(enabled != 0),
         Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_tracing(enabled != 0),
     }
@@ -301,11 +305,11 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
-    statement: *mut CassStatement,
-    retry_policy: *const CassRetryPolicy,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
+    retry_policy: CassSharedPtr<CassRetryPolicy>,
 ) -> CassError {
     let maybe_arced_retry_policy: Option<Arc<dyn scylla::retry_policy::RetryPolicy>> =
-        retry_policy.as_ref().map(|policy| match policy {
+        ArcFFI::as_ref(&retry_policy).map(|policy| match policy {
             CassRetryPolicy::DefaultRetryPolicy(default) => {
                 default.clone() as Arc<dyn scylla::retry_policy::RetryPolicy>
             }
@@ -313,7 +317,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
         });
 
-    match &mut ptr_to_ref_mut(statement).statement {
+    match &mut BoxFFI::as_mut_ref(&mut statement).unwrap().statement {
         Statement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
         Statement::Prepared(inner) => Arc::make_mut(inner)
             .statement
@@ -325,7 +329,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_serial_consistency(
-    statement: *mut CassStatement,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
     serial_consistency: CassConsistency,
 ) -> CassError {
     // cpp-driver doesn't validate passed value in any way.
@@ -342,7 +346,7 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
         _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
     };
 
-    match &mut ptr_to_ref_mut(statement).statement {
+    match &mut BoxFFI::as_mut_ref(&mut statement).unwrap().statement {
         Statement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
         Statement::Prepared(inner) => Arc::make_mut(inner)
             .statement
@@ -371,10 +375,10 @@ fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_timestamp(
-    statement: *mut CassStatement,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
     timestamp: cass_int64_t,
 ) -> CassError {
-    match &mut ptr_to_ref_mut(statement).statement {
+    match &mut BoxFFI::as_mut_ref(&mut statement).unwrap().statement {
         Statement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
         Statement::Prepared(inner) => Arc::make_mut(inner)
             .statement
@@ -386,7 +390,7 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_set_request_timeout(
-    statement: *mut CassStatement,
+    mut statement: CassExclusiveMutPtr<CassStatement>,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
     // The maximum duration for a sleep is 68719476734 milliseconds (approximately 2.2 years).
@@ -397,7 +401,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    let statement_from_raw = ptr_to_ref_mut(statement);
+    let statement_from_raw = BoxFFI::as_mut_ref(&mut statement).unwrap();
     statement_from_raw.request_timeout_ms = Some(timeout_ms);
 
     CassError::CASS_OK
@@ -405,10 +409,10 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_statement_reset_parameters(
-    statement_raw: *mut CassStatement,
+    mut statement_raw: CassExclusiveMutPtr<CassStatement>,
     count: size_t,
 ) -> CassError {
-    let statement = ptr_to_ref_mut(statement_raw);
+    let statement = BoxFFI::as_mut_ref(&mut statement_raw).unwrap();
     statement.reset_bound_values(count as usize);
 
     CassError::CASS_OK

@@ -1,5 +1,5 @@
 use crate::cass_error::CassError;
-use crate::cass_types::CassDataType;
+use crate::cass_types::{CassDataType, CassDataTypeInner};
 use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
@@ -14,12 +14,18 @@ pub struct CassUserType {
     pub field_values: Vec<Option<CassCqlValue>>,
 }
 
+impl FFI for CassUserType {
+    type Ownership = OwnershipExclusive;
+}
+
 impl CassUserType {
     fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         if index >= self.field_values.len() {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
-        if !value::is_type_compatible(&value, &self.data_type.get_udt_type().field_types[index].1) {
+        if !value::is_type_compatible(&value, unsafe {
+            &self.data_type.get_unchecked().get_udt_type().field_types[index].1
+        }) {
             return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
         }
         self.field_values[index] = value;
@@ -28,9 +34,14 @@ impl CassUserType {
 
     fn set_field_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut found_field: bool = false;
-        for (index, (field_name, field_type)) in
-            self.data_type.get_udt_type().field_types.iter().enumerate()
-        {
+        for (index, (field_name, field_type)) in unsafe {
+            self.data_type
+                .get_unchecked()
+                .get_udt_type()
+                .field_types
+                .iter()
+                .enumerate()
+        } {
             if *field_name == name {
                 found_field = true;
                 if index >= self.field_values.len() {
@@ -58,7 +69,14 @@ impl From<&CassUserType> for CassCqlValue {
             fields: user_type
                 .field_values
                 .iter()
-                .zip(user_type.data_type.get_udt_type().field_types.iter())
+                .zip(unsafe {
+                    user_type
+                        .data_type
+                        .get_unchecked()
+                        .get_udt_type()
+                        .field_types
+                        .iter()
+                })
                 .map(|(v, (name, _))| (name.clone(), v.clone()))
                 .collect(),
         }
@@ -67,31 +85,31 @@ impl From<&CassUserType> for CassCqlValue {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
-    data_type_raw: *const CassDataType,
-) -> *mut CassUserType {
-    let data_type = clone_arced(data_type_raw);
+    data_type_raw: CassSharedPtr<CassDataType>,
+) -> CassExclusiveMutPtr<CassUserType> {
+    let data_type = ArcFFI::cloned_from_ptr(data_type_raw).unwrap();
 
-    match &*data_type {
-        CassDataType::UDT(udt_data_type) => {
+    match data_type.get_unchecked() {
+        CassDataTypeInner::UDT(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
-            Box::into_raw(Box::new(CassUserType {
+            BoxFFI::into_ptr(Box::new(CassUserType {
                 data_type,
                 field_values,
             }))
         }
-        _ => std::ptr::null_mut(),
+        _ => BoxFFI::null_mut(),
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_user_type_free(user_type: *mut CassUserType) {
-    free_boxed(user_type);
+pub unsafe extern "C" fn cass_user_type_free(user_type: CassExclusiveMutPtr<CassUserType>) {
+    BoxFFI::free(user_type);
 }
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_data_type(
-    user_type: *const CassUserType,
-) -> *const CassDataType {
-    Arc::as_ptr(&ptr_to_ref(user_type).data_type)
+    user_type: CassExclusiveConstPtr<CassUserType>,
+) -> CassSharedPtr<CassDataType> {
+    ArcFFI::as_ptr(&BoxFFI::as_ref(&user_type).unwrap().data_type)
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,
