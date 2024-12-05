@@ -37,6 +37,10 @@
   "INSERT INTO %s "                  \
   "(key, abc, \"ABC\", \"aBc\") "    \
   "VALUES (?, ?, ?, ?)"
+#define INSERT_SAME_MARKER_FORMAT \
+  "INSERT INTO %s "                  \
+  "(key, abc, \"ABC\", \"aBc\") "    \
+  "VALUES (:key, :abc, :abc, :abc)"
 #define INSERT_ALL_FORMAT                  \
   "INSERT INTO %s "                        \
   "(key, a, b, c, abc, \"ABC\", \"aBc\") " \
@@ -174,6 +178,28 @@ protected:
     ASSERT_TRUE(row.column_by_name<Float>("\"ABC\"").is_null());
     ASSERT_TRUE(row.column_by_name<Float>("\"aBc\"").is_null());
   }
+
+  /**
+   * Insert non-pk values using same bind marker
+   *
+   * @param statement Insert statement to use
+   */
+  void insert_and_validate_multiple_binds(Statement statement) {
+    TimeUuid key = uuid_generator_.generate_timeuuid();
+    statement.bind<TimeUuid>("key", key);
+    statement.bind<Float>("abc", Float(1.23f)); // This should bind to columns `abc`, `ABC`, and `aBc`
+    session_.execute(statement);
+
+    // Validate the inserts to multiple binded columns
+    Result result = session_.execute(default_select_all());
+    ASSERT_EQ(1u, result.row_count());
+    ASSERT_EQ(7u, result.column_count());
+    Row row = result.first_row();
+    ASSERT_EQ(key, row.column_by_name<TimeUuid>("key"));
+    ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"abc\""));
+    ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"ABC\""));
+    ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"aBc\""));
+  }
 };
 
 /**
@@ -287,20 +313,50 @@ CASSANDRA_INTEGRATION_TEST_F(ByNameTests, MultipleBinds) {
   Prepared prepared =
       session_.prepare(format_string(INSERT_CASE_SENSITIVE_FORMAT, table_name_.c_str()));
   Statement statement = prepared.bind();
-  TimeUuid key = uuid_generator_.generate_timeuuid();
-  statement.bind<TimeUuid>("key", key);
-  statement.bind<Float>("abc", Float(1.23f)); // This should bind to columns `abc`, `ABC`, and `aBc`
-  session_.execute(statement);
+  insert_and_validate_multiple_binds(statement);
+}
 
-  // Validate the inserts to multiple binded columns
-  Result result = session_.execute(default_select_all());
-  ASSERT_EQ(1u, result.row_count());
-  ASSERT_EQ(7u, result.column_count());
-  Row row = result.first_row();
-  ASSERT_EQ(key, row.column_by_name<TimeUuid>("key"));
-  ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"abc\""));
-  ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"ABC\""));
-  ASSERT_EQ(Float(1.23f), row.column_by_name<Float>("\"aBc\""));
+/**
+ * Perform `by name` references using a prepared statement to insert multiple
+ * values using same bind marker and validate.
+ *
+ * This test will perform bindings of a value to multiple columns `by name` 
+ * using same bind marker, insert using a prepared statement 
+ * and validate the results on a single node cluster.
+ *
+ * @test_category queries:prepared
+ * @since core:1.0.0
+ * @expected_result Cassandra values are inserted and validated by name
+ */
+CASSANDRA_INTEGRATION_TEST_F(ByNameTests, PreparedMultipleBindsSameMarker) {
+  CHECK_FAILURE;
+
+  // Prepare, bind, and insert the values into the table
+  Prepared prepared =
+      session_.prepare(format_string(INSERT_SAME_MARKER_FORMAT, table_name_.c_str()));
+  Statement statement = prepared.bind();
+  insert_and_validate_multiple_binds(statement);
+}
+
+/**
+ * Perform `by name` references using a simple statement to insert multiple
+ * values using same bind marker and validate
+ *
+ * This test will perform bindings of a value to multiple columns `by name` 
+ * using same bind marker, insert using a simple statement 
+ * and validate the results on a single node cluster.
+ *
+ * @test_category queries:basic
+ * @cassandra_version 2.1.0
+ * @expected_result Cassandra values are inserted and validated by name
+ */
+CASSANDRA_INTEGRATION_TEST_F(ByNameTests, SimpleMultipleBindsSameMarker) {
+  CHECK_FAILURE;
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+
+  // Prepare, create, insert and validate
+  Statement statement(format_string(INSERT_SAME_MARKER_FORMAT, table_name_.c_str()), 4);
+  insert_and_validate_multiple_binds(statement);
 }
 
 /**
