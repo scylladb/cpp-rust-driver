@@ -20,61 +20,71 @@ use std::slice;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub enum Statement {
-    Simple(SimpleQuery),
-    // Arc is needed, because PreparedStatement is passed by reference to session.execute
-    Prepared(Arc<CassPrepared>),
+pub enum BoundStatement {
+    Simple(BoundSimpleQuery),
+    Prepared(BoundPreparedStatement),
 }
 
 #[derive(Clone)]
-pub struct SimpleQuery {
-    pub query: Query,
-    pub name_to_bound_index: HashMap<String, usize>,
-}
-
-pub struct CassStatement {
-    pub statement: Statement,
+pub struct BoundPreparedStatement {
+    // Arc is needed, because PreparedStatement is passed by reference to session.execute
+    pub statement: Arc<CassPrepared>,
     pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
-    pub paging_state: PagingState,
-    pub paging_enabled: bool,
-    pub request_timeout_ms: Option<cass_uint64_t>,
-
-    pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
-impl BoxFFI for CassStatement {}
-
-impl CassStatement {
+impl BoundPreparedStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
-        let (bound_value, maybe_data_type) = match &self.statement {
-            Statement::Simple(_) => match self.bound_values.get_mut(index) {
-                Some(v) => (v, None),
-                None => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
-            },
-            Statement::Prepared(p) => match (
-                self.bound_values.get_mut(index),
-                p.variable_col_data_types.get(index),
-            ) {
-                (Some(v), Some(dt)) => (v, Some(dt)),
-                (None, None) => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
-                // This indicates a length mismatch between col specs table and self.bound_values.
-                //
-                // It can only occur when user provides bad `count` value in `cass_statement_reset_parameters`.
-                // Cpp-driver does not verify that both of these values are equal.
-                // I believe returning CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS is best we can do here.
-                _ => return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
-            },
-        };
+        match (
+            self.bound_values.get_mut(index),
+            self.statement.variable_col_data_types.get(index),
+        ) {
+            (Some(v), Some(dt)) => {
+                // Perform the typecheck.
+                if !value::is_type_compatible(&value, dt) {
+                    return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                }
 
-        // Perform the typecheck.
-        if let Some(dt) = maybe_data_type {
-            if !value::is_type_compatible(&value, dt) {
-                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+                *v = Set(value);
+                CassError::CASS_OK
             }
+            (None, None) => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+            // This indicates a length mismatch between col specs table and self.bound_values.
+            //
+            // It can only occur when user provides bad `count` value in `cass_statement_reset_parameters`.
+            // Cpp-driver does not verify that both of these values are equal.
+            // I believe returning CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS is best we can do here.
+            _ => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+        }
+    }
+
+    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
+        let mut name_str = name;
+        let mut is_case_sensitive = false;
+
+        if name_str.starts_with('\"') && name_str.ends_with('\"') {
+            name_str = name_str.strip_prefix('\"').unwrap();
+            name_str = name_str.strip_suffix('\"').unwrap();
+            is_case_sensitive = true;
         }
 
-        *bound_value = Set(value);
-        CassError::CASS_OK
+        let indices: Vec<usize> = self
+            .statement
+            .statement
+            .get_variable_col_specs()
+            .iter()
+            .enumerate()
+            .filter(|(_, col)| {
+                is_case_sensitive && col.name() == name_str
+                    || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_str)
+            })
+            .map(|(i, _)| i)
+            .collect();
+
+        if indices.is_empty() {
+            return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
+        }
+
+        self.bind_multiple_values_by_name(&indices, value)
     }
 
     fn bind_multiple_values_by_name(
@@ -92,69 +102,89 @@ impl CassStatement {
 
         CassError::CASS_OK
     }
+}
+
+#[derive(Clone)]
+pub struct BoundSimpleQuery {
+    pub query: Query,
+    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub name_to_bound_index: HashMap<String, usize>,
+}
+
+impl BoundSimpleQuery {
+    fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
+        match self.bound_values.get_mut(index) {
+            Some(v) => {
+                *v = Set(value);
+                CassError::CASS_OK
+            }
+            None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
+        }
+    }
 
     fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
         let mut set_bound_val_index: Option<usize> = None;
-        let mut name_str = name;
-        let mut is_case_sensitive = false;
 
-        if name_str.starts_with('\"') && name_str.ends_with('\"') {
-            name_str = name_str.strip_prefix('\"').unwrap();
-            name_str = name_str.strip_suffix('\"').unwrap();
-            is_case_sensitive = true;
-        }
-
-        match &self.statement {
-            Statement::Prepared(prepared) => {
-                let indices: Vec<usize> = prepared
-                    .statement
-                    .get_variable_col_specs()
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, col)| {
-                        is_case_sensitive && col.name() == name_str
-                            || !is_case_sensitive && col.name().eq_ignore_ascii_case(name_str)
-                    })
-                    .map(|(i, _)| i)
-                    .collect();
-
-                if indices.is_empty() {
-                    return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
-                }
-
-                return self.bind_multiple_values_by_name(&indices, value);
-            }
-            Statement::Simple(query) => {
-                let index = query.name_to_bound_index.get(name);
-
-                if let Some(idx) = index {
-                    return self.bind_cql_value(*idx, value);
-                } else {
-                    for (index, bound_val) in self.bound_values.iter().enumerate() {
-                        if let Unset = bound_val {
-                            set_bound_val_index = Some(index);
-                            break;
-                        }
-                    }
+        let index = self.name_to_bound_index.get(name);
+        if let Some(idx) = index {
+            return self.bind_cql_value(*idx, value);
+        } else {
+            for (index, bound_val) in self.bound_values.iter().enumerate() {
+                if let Unset = bound_val {
+                    set_bound_val_index = Some(index);
+                    break;
                 }
             }
         }
 
         if let Some(index) = set_bound_val_index {
-            if let Statement::Simple(query) = &mut self.statement {
-                query.name_to_bound_index.insert(name.to_string(), index);
-            }
+            self.name_to_bound_index.insert(name.to_string(), index);
 
             return self.bind_cql_value(index, value);
         }
 
         CassError::CASS_OK
     }
+}
+
+pub struct CassStatement {
+    pub statement: BoundStatement,
+    pub paging_state: PagingState,
+    pub paging_enabled: bool,
+    pub request_timeout_ms: Option<cass_uint64_t>,
+
+    pub(crate) exec_profile: Option<PerStatementExecProfile>,
+}
+
+impl BoxFFI for CassStatement {}
+
+impl CassStatement {
+    fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
+        match &mut self.statement {
+            BoundStatement::Simple(simple) => simple.bind_cql_value(index, value),
+            BoundStatement::Prepared(prepared) => prepared.bind_cql_value(index, value),
+        }
+    }
+
+    fn bind_cql_value_by_name(&mut self, name: &str, value: Option<CassCqlValue>) -> CassError {
+        match &mut self.statement {
+            BoundStatement::Simple(simple) => simple.bind_cql_value_by_name(name, value),
+            BoundStatement::Prepared(prepared) => prepared.bind_cql_value_by_name(name, value),
+        }
+    }
 
     fn reset_bound_values(&mut self, count: usize) {
         // Clear bound values and resize the vector - all values should be unset.
-        self.bound_values.clear();
-        self.bound_values.resize(count, Unset);
+        match &mut self.statement {
+            BoundStatement::Simple(simple) => {
+                simple.bound_values.clear();
+                simple.bound_values.resize(count, Unset);
+            }
+            BoundStatement::Prepared(prepared) => {
+                prepared.bound_values.clear();
+                prepared.bound_values.resize(count, Unset);
+            }
+        }
     }
 }
 
@@ -179,14 +209,14 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     let query = Query::new(query_str.to_string());
 
-    let simple_query = SimpleQuery {
+    let simple_query = BoundSimpleQuery {
         query,
+        bound_values: vec![Unset; parameter_count as usize],
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
     };
 
     BoxFFI::into_ptr(Box::new(CassStatement {
-        statement: Statement::Simple(simple_query),
-        bound_values: vec![Unset; parameter_count as usize],
+        statement: BoundStatement::Simple(simple_query),
         paging_state: PagingState::start(),
         // Cpp driver disables paging by default.
         paging_enabled: false,
@@ -209,10 +239,10 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
 
     if let Some(consistency) = consistency_opt {
         match &mut BoxFFI::as_mut_ref(statement).statement {
-            Statement::Simple(inner) => inner.query.set_consistency(consistency),
-            Statement::Prepared(inner) => {
-                Arc::make_mut(inner).statement.set_consistency(consistency)
-            }
+            BoundStatement::Simple(inner) => inner.query.set_consistency(consistency),
+            BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                .statement
+                .set_consistency(consistency),
         }
     }
 
@@ -231,8 +261,10 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     } else {
         statement.paging_enabled = true;
         match &mut statement.statement {
-            Statement::Simple(inner) => inner.query.set_page_size(page_size),
-            Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_page_size(page_size),
+            BoundStatement::Simple(inner) => inner.query.set_page_size(page_size),
+            BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                .statement
+                .set_page_size(page_size),
         }
     }
 
@@ -279,8 +311,8 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
     is_idempotent: cass_bool_t,
 ) -> CassError {
     match &mut BoxFFI::as_mut_ref(statement_raw).statement {
-        Statement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner)
+        BoundStatement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
             .set_is_idempotent(is_idempotent != 0),
     }
@@ -294,8 +326,10 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     enabled: cass_bool_t,
 ) -> CassError {
     match &mut BoxFFI::as_mut_ref(statement_raw).statement {
-        Statement::Simple(inner) => inner.query.set_tracing(enabled != 0),
-        Statement::Prepared(inner) => Arc::make_mut(inner).statement.set_tracing(enabled != 0),
+        BoundStatement::Simple(inner) => inner.query.set_tracing(enabled != 0),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_tracing(enabled != 0),
     }
 
     CassError::CASS_OK
@@ -316,8 +350,8 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
         });
 
     match &mut BoxFFI::as_mut_ref(statement).statement {
-        Statement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
-        Statement::Prepared(inner) => Arc::make_mut(inner)
+        BoundStatement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
             .set_retry_policy(maybe_arced_retry_policy),
     }
@@ -345,8 +379,8 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     };
 
     match &mut BoxFFI::as_mut_ref(statement).statement {
-        Statement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
-        Statement::Prepared(inner) => Arc::make_mut(inner)
+        BoundStatement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
             .set_serial_consistency(Some(consistency)),
     }
@@ -377,8 +411,8 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
     timestamp: cass_int64_t,
 ) -> CassError {
     match &mut BoxFFI::as_mut_ref(statement).statement {
-        Statement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
-        Statement::Prepared(inner) => Arc::make_mut(inner)
+        BoundStatement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
             .set_timestamp(Some(timestamp)),
     }

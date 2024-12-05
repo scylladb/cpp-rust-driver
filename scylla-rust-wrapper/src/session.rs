@@ -10,8 +10,8 @@ use crate::metadata::create_table_metadata;
 use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta};
 use crate::prepared::CassPrepared;
 use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
+use crate::statement::BoundStatement;
 use crate::statement::CassStatement;
-use crate::statement::Statement;
 use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
 use scylla::frame::types::Consistency;
@@ -258,7 +258,6 @@ pub unsafe extern "C" fn cass_session_execute(
     let statement_opt = BoxFFI::as_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
-    let bound_values = statement_opt.bound_values.clone();
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
     let mut statement = statement_opt.statement.clone();
@@ -282,8 +281,8 @@ pub unsafe extern "C" fn cass_session_execute(
             .await?;
 
         match &mut statement {
-            Statement::Simple(query) => query.query.set_execution_profile_handle(handle),
-            Statement::Prepared(prepared) => Arc::make_mut(prepared)
+            BoundStatement::Simple(query) => query.query.set_execution_profile_handle(handle),
+            BoundStatement::Prepared(prepared) => Arc::make_mut(&mut prepared.statement)
                 .statement
                 .set_execution_profile_handle(handle),
         }
@@ -304,18 +303,18 @@ pub unsafe extern "C" fn cass_session_execute(
             QueryError,
         >;
         let query_res: QueryRes = match statement {
-            Statement::Simple(query) => {
+            BoundStatement::Simple(query) => {
                 // We don't store result metadata for Queries - return None.
                 let maybe_result_metadata = None;
 
                 if paging_enabled {
                     session
-                        .query_single_page(query.query, bound_values, paging_state)
+                        .query_single_page(query.query, query.bound_values, paging_state)
                         .await
                         .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
                 } else {
                     session
-                        .query_unpaged(query.query, bound_values)
+                        .query_unpaged(query.query, query.bound_values)
                         .await
                         .map(|result| {
                             (
@@ -326,19 +325,23 @@ pub unsafe extern "C" fn cass_session_execute(
                         })
                 }
             }
-            Statement::Prepared(prepared) => {
+            BoundStatement::Prepared(prepared) => {
                 // Clone result metadata, so we don't need to construct it from scratch in
                 // `CassResultMetadata::from_column_specs` - it requires a lot of allocations for complex types.
-                let maybe_result_metadata = Some(Arc::clone(&prepared.result_metadata));
+                let maybe_result_metadata = Some(Arc::clone(&prepared.statement.result_metadata));
 
                 if paging_enabled {
                     session
-                        .execute_single_page(&prepared.statement, bound_values, paging_state)
+                        .execute_single_page(
+                            &prepared.statement.statement,
+                            prepared.bound_values,
+                            paging_state,
+                        )
                         .await
                         .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
                 } else {
                     session
-                        .execute_unpaged(&prepared.statement, bound_values)
+                        .execute_unpaged(&prepared.statement.statement, prepared.bound_values)
                         .await
                         .map(|result| {
                             (
@@ -385,9 +388,9 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     CassFuture::make_raw(async move {
         let query = match &statement {
-            Statement::Simple(q) => q,
-            Statement::Prepared(ps) => {
-                return Ok(CassResultValue::Prepared(ps.clone()));
+            BoundStatement::Simple(q) => q,
+            BoundStatement::Prepared(ps) => {
+                return Ok(CassResultValue::Prepared(ps.statement.clone()));
             }
         };
 
