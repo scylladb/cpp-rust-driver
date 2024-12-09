@@ -122,7 +122,7 @@ pub static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
 
 // #[no_mangle]
 // pub extern "C" fn create_foo() -> *mut Foo {
-//     Box::into_raw(Box::new(Foo))
+//     BoxFFI::into_raw(Box::new(Foo))
 // }
 
 // To borrow (and not free) from C:

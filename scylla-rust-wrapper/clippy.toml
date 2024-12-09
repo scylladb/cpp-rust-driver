@@ -1,0 +1,21 @@
+disallowed-methods = [
+    "std::boxed::Box::from_raw",
+    "std::boxed::Box::from_raw_in",
+    "std::boxed::Box::into_raw",
+    "std::boxed::Box::into_raw_with_allocator",
+
+    "std::sync::Arc::as_ptr",
+    "std::sync::Arc::decrement_strong_count",
+    "std::sync::Arc::from_raw",
+    "std::sync::Arc::increment_strong_count",
+    "std::sync::Arc::into_raw",
+
+    "std::rc::Rc::as_ptr",
+    "std::rc::Rc::decrement_strong_count",
+    "std::rc::Rc::from_raw",
+    "std::rc::Rc::increment_strong_count",
+    "std::rc::Rc::into_raw",
+
+    "const_ptr::as_ref",
+    "mut_ptr::as_mut"
+]

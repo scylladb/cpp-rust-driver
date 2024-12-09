@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{CassDataType, UDTDataType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, UDTDataType};
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -139,10 +139,12 @@ impl CassSessionInner {
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
 
+impl ArcFFI for CassSession {}
+
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
     let session = Arc::new(RwLock::new(None::<CassSessionInner>));
-    Arc::into_raw(session) as *mut CassSession
+    ArcFFI::into_ptr(session) as *mut CassSession
 }
 
 #[no_mangle]
@@ -150,8 +152,8 @@ pub unsafe extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     cluster_raw: *const CassCluster,
 ) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session_raw);
-    let cluster: &CassCluster = ptr_to_ref(cluster_raw);
+    let session_opt = ArcFFI::as_ref(session_raw);
+    let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
 
     CassSessionInner::connect(session_opt, cluster, None)
 }
@@ -172,8 +174,8 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session_raw);
-    let cluster: &CassCluster = ptr_to_ref(cluster_raw);
+    let session_opt = ArcFFI::as_ref(session_raw);
+    let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
     let keyspace = ptr_to_cstr_n(keyspace, keyspace_length).map(ToOwned::to_owned);
 
     CassSessionInner::connect(session_opt, cluster, keyspace)
@@ -184,8 +186,8 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: *mut CassSession,
     batch_raw: *const CassBatch,
 ) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session_raw);
-    let batch_from_raw = ptr_to_ref(batch_raw);
+    let session_opt = ArcFFI::as_ref(session_raw);
+    let batch_from_raw = BoxFFI::as_ref(batch_raw);
     let mut state = batch_from_raw.state.clone();
     let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
 
@@ -250,10 +252,10 @@ pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
 ) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session_raw);
+    let session_opt = ArcFFI::as_ref(session_raw);
 
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
-    let statement_opt = ptr_to_ref(statement_raw);
+    let statement_opt = BoxFFI::as_ref(statement_raw);
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
     let bound_values = statement_opt.bound_values.clone();
@@ -377,8 +379,8 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
     cass_session: *mut CassSession,
     statement: *const CassStatement,
 ) -> *const CassFuture {
-    let session = ptr_to_ref(cass_session);
-    let cass_statement = ptr_to_ref(statement);
+    let session = ArcFFI::as_ref(cass_session);
+    let cass_statement = BoxFFI::as_ref(statement);
     let statement = cass_statement.statement.clone();
 
     CassFuture::make_raw(async move {
@@ -429,7 +431,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
     let query = Query::new(query_str.to_string());
-    let cass_session: &CassSession = ptr_to_ref(cass_session_raw);
+    let cass_session = ArcFFI::as_ref(cass_session_raw);
 
     CassFuture::make_raw(async move {
         let session_guard = cass_session.read().await;
@@ -457,12 +459,12 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
-    free_arced(session_raw);
+    ArcFFI::free(session_raw);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session);
+    let session_opt = ArcFFI::as_ref(session);
 
     CassFuture::make_raw(async move {
         let mut session_guard = session_opt.write().await;
@@ -481,7 +483,7 @@ pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_get_client_id(session: *const CassSession) -> CassUuid {
-    let cass_session = ptr_to_ref(session);
+    let cass_session = ArcFFI::as_ref(session);
 
     let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
     client_id.into()
@@ -491,7 +493,7 @@ pub unsafe extern "C" fn cass_session_get_client_id(session: *const CassSession)
 pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: *const CassSession,
 ) -> *const CassSchemaMeta {
-    let cass_session = ptr_to_ref(session);
+    let cass_session = ArcFFI::as_ref(session);
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
     for (keyspace_name, keyspace) in cass_session
@@ -509,7 +511,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         for udt_name in keyspace.user_defined_types.keys() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                Arc::new(CassDataType::UDT(UDTDataType::create_with_params(
+                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType::create_with_params(
                     &keyspace.user_defined_types,
                     keyspace_name,
                     udt_name,
@@ -565,7 +567,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         );
     }
 
-    Box::into_raw(Box::new(CassSchemaMeta { keyspaces }))
+    BoxFFI::into_ptr(Box::new(CassSchemaMeta { keyspaces }))
 }
 
 #[cfg(test)]
@@ -580,7 +582,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        argconv::{make_c_str, ptr_to_ref},
+        argconv::make_c_str,
         batch::{
             cass_batch_add_statement, cass_batch_free, cass_batch_new, cass_batch_set_retry_policy,
         },
@@ -721,7 +723,7 @@ mod tests {
                 cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
                 // Initially, the profile map is empty.
 
-                assert!(ptr_to_ref(session_raw)
+                assert!(ArcFFI::as_ref(session_raw)
                     .blocking_read()
                     .as_ref()
                     .unwrap()
@@ -730,7 +732,7 @@ mod tests {
 
                 cass_cluster_set_execution_profile(cluster_raw, make_c_str!("prof"), profile_raw);
                 // Mutations in cluster do not affect the session that was connected before.
-                assert!(ptr_to_ref(session_raw)
+                assert!(ArcFFI::as_ref(session_raw)
                     .blocking_read()
                     .as_ref()
                     .unwrap()
@@ -741,7 +743,7 @@ mod tests {
 
                 // Mutations in cluster are now propagated to the session.
                 cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
-                let profile_map_keys = ptr_to_ref(session_raw)
+                let profile_map_keys = ArcFFI::as_ref(session_raw)
                     .blocking_read()
                     .as_ref()
                     .unwrap()
@@ -827,8 +829,8 @@ mod tests {
             cass_future_wait_check_and_free(cass_session_connect(session_raw, cluster_raw));
             {
                 /* Test valid configurations */
-                let statement = ptr_to_ref(statement_raw);
-                let batch = ptr_to_ref(batch_raw);
+                let statement = BoxFFI::as_ref(statement_raw);
+                let batch = BoxFFI::as_ref(batch_raw);
                 {
                     assert!(statement.exec_profile.is_none());
                     assert!(batch.exec_profile.is_none());

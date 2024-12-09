@@ -17,6 +17,8 @@ pub struct CassUuidGen {
     pub last_timestamp: AtomicU64,
 }
 
+impl BoxFFI for CassUuidGen {}
+
 // Implementation directly ported from Cpp Driver implementation:
 
 const TIME_OFFSET_BETWEEN_UTC_AND_EPOCH: u64 = 0x01B21DD213814000; // Nanoseconds
@@ -113,7 +115,7 @@ pub unsafe extern "C" fn cass_uuid_gen_new() -> *mut CassUuidGen {
     // Masking the same way as in Cpp Driver.
     let node: u64 = (hasher.finish() & 0x0000FFFFFFFFFFFF) | 0x0000010000000000 /* Multicast bit */;
 
-    Box::into_raw(Box::new(CassUuidGen {
+    BoxFFI::into_ptr(Box::new(CassUuidGen {
         clock_seq_and_node: rand_clock_seq_and_node(node),
         last_timestamp: AtomicU64::new(0),
     }))
@@ -121,7 +123,7 @@ pub unsafe extern "C" fn cass_uuid_gen_new() -> *mut CassUuidGen {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mut CassUuidGen {
-    Box::into_raw(Box::new(CassUuidGen {
+    BoxFFI::into_ptr(Box::new(CassUuidGen {
         clock_seq_and_node: rand_clock_seq_and_node(node & 0x0000FFFFFFFFFFFF),
         last_timestamp: AtomicU64::new(0),
     }))
@@ -129,7 +131,7 @@ pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mu
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_time(uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
-    let uuid_gen = ptr_to_ref_mut(uuid_gen);
+    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen);
 
     let uuid = CassUuid {
         time_and_version: set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1),
@@ -159,7 +161,7 @@ pub unsafe extern "C" fn cass_uuid_gen_from_time(
     timestamp: cass_uint64_t,
     output: *mut CassUuid,
 ) {
-    let uuid_gen = ptr_to_ref_mut(uuid_gen);
+    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen);
 
     let uuid = CassUuid {
         time_and_version: set_version(from_unix_timestamp(timestamp), 1),
@@ -249,5 +251,5 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_free(uuid_gen: *mut CassUuidGen) {
-    free_boxed(uuid_gen);
+    BoxFFI::free(uuid_gen);
 }

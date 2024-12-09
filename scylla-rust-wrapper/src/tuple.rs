@@ -1,12 +1,13 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassDataType;
+use crate::cass_types::CassDataTypeInner;
 use crate::types::*;
 use crate::value;
 use crate::value::CassCqlValue;
 use std::sync::Arc;
 
-static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::Tuple(Vec::new());
+static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Tuple(Vec::new()));
 
 #[derive(Clone)]
 pub struct CassTuple {
@@ -14,11 +15,13 @@ pub struct CassTuple {
     pub items: Vec<Option<CassCqlValue>>,
 }
 
+impl BoxFFI for CassTuple {}
+
 impl CassTuple {
     fn get_types(&self) -> Option<&Vec<Arc<CassDataType>>> {
         match &self.data_type {
-            Some(t) => match &**t {
-                CassDataType::Tuple(v) => Some(v),
+            Some(t) => match unsafe { t.as_ref().get_unchecked() } {
+                CassDataTypeInner::Tuple(v) => Some(v),
                 _ => unreachable!(),
             },
             None => None,
@@ -59,7 +62,7 @@ impl From<&CassTuple> for CassCqlValue {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_tuple_new(item_count: size_t) -> *mut CassTuple {
-    Box::into_raw(Box::new(CassTuple {
+    BoxFFI::into_ptr(Box::new(CassTuple {
         data_type: None,
         items: vec![None; item_count as usize],
     }))
@@ -69,12 +72,12 @@ pub unsafe extern "C" fn cass_tuple_new(item_count: size_t) -> *mut CassTuple {
 unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: *const CassDataType,
 ) -> *mut CassTuple {
-    let data_type = clone_arced(data_type);
-    let item_count = match &*data_type {
-        CassDataType::Tuple(v) => v.len(),
+    let data_type = ArcFFI::cloned_from_ptr(data_type);
+    let item_count = match data_type.get_unchecked() {
+        CassDataTypeInner::Tuple(v) => v.len(),
         _ => return std::ptr::null_mut(),
     };
-    Box::into_raw(Box::new(CassTuple {
+    BoxFFI::into_ptr(Box::new(CassTuple {
         data_type: Some(data_type),
         items: vec![None; item_count],
     }))
@@ -82,13 +85,13 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
 
 #[no_mangle]
 unsafe extern "C" fn cass_tuple_free(tuple: *mut CassTuple) {
-    free_boxed(tuple)
+    BoxFFI::free(tuple);
 }
 
 #[no_mangle]
 unsafe extern "C" fn cass_tuple_data_type(tuple: *const CassTuple) -> *const CassDataType {
-    match &ptr_to_ref(tuple).data_type {
-        Some(t) => Arc::as_ptr(t),
+    match &BoxFFI::as_ref(tuple).data_type {
+        Some(t) => ArcFFI::as_ptr(t),
         None => &UNTYPED_TUPLE_TYPE,
     }
 }
