@@ -10,14 +10,21 @@ use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use row_with_self_borrowed_metadata::RowWithSelfBorrowedMetadata;
-use scylla::errors::IntoRowsResultError;
-use scylla::frame::response::result::DeserializedMetadataAndRawRows;
+use scylla::cluster::metadata::ColumnType;
+use scylla::deserialize::row::{
+    BuiltinDeserializationError, BuiltinDeserializationErrorKind, ColumnIterator, DeserializeRow,
+};
+use scylla::deserialize::value::DeserializeValue;
+use scylla::deserialize::FrameSlice;
+use scylla::errors::{DeserializationError, IntoRowsResultError, TypeCheckError};
+use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows};
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
 use scylla::value::{CqlValue, Row};
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use thiserror::Error;
 use uuid::Uuid;
 
 pub enum CassResultKind {
@@ -119,6 +126,41 @@ impl CassResultMetadata {
     }
 }
 
+pub(crate) struct CassRawRow<'result> {
+    pub(crate) columns: Vec<CassRawValue<'result>>,
+}
+
+impl<'frame, 'metadata, 'result> DeserializeRow<'frame, 'metadata> for CassRawRow<'result>
+where
+    'frame: 'result,
+    'metadata: 'result,
+{
+    fn type_check(_specs: &[ColumnSpec]) -> Result<(), TypeCheckError> {
+        Ok(())
+    }
+
+    fn deserialize(
+        mut row: ColumnIterator<'frame, 'metadata>,
+    ) -> Result<Self, DeserializationError> {
+        let mut columns = Vec::with_capacity(row.size_hint().0);
+        while let Some(column) = row.next().transpose()? {
+            columns.push(
+                <CassRawValue>::deserialize(column.spec.typ(), column.slice).map_err(|err| {
+                    DeserializationError::new(BuiltinDeserializationError {
+                        rust_name: std::any::type_name::<CassRawValue>(),
+                        kind: BuiltinDeserializationErrorKind::ColumnDeserializationFailed {
+                            column_index: column.index,
+                            column_name: column.spec.name().to_owned(),
+                            err,
+                        },
+                    })
+                })?,
+            );
+        }
+        Ok(Self { columns })
+    }
+}
+
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow<'result> {
@@ -200,6 +242,74 @@ mod row_with_self_borrowed_metadata {
 
             Self(yoke)
         }
+    }
+}
+
+pub(crate) struct CassRawValue<'result> {
+    pub(crate) typ: &'result ColumnType<'result>,
+    pub(crate) slice: Option<FrameSlice<'result>>,
+    pub(crate) item_count: Option<usize>,
+}
+
+#[derive(Error, Debug)]
+pub(crate) enum CollectionLengthDeserializationError {
+    #[error("Provided slice is too short. Expected at least 4 bytes, got {0}.")]
+    TooFewBytes(usize),
+    #[error("Deserialized length is negative: {0}.")]
+    NegativeLength(i32),
+}
+
+impl<'frame, 'metadata, 'result> DeserializeValue<'frame, 'metadata> for CassRawValue<'result>
+where
+    'metadata: 'result,
+    'frame: 'result,
+{
+    fn type_check(_typ: &ColumnType) -> Result<(), TypeCheckError> {
+        Ok(())
+    }
+
+    fn deserialize(
+        typ: &'metadata ColumnType<'metadata>,
+        v: Option<FrameSlice<'frame>>,
+    ) -> Result<Self, DeserializationError> {
+        let item_count: Option<usize> = v
+            .map(|frame_slice| match typ {
+                ColumnType::Collection { .. } => {
+                    let slice = frame_slice.as_slice();
+                    let length_arr: [u8; 4] = slice
+                        .get(0..4)
+                        .ok_or_else(|| {
+                            DeserializationError::new(
+                                CollectionLengthDeserializationError::TooFewBytes(slice.len()),
+                            )
+                        })?
+                        .try_into()
+                        // unwrap: Conversion from slice of length 4 to array of length 4 is safe.
+                        .unwrap();
+
+                    let i32_length = i32::from_be_bytes(length_arr);
+                    let length = i32_length.try_into().map_err(|_| {
+                        DeserializationError::new(
+                            CollectionLengthDeserializationError::NegativeLength(i32_length),
+                        )
+                    })?;
+
+                    Ok(Some(length))
+                }
+                ColumnType::Tuple(types) => Ok(Some(types.len())),
+                ColumnType::UserDefinedType { definition, .. } => {
+                    Ok(Some(definition.field_types.len()))
+                }
+                _ => Ok(None),
+            })
+            .transpose()?
+            .flatten();
+
+        Ok(Self {
+            typ,
+            slice: v,
+            item_count,
+        })
     }
 }
 
