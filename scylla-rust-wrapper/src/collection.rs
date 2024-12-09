@@ -6,19 +6,26 @@ use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
 use std::convert::TryFrom;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 // These constants help us to save an allocation in case user calls `cass_collection_new` (untyped collection).
-static UNTYPED_LIST_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::List {
-    typ: None,
-    frozen: false,
+static UNTYPED_LIST_TYPE: LazyLock<Arc<CassDataType>> = LazyLock::new(|| {
+    CassDataType::new_arced(CassDataTypeInner::List {
+        typ: None,
+        frozen: false,
+    })
 });
-static UNTYPED_SET_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Set {
-    typ: None,
-    frozen: false,
+static UNTYPED_SET_TYPE: LazyLock<Arc<CassDataType>> = LazyLock::new(|| {
+    CassDataType::new_arced(CassDataTypeInner::Set {
+        typ: None,
+        frozen: false,
+    })
 });
-static UNTYPED_MAP_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Map {
-    typ: MapDataType::Untyped,
-    frozen: false,
+static UNTYPED_MAP_TYPE: LazyLock<Arc<CassDataType>> = LazyLock::new(|| {
+    CassDataType::new_arced(CassDataTypeInner::Map {
+        typ: MapDataType::Untyped,
+        frozen: false,
+    })
 });
 
 #[derive(Clone)]
@@ -29,7 +36,9 @@ pub struct CassCollection {
     pub items: Vec<CassCqlValue>,
 }
 
-impl BoxFFI for CassCollection {}
+impl FFI for CassCollection {
+    type Ownership = OwnershipExclusive;
+}
 
 impl CassCollection {
     fn typecheck_on_append(&self, value: &Option<CassCqlValue>) -> CassError {
@@ -130,7 +139,7 @@ impl TryFrom<&CassCollection> for CassCqlValue {
 pub unsafe extern "C" fn cass_collection_new(
     collection_type: CassCollectionType,
     item_count: size_t,
-) -> *mut CassCollection {
+) -> CassExclusiveMutPtr<CassCollection> {
     let capacity = match collection_type {
         // Maps consist of a key and a value, so twice
         // the number of CassCqlValue will be stored.
@@ -148,10 +157,10 @@ pub unsafe extern "C" fn cass_collection_new(
 
 #[no_mangle]
 unsafe extern "C" fn cass_collection_new_from_data_type(
-    data_type: *const CassDataType,
+    data_type: CassSharedPtr<CassDataType>,
     item_count: size_t,
-) -> *mut CassCollection {
-    let data_type = ArcFFI::cloned_from_ptr(data_type);
+) -> CassExclusiveMutPtr<CassCollection> {
+    let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
     let (capacity, collection_type) = match data_type.get_unchecked() {
         CassDataTypeInner::List { .. } => {
             (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
@@ -162,7 +171,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
         CassDataTypeInner::Map { .. } => {
             (item_count * 2, CassCollectionType::CASS_COLLECTION_TYPE_MAP)
         }
-        _ => return std::ptr::null_mut(),
+        _ => return BoxFFI::null_mut(),
     };
     let capacity = capacity as usize;
 
@@ -176,16 +185,16 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
 
 #[no_mangle]
 unsafe extern "C" fn cass_collection_data_type(
-    collection: *const CassCollection,
-) -> *const CassDataType {
-    let collection_ref = BoxFFI::as_ref(collection);
+    collection: CassExclusiveConstPtr<CassCollection>,
+) -> CassSharedPtr<CassDataType> {
+    let collection_ref = BoxFFI::as_ref(&collection).unwrap();
 
     match &collection_ref.data_type {
         Some(dt) => ArcFFI::as_ptr(dt),
         None => match collection_ref.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => &UNTYPED_LIST_TYPE,
-            CassCollectionType::CASS_COLLECTION_TYPE_SET => &UNTYPED_SET_TYPE,
-            CassCollectionType::CASS_COLLECTION_TYPE_MAP => &UNTYPED_MAP_TYPE,
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => ArcFFI::as_ptr(&UNTYPED_LIST_TYPE),
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => ArcFFI::as_ptr(&UNTYPED_SET_TYPE),
+            CassCollectionType::CASS_COLLECTION_TYPE_MAP => ArcFFI::as_ptr(&UNTYPED_MAP_TYPE),
             // CassCollectionType is a C enum. Panic, if it's out of range.
             _ => panic!(
                 "CassCollectionType enum value out of range: {}",
@@ -196,7 +205,7 @@ unsafe extern "C" fn cass_collection_data_type(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_collection_free(collection: *mut CassCollection) {
+pub unsafe extern "C" fn cass_collection_free(collection: CassExclusiveMutPtr<CassCollection>) {
     BoxFFI::free(collection);
 }
 
@@ -225,7 +234,10 @@ mod tests {
     use crate::{
         argconv::ArcFFI,
         cass_error::CassError,
-        cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType},
+        cass_types::{
+            cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new, CassDataType,
+            CassDataTypeInner, CassValueType, MapDataType,
+        },
         collection::{
             cass_collection_append_double, cass_collection_append_float, cass_collection_free,
         },
@@ -234,7 +246,8 @@ mod tests {
 
     use super::{
         cass_bool_t, cass_collection_append_bool, cass_collection_append_int16,
-        cass_collection_new, cass_collection_new_from_data_type, CassCollectionType,
+        cass_collection_data_type, cass_collection_new, cass_collection_new_from_data_type,
+        CassCollectionType,
     };
 
     #[test]
@@ -496,6 +509,26 @@ mod tests {
                 ArcFFI::free(dt_ptr);
                 cass_collection_free(bool_list);
             }
+        }
+    }
+
+    #[test]
+    fn regression_empty_collection_data_type_test() {
+        // This is a regression test that checks whether collections return
+        // an Arc-based pointer for their type, even if they are empty.
+        // Previously, they would return the pointer to static data, but not Arc allocated.
+        unsafe {
+            let empty_list = cass_collection_new(CassCollectionType::CASS_COLLECTION_TYPE_LIST, 2);
+
+            // This would previously return a non Arc-based pointer.
+            let empty_list_dt = cass_collection_data_type(empty_list.into_const());
+
+            let empty_set_dt = cass_data_type_new(CassValueType::CASS_VALUE_TYPE_SET);
+            // This will try to increment the reference count of `empty_list_dt`.
+            // Previously, this would fail, because `empty_list_dt` did not originate from an Arc allocation.
+            cass_data_type_add_sub_type(empty_set_dt, empty_list_dt);
+
+            cass_data_type_free(empty_set_dt)
         }
     }
 }
