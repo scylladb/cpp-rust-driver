@@ -3,6 +3,7 @@ use scylla::transport::errors::*;
 // Re-export error types.
 pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
 use crate::query_error::CassErrorResult;
+use crate::statement::UnknownNamedParameterError;
 
 pub trait ToCassError {
     fn to_cass_error(&self) -> CassError;
@@ -94,7 +95,14 @@ impl ToCassError for BadQuery {
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
             BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::SerializationError(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::SerializationError(e) => {
+                if e.downcast_ref::<UnknownNamedParameterError>().is_some() {
+                    // It means that our custom `UnknownNamedParameterError` was returned.
+                    CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
+                } else {
+                    CassError::CASS_ERROR_LAST_ENTRY
+                }
+            }
             BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
             // BadQuery is non_exhaustive
             // For now, since all other variants return LAST_ENTRY,

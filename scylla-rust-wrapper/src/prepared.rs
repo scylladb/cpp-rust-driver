@@ -6,7 +6,7 @@ use crate::{
     cass_error::CassError,
     cass_types::{get_column_type, CassDataType},
     query_result::CassResultMetadata,
-    statement::{CassStatement, Statement},
+    statement::{BoundPreparedStatement, BoundStatement, CassStatement},
     types::size_t,
 };
 use scylla::prepared_statement::PreparedStatement;
@@ -88,11 +88,14 @@ pub unsafe extern "C" fn cass_prepared_bind(
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument
-    let statement = Statement::Prepared(prepared);
+
+    let statement = BoundStatement::Prepared(BoundPreparedStatement {
+        statement: prepared,
+        bound_values: vec![Unset; bound_values_size],
+    });
 
     BoxFFI::into_ptr(Box::new(CassStatement {
         statement,
-        bound_values: vec![Unset; bound_values_size],
         paging_state: PagingState::start(),
         // Cpp driver disables paging by default.
         paging_enabled: false,
