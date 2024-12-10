@@ -112,6 +112,36 @@ protected:
   }
 
   /**
+   * Insert and validate
+   *
+   * @param statement Insert statement to use (case sensitive format)
+   */
+  void insert_and_validate_interleaving(Statement statement) {
+    // Insert values into the table by name
+    TimeUuid key = uuid_generator_.generate_timeuuid();
+    statement.bind<TimeUuid>("key", key);
+    statement.bind<Float>(1, Float(0.0f));
+    // This should overwrite the previous value. Thus bound_values[1] = 1.1f.
+    statement.bind<Float>("\"abc\"", Float(1.1f));
+    statement.bind<Float>("\"ABC\"", Float(2.2f));
+    statement.bind<Float>("\"aBc\"", Float(3.3f));
+    // This should overwrite the previous value.
+    // Thus, bound_values[name_to_bound_index["aBc"]] = 4.4f.
+    statement.bind<Float>(3, Float(4.4f));
+    session_.execute(statement);
+
+    // Validate the inserts into the table
+    Result result = session_.execute(default_select_all());
+    ASSERT_EQ(1u, result.row_count());
+    ASSERT_EQ(7u, result.column_count());
+    Row row = result.first_row();
+    ASSERT_EQ(key, row.column_by_name<TimeUuid>("key"));
+    ASSERT_EQ(Float(1.1f), row.column_by_name<Float>("\"abc\""));
+    ASSERT_EQ(Float(2.2f), row.column_by_name<Float>("\"ABC\""));
+    ASSERT_EQ(Float(4.4f), row.column_by_name<Float>("\"aBc\""));
+  }
+
+  /**
    * Insert all values into the table
    *
    * @param statement Insert statement to use (all format)
@@ -292,6 +322,42 @@ CASSANDRA_INTEGRATION_TEST_F(ByNameTests, SimpleCaseSensitive) {
   // Prepare, create, insert and validate
   Statement statement(format_string(INSERT_CASE_SENSITIVE_FORMAT, table_name_.c_str()), 4);
   insert_and_validate_case_sensitive(statement);
+}
+
+/**
+ * Perform interleaving `by name` and `by index` binding 
+ * using a prepared statement and validate
+ *
+ * @test_category queries:prepared
+ * @since core:1.0.0
+ * @expected_result Cassandra values are inserted using 
+ *                  interleaving by name and by index bindng and validated
+ */
+CASSANDRA_INTEGRATION_TEST_F(ByNameTests, PreparedInterleaving) {
+  CHECK_FAILURE;
+
+  // Prepare, create, insert and validate
+  Prepared prepared =
+      session_.prepare(format_string(INSERT_CASE_SENSITIVE_FORMAT, table_name_.c_str()));
+  insert_and_validate_interleaving(prepared.bind());
+}
+
+/**
+ * Perform interleaving `by name` and `by index` binding 
+ * using a simple statement and validate
+ *
+ * @test_category queries:basic
+ * @since core:2.1.0
+ * @expected_result Cassandra values are inserted using 
+ *                  interleaving by name and by index bindng and validated
+ */
+CASSANDRA_INTEGRATION_TEST_F(ByNameTests, SimpleInterleaving) {
+  CHECK_FAILURE;
+  SKIP_IF_CASSANDRA_VERSION_LT(2.1.0);
+
+  // Prepare, create, insert and validate
+  Statement statement(format_string(INSERT_CASE_SENSITIVE_FORMAT, table_name_.c_str()), 4);
+  insert_and_validate_interleaving(statement);
 }
 
 /**
