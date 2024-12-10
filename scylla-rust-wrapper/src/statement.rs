@@ -126,17 +126,22 @@ impl BoundSimpleQuery {
         if let Some(idx) = index {
             self.bind_cql_value(*idx, value)
         } else {
-            // Find first free index, i.e. index where value at this index is Unset.
-            let free_index = self.bound_values.iter().position(|v| matches!(v, Unset));
+            let index = {
+                // If new name appeared, we want to append its value to the vector.
+                // This can possibly overwrite some already Set value
+                // (which was set via by_index binding). cpp-driver does the same.
+                let free_index = self.name_to_bound_index.len();
 
-            if let Some(index) = free_index {
-                self.name_to_bound_index.insert(name.to_string(), index);
+                // New index exceeds the number of declared parameters.
+                // cpp-driver returns this error as well.
+                if free_index >= self.bound_values.len() {
+                    return CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
+                }
+                free_index
+            };
 
-                self.bind_cql_value(index, value)
-            } else {
-                // No free index for a given name. Cpp-driver returns this error in such case.
-                CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
-            }
+            self.name_to_bound_index.insert(name.to_string(), index);
+            self.bind_cql_value(index, value)
         }
     }
 }
