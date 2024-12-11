@@ -204,7 +204,7 @@ CASSANDRA_INTEGRATION_TEST_F(NamedParametersTests, SimpleStatementInvalidName) {
   insert_statement.bind<Uuid>("named_uuid", value_uuid_);
   insert_statement.bind<Blob>("named_blob", value_blob_);
   insert_statement.bind<List<Float> >("named_list_floats", value_list_floats_);
-  EXPECT_EQ(CASS_ERROR_SERVER_INVALID_QUERY,
+  EXPECT_EQ(CASS_ERROR_LIB_NAME_DOES_NOT_EXIST,
             session_.execute(insert_statement, false).error_code());
 }
 

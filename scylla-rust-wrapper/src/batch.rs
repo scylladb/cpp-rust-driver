@@ -4,7 +4,7 @@ use crate::cass_types::CassConsistency;
 use crate::cass_types::{make_batch_type, CassBatchType};
 use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
-use crate::statement::{CassStatement, Statement};
+use crate::statement::{BoundStatement, CassStatement};
 use crate::types::*;
 use crate::value::CassCqlValue;
 use scylla::batch::Batch;
@@ -166,11 +166,15 @@ pub unsafe extern "C" fn cass_batch_add_statement(
     let statement = BoxFFI::as_ref(statement);
 
     match &statement.statement {
-        Statement::Simple(q) => state.batch.append_statement(q.query.clone()),
-        Statement::Prepared(p) => state.batch.append_statement(p.statement.clone()),
+        BoundStatement::Simple(q) => {
+            state.batch.append_statement(q.query.clone());
+            state.bound_values.push(q.bound_values.clone());
+        }
+        BoundStatement::Prepared(p) => {
+            state.batch.append_statement(p.statement.statement.clone());
+            state.bound_values.push(p.bound_values.clone());
+        }
     };
-
-    state.bound_values.push(statement.bound_values.clone());
 
     CassError::CASS_OK
 }
