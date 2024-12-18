@@ -70,11 +70,7 @@ impl CassSessionInner {
     }
 
     fn connect(
-        // This reference is 'static because this is the only was of assuring the borrow checker
-        // that holding it in our returned future is sound. Ideally, we would prefer to have
-        // the returned future's lifetime constrained by real lifetime of the session's RwLock,
-        // but this is impossible to be guaranteed due to C/Rust cross-language barrier.
-        session_opt: &'static RwLock<Option<CassSessionInner>>,
+        session_opt: Arc<RwLock<Option<CassSessionInner>>>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> *mut CassFuture {
@@ -94,7 +90,7 @@ impl CassSessionInner {
     }
 
     async fn connect_fut(
-        session_opt: &RwLock<Option<CassSessionInner>>,
+        session_opt: Arc<RwLock<Option<CassSessionInner>>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         client_id: uuid::Uuid,
@@ -154,7 +150,7 @@ pub unsafe extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     cluster_raw: *const CassCluster,
 ) -> *mut CassFuture {
-    let session_opt = ArcFFI::as_ref(session_raw);
+    let session_opt = ArcFFI::cloned_from_ptr(session_raw);
     let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
 
     CassSessionInner::connect(session_opt, cluster, None)
@@ -176,7 +172,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> *mut CassFuture {
-    let session_opt = ArcFFI::as_ref(session_raw);
+    let session_opt = ArcFFI::cloned_from_ptr(session_raw);
     let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
     let keyspace = ptr_to_cstr_n(keyspace, keyspace_length).map(ToOwned::to_owned);
 
@@ -188,7 +184,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: *mut CassSession,
     batch_raw: *const CassBatch,
 ) -> *mut CassFuture {
-    let session_opt = ArcFFI::as_ref(session_raw);
+    let session_opt = ArcFFI::cloned_from_ptr(session_raw);
     let batch_from_raw = BoxFFI::as_ref(batch_raw);
     let mut state = batch_from_raw.state.clone();
     let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
@@ -254,7 +250,7 @@ pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
 ) -> *mut CassFuture {
-    let session_opt = ArcFFI::as_ref(session_raw);
+    let session_opt = ArcFFI::cloned_from_ptr(session_raw);
 
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = BoxFFI::as_ref(statement_raw);
@@ -389,7 +385,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
     cass_session: *mut CassSession,
     statement: *const CassStatement,
 ) -> *mut CassFuture {
-    let session = ArcFFI::as_ref(cass_session);
+    let session = ArcFFI::cloned_from_ptr(cass_session);
     let cass_statement = BoxFFI::as_ref(statement);
     let statement = cass_statement.statement.clone();
 
@@ -441,7 +437,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
-    let cass_session = ArcFFI::as_ref(cass_session_raw);
+    let cass_session = ArcFFI::cloned_from_ptr(cass_session_raw);
 
     CassFuture::make_raw(async move {
         let session_guard = cass_session.read().await;
@@ -474,7 +470,7 @@ pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *mut CassFuture {
-    let session_opt = ArcFFI::as_ref(session);
+    let session_opt = ArcFFI::cloned_from_ptr(session);
 
     CassFuture::make_raw(async move {
         let mut session_guard = session_opt.write().await;
