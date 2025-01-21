@@ -25,7 +25,7 @@ pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
     let mut result = ['\0' as c_char; N];
 
     // Max length must be null-terminated
-    let mut max_len = min(N - 1, s.as_bytes().len());
+    let mut max_len = min(N - 1, s.len());
 
     while !s.is_char_boundary(max_len) {
         max_len -= 1;
