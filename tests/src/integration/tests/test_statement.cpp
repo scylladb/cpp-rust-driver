@@ -35,7 +35,7 @@ CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetHost) {
   for (int i = 1; i <= 2; ++i) {
     std::stringstream ip_address;
     ip_address << ccm_->get_ip_prefix() << i;
-    Statement statement("SELECT rpc_address FROM system.local");
+    Statement statement("SELECT rpc_address FROM system.local WHERE key='local'");
     statement.set_host(ip_address.str(), 9042);
     Result result = session_.execute(statement);
     Inet rpc_address = result.first_row().column_by_name<Inet>("rpc_address");
@@ -60,7 +60,7 @@ CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetHostInet) {
     ip_address << ccm_->get_ip_prefix() << i;
     CassInet inet;
     ASSERT_EQ(cass_inet_from_string(ip_address.str().c_str(), &inet), CASS_OK);
-    Statement statement("SELECT rpc_address FROM system.local");
+    Statement statement("SELECT rpc_address FROM system.local WHERE key='local'");
     statement.set_host(&inet, 9042);
     Result result = session_.execute(statement);
     Inet rpc_address = result.first_row().column_by_name<Inet>("rpc_address");
@@ -78,7 +78,7 @@ CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetHostInet) {
 CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetNode) {
   CHECK_FAILURE;
 
-  Statement statement("SELECT rpc_address FROM system.local");
+  Statement statement("SELECT rpc_address FROM system.local WHERE key='local'");
   Result result1 = session_.execute(statement);
   Inet rpc_address1 = result1.first_row().column_by_name<Inet>("rpc_address");
   const CassNode* node = result1.coordinator();
@@ -104,7 +104,7 @@ CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetNode) {
 CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetHostWithInvalidPort) {
   CHECK_FAILURE;
 
-  Statement statement("SELECT rpc_address FROM system.local");
+  Statement statement("SELECT rpc_address FROM system.local WHERE key='local'");
   statement.set_host("127.0.0.1", 8888); // Invalid port
   Result result = session_.execute(statement, false);
   EXPECT_EQ(result.error_code(), CASS_ERROR_LIB_NO_HOSTS_AVAILABLE);
@@ -123,7 +123,7 @@ CASSANDRA_INTEGRATION_TEST_F(StatementTests, SetHostWhereHostIsDown) {
 
   stop_node(1);
 
-  Statement statement("SELECT rpc_address FROM system.local");
+  Statement statement("SELECT rpc_address FROM system.local WHERE key='local'");
   statement.set_host("127.0.0.1", 9042);
   Result result = session_.execute(statement, false);
   EXPECT_EQ(result.error_code(), CASS_ERROR_LIB_NO_HOSTS_AVAILABLE);

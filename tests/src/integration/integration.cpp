@@ -30,7 +30,7 @@
 #define ENTITY_MAXIMUM_LENGTH 48
 #define SIMPLE_KEYSPACE_FORMAT "CREATE KEYSPACE IF NOT EXISTS %s WITH replication = %s"
 #define REPLICATION_STRATEGY "{ 'class': %s }"
-#define SELECT_SERVER_VERSION "SELECT release_version FROM system.local"
+#define SELECT_SERVER_VERSION "SELECT release_version FROM system.local WHERE key='local'"
 #define LOGGER_MAXIMUM_WAIT_TIME_MS 10000u
 #define LOGGER_WAIT_FOR_NAP_MS 100
 

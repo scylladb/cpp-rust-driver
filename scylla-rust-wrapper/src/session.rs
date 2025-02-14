@@ -1088,7 +1088,7 @@ mod tests {
                 CassError::CASS_OK
             );
 
-            let query = make_c_str!("SELECT host_id FROM system.local");
+            let query = make_c_str!("SELECT host_id FROM system.local WHERE key='local'");
             let statement_raw = cass_statement_new(query, 0);
             let batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
             assert_cass_error_eq!(

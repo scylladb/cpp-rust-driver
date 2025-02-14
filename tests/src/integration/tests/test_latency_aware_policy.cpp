@@ -50,7 +50,7 @@ CASSANDRA_INTEGRATION_TEST_F(LatencyAwarePolicyTest, IsEnabled) {
   logger_.add_critera("Calculated new minimum:");
 
   for (int i = 0; i < 9; ++i) { // Greater than min measured
-    session_.execute("SELECT release_version FROM system.local");
+    session_.execute("SELECT release_version FROM system.local WHERE key='local'");
   }
 
   msleep(250);
