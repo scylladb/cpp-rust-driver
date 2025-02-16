@@ -24,7 +24,7 @@ CASSANDRA_INTEGRATION_TEST_F(TracingTests, Simple) {
   Uuid tracing_id;
 
   { // Get tracing ID.
-    Statement statement("SELECT release_version FROM system.local");
+    Statement statement("SELECT release_version FROM system.local WHERE key='local'");
     statement.set_tracing(true);
     Result result = session_.execute(statement);
     tracing_id = result.tracing_id();

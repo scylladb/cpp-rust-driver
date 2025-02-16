@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
     CassFuture* close_future = NULL;
 
     /* Build statement and execute query */
-    const char* query = "SELECT release_version FROM system.local";
+    const char* query = "SELECT release_version FROM system.local WHERE key='local'";
     CassStatement* statement = cass_statement_new(query, 0);
 
     CassFuture* result_future = cass_session_execute(session, statement);

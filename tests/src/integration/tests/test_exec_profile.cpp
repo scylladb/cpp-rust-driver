@@ -160,7 +160,7 @@ private:
   void build_tokens() {
     // Build the token/host mapping
     Session session = cluster_.connect();
-    Statement statement("SELECT data_center, tokens FROM system.local");
+    Statement statement("SELECT data_center, tokens FROM system.local WHERE key='local'");
     statement.set_execution_profile("round_robin");
     for (size_t i = 0; i < total_nodes_; ++i) {
       // Execute the statement and retrieve the host IP address

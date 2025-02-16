@@ -149,7 +149,7 @@ int main(int argc, char* argv[]) {
   if (cass_future_error_code(connect_future) == CASS_OK) {
     /* Build statement and execute query */
     CassFuture* result_future = NULL;
-    const char* query = "SELECT release_version FROM system.local";
+    const char* query = "SELECT release_version FROM system.local WHERE key='local'";
     CassStatement* statement = cass_statement_new(query, 0);
 
     /* Enable tracing on the statement */

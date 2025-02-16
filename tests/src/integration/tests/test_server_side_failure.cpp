@@ -81,7 +81,7 @@ CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, Warning) {
   SKIP_IF_CASSANDRA_VERSION_LT(2.2);
 
   logger_.add_critera("Server-side warning: Aggregation query used without partition key");
-  session_.execute("SELECT sum(gossip_generation) FROM system.local");
+  session_.execute("SELECT sum(gossip_generation) FROM system.local WHERE key='local'");
   EXPECT_EQ(logger_.count(), 1u);
 }
 
