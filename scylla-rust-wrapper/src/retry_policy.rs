@@ -1,5 +1,6 @@
-use scylla::retry_policy::{DefaultRetryPolicy, FallthroughRetryPolicy};
-use scylla::transport::downgrading_consistency_retry_policy::DowngradingConsistencyRetryPolicy;
+use scylla::policies::retry::{
+    DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
+};
 use std::sync::Arc;
 
 use crate::argconv::ArcFFI;

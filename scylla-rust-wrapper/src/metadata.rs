@@ -3,7 +3,7 @@ use crate::cass_column_types::CassColumnType;
 use crate::cass_types::get_column_type_from_cql_type;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::transport::topology::{ColumnKind, Table, UserDefinedType};
+use scylla::cluster::metadata::{ColumnKind, Table, UserDefinedType};
 use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -72,7 +72,7 @@ pub unsafe fn create_table_metadata(
             let cass_column_meta = CassColumnMeta {
                 name: column_name.clone(),
                 column_type: get_column_type_from_cql_type(
-                    &column_metadata.type_,
+                    &column_metadata.typ,
                     user_defined_types,
                     keyspace_name,
                 ),
@@ -81,6 +81,9 @@ pub unsafe fn create_table_metadata(
                     ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
                     ColumnKind::Clustering => CassColumnType::CASS_COLUMN_TYPE_CLUSTERING_KEY,
                     ColumnKind::PartitionKey => CassColumnType::CASS_COLUMN_TYPE_PARTITION_KEY,
+
+                    // ColumnKind is non_exhaustive.
+                    _ => panic!("Unsupported column kind"),
                 },
             };
 

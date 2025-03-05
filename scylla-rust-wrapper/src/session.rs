@@ -13,12 +13,14 @@ use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
 use crate::statement::{BoundStatement, CassStatement, SimpleQueryRowSerializer};
 use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
+use scylla::client::execution_profile::ExecutionProfileHandle;
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
+use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
-use scylla::query::Query;
-use scylla::transport::errors::QueryError;
-use scylla::transport::execution_profile::ExecutionProfileHandle;
-use scylla::transport::PagingStateResponse;
-use scylla::{QueryResult, Session, SessionBuilder};
+use scylla::response::query_result::QueryResult;
+use scylla::response::PagingStateResponse;
+use scylla::statement::unprepared::Statement;
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
@@ -241,7 +243,7 @@ async fn request_with_timeout(
     match tokio::time::timeout(Duration::from_millis(request_timeout_ms), future).await {
         Ok(result) => result,
         Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
-            QueryError::TimeoutError.into(),
+            ExecutionError::RequestTimeout(Duration::from_millis(request_timeout_ms)).into(),
         ))),
     }
 }
@@ -299,7 +301,7 @@ pub unsafe extern "C" fn cass_session_execute(
                 // of prepared statements.
                 Option<Arc<CassResultMetadata>>,
             ),
-            QueryError,
+            ExecutionError,
         >;
         let query_res: QueryRes = match statement {
             BoundStatement::Simple(query) => {
@@ -437,7 +439,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
-    let query = Query::new(query_str.to_string());
+    let query = Statement::new(query_str.to_string());
     let cass_session = ArcFFI::as_ref(cass_session_raw);
 
     CassFuture::make_raw(async move {
@@ -508,8 +510,8 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         .as_ref()
         .unwrap()
         .session
-        .get_cluster_data()
-        .get_keyspace_info()
+        .get_cluster_state()
+        .keyspaces_iter()
     {
         let mut user_defined_type_data_type = HashMap::new();
         let mut tables = HashMap::new();
@@ -564,9 +566,9 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         }
 
         keyspaces.insert(
-            keyspace_name.clone(),
+            keyspace_name.to_owned(),
             CassKeyspaceMeta {
-                name: keyspace_name.clone(),
+                name: keyspace_name.to_owned(),
                 user_defined_type_data_type,
                 tables,
                 views,
@@ -580,7 +582,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 #[cfg(test)]
 mod tests {
     use rusty_fork::rusty_fork_test;
-    use scylla::transport::errors::DbError;
+    use scylla::errors::DbError;
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,

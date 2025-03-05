@@ -5,12 +5,12 @@ use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use scylla::execution_profile::{
+use scylla::client::execution_profile::{
     ExecutionProfile, ExecutionProfileBuilder, ExecutionProfileHandle,
 };
-use scylla::load_balancing::LatencyAwarenessBuilder;
-use scylla::retry_policy::RetryPolicy;
-use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
+use scylla::policies::load_balancing::LatencyAwarenessBuilder;
+use scylla::policies::retry::RetryPolicy;
+use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 
 use crate::argconv::{ptr_to_cstr_n, strlen, ArcFFI, BoxFFI};
