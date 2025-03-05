@@ -41,7 +41,7 @@ impl CassPrepared {
             .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
             .collect();
 
-        let result_metadata = Arc::new(CassResultMetadata::from_column_spec_views(
+        let result_metadata = Arc::new(CassResultMetadata::from_column_specs(
             statement.get_result_set_col_specs(),
         ));
 
