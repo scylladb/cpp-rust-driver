@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{CassDataType, CassDataTypeInner, UDTDataType};
+use crate::cass_types::get_column_type;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -16,6 +16,7 @@ use crate::uuid::CassUuid;
 use scylla::client::execution_profile::ExecutionProfileHandle;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
+use scylla::cluster::metadata::ColumnType;
 use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
 use scylla::response::query_result::QueryResult;
@@ -517,15 +518,13 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         let mut tables = HashMap::new();
         let mut views = HashMap::new();
 
-        for udt_name in keyspace.user_defined_types.keys() {
+        for (udt_name, udt) in keyspace.user_defined_types.iter() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType::create_with_params(
-                    &keyspace.user_defined_types,
-                    keyspace_name,
-                    udt_name,
-                    false,
-                ))),
+                Arc::new(get_column_type(&ColumnType::UserDefinedType {
+                    definition: Arc::clone(udt),
+                    frozen: false,
+                })),
             );
         }
 
