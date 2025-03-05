@@ -1,12 +1,11 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::types::*;
-use scylla::cluster::metadata::{CollectionType, NativeType, UserDefinedType};
+use scylla::cluster::metadata::{CollectionType, NativeType};
 use scylla::frame::response::result::ColumnType;
 use scylla::frame::types::{Consistency, SerialConsistency};
 use scylla::statement::batch::BatchType;
 use std::cell::UnsafeCell;
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::os::raw::c_char;
 use std::ptr;
@@ -34,35 +33,6 @@ impl UDTDataType {
             keyspace: "".to_string(),
             name: "".to_string(),
             frozen: false,
-        }
-    }
-
-    pub fn create_with_params(
-        user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
-        keyspace_name: &str,
-        name: &str,
-        frozen: bool,
-    ) -> UDTDataType {
-        UDTDataType {
-            field_types: user_defined_types
-                .get(name)
-                .map(|udf| &udf.field_types)
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|(udt_field_name, udt_field_type)| {
-                    (
-                        udt_field_name.clone().into_owned(),
-                        Arc::new(get_column_type_from_cql_type(
-                            udt_field_type,
-                            user_defined_types,
-                            keyspace_name,
-                        )),
-                    )
-                })
-                .collect(),
-            keyspace: keyspace_name.to_string(),
-            name: name.to_owned(),
-            frozen,
         }
     }
 
@@ -322,80 +292,6 @@ fn native_type_to_cass_value_type(native_type: &NativeType) -> CassValueType {
         // NativeType is non_exhaustive
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
-}
-
-pub fn get_column_type_from_cql_type(
-    cql_type: &ColumnType,
-    user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
-    keyspace_name: &str,
-) -> CassDataType {
-    let inner = match cql_type {
-        ColumnType::Native(native) => {
-            CassDataTypeInner::Value(native_type_to_cass_value_type(native))
-        }
-        ColumnType::Collection { typ, frozen } => match typ {
-            CollectionType::List(list) => CassDataTypeInner::List {
-                typ: Some(Arc::new(get_column_type_from_cql_type(
-                    list,
-                    user_defined_types,
-                    keyspace_name,
-                ))),
-                frozen: *frozen,
-            },
-            CollectionType::Map(key, value) => CassDataTypeInner::Map {
-                typ: MapDataType::KeyAndValue(
-                    Arc::new(get_column_type_from_cql_type(
-                        key,
-                        user_defined_types,
-                        keyspace_name,
-                    )),
-                    Arc::new(get_column_type_from_cql_type(
-                        value,
-                        user_defined_types,
-                        keyspace_name,
-                    )),
-                ),
-                frozen: *frozen,
-            },
-            CollectionType::Set(set) => CassDataTypeInner::Set {
-                typ: Some(Arc::new(get_column_type_from_cql_type(
-                    set,
-                    user_defined_types,
-                    keyspace_name,
-                ))),
-                frozen: *frozen,
-            },
-
-            // CollectionType is non_exhaustive.
-            _ => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
-        },
-        ColumnType::Tuple(tuple) => CassDataTypeInner::Tuple(
-            tuple
-                .iter()
-                .map(|field_type| {
-                    Arc::new(get_column_type_from_cql_type(
-                        field_type,
-                        user_defined_types,
-                        keyspace_name,
-                    ))
-                })
-                .collect(),
-        ),
-        ColumnType::UserDefinedType { definition, frozen } => {
-            let name = &definition.name;
-            CassDataTypeInner::UDT(UDTDataType::create_with_params(
-                user_defined_types,
-                keyspace_name,
-                name,
-                *frozen,
-            ))
-        }
-
-        // Column type is non_exhaustive.
-        _ => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_UNKNOWN),
-    };
-
-    CassDataType::new(inner)
 }
 
 impl CassDataTypeInner {
