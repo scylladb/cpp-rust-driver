@@ -295,33 +295,31 @@ impl CassDataType {
     }
 }
 
-impl From<NativeType> for CassValueType {
-    fn from(native_type: NativeType) -> CassValueType {
-        match native_type {
-            NativeType::Ascii => CassValueType::CASS_VALUE_TYPE_ASCII,
-            NativeType::Boolean => CassValueType::CASS_VALUE_TYPE_BOOLEAN,
-            NativeType::Blob => CassValueType::CASS_VALUE_TYPE_BLOB,
-            NativeType::Counter => CassValueType::CASS_VALUE_TYPE_COUNTER,
-            NativeType::Date => CassValueType::CASS_VALUE_TYPE_DATE,
-            NativeType::Decimal => CassValueType::CASS_VALUE_TYPE_DECIMAL,
-            NativeType::Double => CassValueType::CASS_VALUE_TYPE_DOUBLE,
-            NativeType::Duration => CassValueType::CASS_VALUE_TYPE_DURATION,
-            NativeType::Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
-            NativeType::Int => CassValueType::CASS_VALUE_TYPE_INT,
-            NativeType::BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
-            NativeType::Text => CassValueType::CASS_VALUE_TYPE_TEXT,
-            NativeType::Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
-            NativeType::Inet => CassValueType::CASS_VALUE_TYPE_INET,
-            NativeType::SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
-            NativeType::TinyInt => CassValueType::CASS_VALUE_TYPE_TINY_INT,
-            NativeType::Time => CassValueType::CASS_VALUE_TYPE_TIME,
-            NativeType::Timeuuid => CassValueType::CASS_VALUE_TYPE_TIMEUUID,
-            NativeType::Uuid => CassValueType::CASS_VALUE_TYPE_UUID,
-            NativeType::Varint => CassValueType::CASS_VALUE_TYPE_VARINT,
+fn native_type_to_cass_value_type(native_type: &NativeType) -> CassValueType {
+    match native_type {
+        NativeType::Ascii => CassValueType::CASS_VALUE_TYPE_ASCII,
+        NativeType::Boolean => CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+        NativeType::Blob => CassValueType::CASS_VALUE_TYPE_BLOB,
+        NativeType::Counter => CassValueType::CASS_VALUE_TYPE_COUNTER,
+        NativeType::Date => CassValueType::CASS_VALUE_TYPE_DATE,
+        NativeType::Decimal => CassValueType::CASS_VALUE_TYPE_DECIMAL,
+        NativeType::Double => CassValueType::CASS_VALUE_TYPE_DOUBLE,
+        NativeType::Duration => CassValueType::CASS_VALUE_TYPE_DURATION,
+        NativeType::Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
+        NativeType::Int => CassValueType::CASS_VALUE_TYPE_INT,
+        NativeType::BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
+        NativeType::Text => CassValueType::CASS_VALUE_TYPE_TEXT,
+        NativeType::Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
+        NativeType::Inet => CassValueType::CASS_VALUE_TYPE_INET,
+        NativeType::SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+        NativeType::TinyInt => CassValueType::CASS_VALUE_TYPE_TINY_INT,
+        NativeType::Time => CassValueType::CASS_VALUE_TYPE_TIME,
+        NativeType::Timeuuid => CassValueType::CASS_VALUE_TYPE_TIMEUUID,
+        NativeType::Uuid => CassValueType::CASS_VALUE_TYPE_UUID,
+        NativeType::Varint => CassValueType::CASS_VALUE_TYPE_VARINT,
 
-            // NativeType is non_exhaustive
-            _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
-        }
+        // NativeType is non_exhaustive
+        _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
 
@@ -331,7 +329,9 @@ pub fn get_column_type_from_cql_type(
     keyspace_name: &str,
 ) -> CassDataType {
     let inner = match cql_type {
-        ColumnType::Native(native) => CassDataTypeInner::Value(native.clone().into()),
+        ColumnType::Native(native) => {
+            CassDataTypeInner::Value(native_type_to_cass_value_type(native))
+        }
         ColumnType::Collection { typ, frozen } => match typ {
             CollectionType::List(list) => CassDataTypeInner::List {
                 typ: Some(Arc::new(get_column_type_from_cql_type(
