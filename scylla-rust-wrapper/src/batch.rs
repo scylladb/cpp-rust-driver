@@ -7,8 +7,8 @@ use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::*;
 use crate::value::CassCqlValue;
-use scylla::batch::Batch;
-use scylla::frame::value::MaybeUnset;
+use scylla::statement::batch::Batch;
+use scylla::value::MaybeUnset;
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -89,10 +89,10 @@ pub unsafe extern "C" fn cass_batch_set_retry_policy(
 ) -> CassError {
     let batch = BoxFFI::as_mut_ref(batch);
 
-    let maybe_arced_retry_policy: Option<Arc<dyn scylla::retry_policy::RetryPolicy>> =
+    let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
         ArcFFI::as_maybe_ref(retry_policy).map(|policy| match policy {
             CassRetryPolicy::DefaultRetryPolicy(default) => {
-                default.clone() as Arc<dyn scylla::retry_policy::RetryPolicy>
+                default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
             }
             CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),

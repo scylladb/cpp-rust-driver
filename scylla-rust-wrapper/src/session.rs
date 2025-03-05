@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
-use crate::cass_types::{CassDataType, CassDataTypeInner, UDTDataType};
+use crate::cass_types::get_column_type;
 use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
@@ -13,12 +13,15 @@ use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
 use crate::statement::{BoundStatement, CassStatement, SimpleQueryRowSerializer};
 use crate::types::{cass_uint64_t, size_t};
 use crate::uuid::CassUuid;
+use scylla::client::execution_profile::ExecutionProfileHandle;
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
+use scylla::cluster::metadata::ColumnType;
+use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
-use scylla::query::Query;
-use scylla::transport::errors::QueryError;
-use scylla::transport::execution_profile::ExecutionProfileHandle;
-use scylla::transport::PagingStateResponse;
-use scylla::{QueryResult, Session, SessionBuilder};
+use scylla::response::query_result::QueryResult;
+use scylla::response::PagingStateResponse;
+use scylla::statement::unprepared::Statement;
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
@@ -241,7 +244,7 @@ async fn request_with_timeout(
     match tokio::time::timeout(Duration::from_millis(request_timeout_ms), future).await {
         Ok(result) => result,
         Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
-            QueryError::TimeoutError.into(),
+            ExecutionError::RequestTimeout(Duration::from_millis(request_timeout_ms)).into(),
         ))),
     }
 }
@@ -299,7 +302,7 @@ pub unsafe extern "C" fn cass_session_execute(
                 // of prepared statements.
                 Option<Arc<CassResultMetadata>>,
             ),
-            QueryError,
+            ExecutionError,
         >;
         let query_res: QueryRes = match statement {
             BoundStatement::Simple(query) => {
@@ -437,7 +440,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
-    let query = Query::new(query_str.to_string());
+    let query = Statement::new(query_str.to_string());
     let cass_session = ArcFFI::as_ref(cass_session_raw);
 
     CassFuture::make_raw(async move {
@@ -508,42 +511,31 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         .as_ref()
         .unwrap()
         .session
-        .get_cluster_data()
-        .get_keyspace_info()
+        .get_cluster_state()
+        .keyspaces_iter()
     {
         let mut user_defined_type_data_type = HashMap::new();
         let mut tables = HashMap::new();
         let mut views = HashMap::new();
 
-        for udt_name in keyspace.user_defined_types.keys() {
+        for (udt_name, udt) in keyspace.user_defined_types.iter() {
             user_defined_type_data_type.insert(
                 udt_name.clone(),
-                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType::create_with_params(
-                    &keyspace.user_defined_types,
-                    keyspace_name,
-                    udt_name,
-                    false,
-                ))),
+                Arc::new(get_column_type(&ColumnType::UserDefinedType {
+                    definition: Arc::clone(udt),
+                    frozen: false,
+                })),
             );
         }
 
         for (table_name, table_metadata) in &keyspace.tables {
             let cass_table_meta_arced = Arc::new_cyclic(|weak_cass_table_meta| {
-                let mut cass_table_meta = create_table_metadata(
-                    keyspace_name,
-                    table_name,
-                    table_metadata,
-                    &keyspace.user_defined_types,
-                );
+                let mut cass_table_meta = create_table_metadata(table_name, table_metadata);
 
                 let mut table_views = HashMap::new();
                 for (view_name, view_metadata) in &keyspace.views {
-                    let cass_view_table_meta = create_table_metadata(
-                        keyspace_name,
-                        view_name,
-                        &view_metadata.view_metadata,
-                        &keyspace.user_defined_types,
-                    );
+                    let cass_view_table_meta =
+                        create_table_metadata(view_name, &view_metadata.view_metadata);
                     let cass_view_meta = CassMaterializedViewMeta {
                         name: view_name.clone(),
                         view_metadata: cass_view_table_meta,
@@ -564,9 +556,9 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
         }
 
         keyspaces.insert(
-            keyspace_name.clone(),
+            keyspace_name.to_owned(),
             CassKeyspaceMeta {
-                name: keyspace_name.clone(),
+                name: keyspace_name.to_owned(),
                 user_defined_type_data_type,
                 tables,
                 views,
@@ -580,7 +572,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 #[cfg(test)]
 mod tests {
     use rusty_fork::rusty_fork_test;
-    use scylla::transport::errors::DbError;
+    use scylla::errors::DbError;
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,

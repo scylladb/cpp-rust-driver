@@ -1,4 +1,4 @@
-use scylla::transport::errors::*;
+use scylla::errors::*;
 
 // Re-export error types.
 pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
@@ -27,30 +27,84 @@ impl ToCassError for CassErrorResult {
     }
 }
 
-impl ToCassError for QueryError {
+impl ToCassError for ExecutionError {
     fn to_cass_error(&self) -> CassError {
         match self {
-            QueryError::DbError(db_error, _string) => db_error.to_cass_error(),
-            QueryError::BadQuery(bad_query) => bad_query.to_cass_error(),
-            QueryError::ProtocolError(_str) => CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR,
-            QueryError::TimeoutError => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT, // This may be either read or write timeout error
-            QueryError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
-            QueryError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
-            QueryError::CqlRequestSerialization(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
-            QueryError::BodyExtensionsParseError(_) => {
+            ExecutionError::BadQuery(bad_query) => bad_query.to_cass_error(),
+            ExecutionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
+            ExecutionError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            ExecutionError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            ExecutionError::ConnectionPoolError(e) => e.to_cass_error(),
+            ExecutionError::PrepareError(e) => e.to_cass_error(),
+            ExecutionError::LastAttemptError(e) => e.to_cass_error(),
+            ExecutionError::UseKeyspaceError(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
+            ExecutionError::SchemaAgreementError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            // ExecutionError is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
+        }
+    }
+}
+
+impl ToCassError for ConnectionPoolError {
+    fn to_cass_error(&self) -> CassError {
+        // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
+        // is hidden under the ConnectionPoolError.
+        // However, we still have a lot work to do when it comes to error conversion.
+        // I will address it, once we start resolving all issues related to error conversion.
+        CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+    }
+}
+
+impl ToCassError for PrepareError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            PrepareError::ConnectionPoolError(e) => e.to_cass_error(),
+            PrepareError::AllAttemptsFailed { first_attempt } => first_attempt.to_cass_error(),
+            PrepareError::PreparedStatementIdsMismatch => {
+                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+            }
+
+            // PrepareError is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
+        }
+    }
+}
+
+impl ToCassError for RequestAttemptError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            RequestAttemptError::SerializationError(e) => e.to_cass_error(),
+            RequestAttemptError::CqlRequestSerialization(_) => {
+                CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
+            }
+            RequestAttemptError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
+            RequestAttemptError::BrokenConnectionError(_) => {
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+            }
+            RequestAttemptError::BodyExtensionsParseError(_) => {
+                CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
+            }
+            RequestAttemptError::CqlResultParseError(_) => {
                 CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
             }
-            QueryError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
-            QueryError::CqlResultParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
-            QueryError::CqlErrorParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
-            QueryError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
-            // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
-            // is hidden under the ConnectionPoolError.
-            // However, we still have a lot work to do when it comes to error conversion.
-            // I will address it, once we start resolving all issues related to error conversion.
-            QueryError::ConnectionPoolError(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
-            QueryError::BrokenConnection(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
-            // QueryError is non_exhaustive
+            RequestAttemptError::CqlErrorParseError(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
+            RequestAttemptError::DbError(db_error, _) => db_error.to_cass_error(),
+            RequestAttemptError::UnexpectedResponse(_) => {
+                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+            }
+            RequestAttemptError::RepreparedIdChanged { .. } => {
+                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+            }
+            RequestAttemptError::RepreparedIdMissingInBatch => {
+                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+            }
+            RequestAttemptError::NonfinishedPagingState => {
+                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+            }
+
+            // RequestAttemptError is non_exhaustive.
             _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
@@ -82,6 +136,8 @@ impl ToCassError for DbError {
             }
             // TODO: add appropriate error if rate limit reached
             DbError::RateLimitReached { .. } => CassError::CASS_ERROR_SERVER_UNAVAILABLE,
+            // DbError is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
 }
@@ -89,20 +145,9 @@ impl ToCassError for DbError {
 impl ToCassError for BadQuery {
     fn to_cass_error(&self) -> CassError {
         match self {
-            BadQuery::SerializeValuesError(_serialize_values_error) => {
-                CassError::CASS_ERROR_LAST_ENTRY
-            }
             BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::BadKeyspaceName(_bad_keyspace_name) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::Other(_other_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::SerializationError(e) => {
-                if e.downcast_ref::<UnknownNamedParameterError>().is_some() {
-                    // It means that our custom `UnknownNamedParameterError` was returned.
-                    CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
-                } else {
-                    CassError::CASS_ERROR_LAST_ENTRY
-                }
-            }
+            BadQuery::PartitionKeyExtraction => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::SerializationError(e) => e.to_cass_error(),
             BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
             // BadQuery is non_exhaustive
             // For now, since all other variants return LAST_ENTRY,
@@ -119,29 +164,10 @@ impl ToCassError for NewSessionError {
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             NewSessionError::EmptyKnownNodesList => CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-            NewSessionError::DbError(_db_error, _string) => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::BadQuery(_bad_query) => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::ProtocolError(_str) => {
-                CassError::CASS_ERROR_LIB_UNABLE_TO_DETERMINE_PROTOCOL
-            }
-            NewSessionError::UnableToAllocStreamId => CassError::CASS_ERROR_LAST_ENTRY,
-            NewSessionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
-            NewSessionError::CqlRequestSerialization(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
-            NewSessionError::BodyExtensionsParseError(_) => {
-                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
-            }
-            NewSessionError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
-            NewSessionError::CqlResultParseError(_) => {
-                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
-            }
-            NewSessionError::CqlErrorParseError(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
             NewSessionError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
-            // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
-            // is hidden under the ConnectionPoolError.
-            // However, we still have a lot work to do when it comes to error conversion.
-            // I will address it, once we start resolving all issues related to error conversion.
-            NewSessionError::ConnectionPoolError(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
-            NewSessionError::BrokenConnection(_) => CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
+            NewSessionError::UseKeyspaceError(_) => {
+                CassError::CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE
+            }
             // NS error is non_exhaustive
             _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
@@ -160,6 +186,17 @@ impl ToCassError for BadKeyspaceName {
     }
 }
 
+impl ToCassError for SerializationError {
+    fn to_cass_error(&self) -> CassError {
+        if self.downcast_ref::<UnknownNamedParameterError>().is_some() {
+            // It means that our custom `UnknownNamedParameterError` was returned.
+            CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
+        } else {
+            CassError::CASS_ERROR_LAST_ENTRY
+        }
+    }
+}
+
 pub trait CassErrorMessage {
     fn msg(&self) -> String;
 }
@@ -170,7 +207,13 @@ impl CassErrorMessage for CassErrorResult {
     }
 }
 
-impl CassErrorMessage for QueryError {
+impl CassErrorMessage for ExecutionError {
+    fn msg(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl CassErrorMessage for PrepareError {
     fn msg(&self) -> String {
         self.to_string()
     }
