@@ -1,9 +1,9 @@
 use crate::argconv::*;
 use crate::cass_column_types::CassColumnType;
-use crate::cass_types::get_column_type_from_cql_type;
+use crate::cass_types::get_column_type;
 use crate::cass_types::CassDataType;
 use crate::types::*;
-use scylla::cluster::metadata::{ColumnKind, Table, UserDefinedType};
+use scylla::cluster::metadata::{ColumnKind, Table};
 use std::collections::HashMap;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -58,12 +58,7 @@ pub struct CassColumnMeta {
 // Owned by CassTableMeta
 impl RefFFI for CassColumnMeta {}
 
-pub unsafe fn create_table_metadata(
-    keyspace_name: &str,
-    table_name: &str,
-    table_metadata: &Table,
-    user_defined_types: &HashMap<String, Arc<UserDefinedType>>,
-) -> CassTableMeta {
+pub unsafe fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTableMeta {
     let mut columns_metadata = HashMap::new();
     table_metadata
         .columns
@@ -71,11 +66,7 @@ pub unsafe fn create_table_metadata(
         .for_each(|(column_name, column_metadata)| {
             let cass_column_meta = CassColumnMeta {
                 name: column_name.clone(),
-                column_type: get_column_type_from_cql_type(
-                    &column_metadata.typ,
-                    user_defined_types,
-                    keyspace_name,
-                ),
+                column_type: get_column_type(&column_metadata.typ),
                 column_kind: match column_metadata.kind {
                     ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
                     ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
