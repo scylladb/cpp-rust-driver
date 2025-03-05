@@ -531,21 +531,12 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 
         for (table_name, table_metadata) in &keyspace.tables {
             let cass_table_meta_arced = Arc::new_cyclic(|weak_cass_table_meta| {
-                let mut cass_table_meta = create_table_metadata(
-                    keyspace_name,
-                    table_name,
-                    table_metadata,
-                    &keyspace.user_defined_types,
-                );
+                let mut cass_table_meta = create_table_metadata(table_name, table_metadata);
 
                 let mut table_views = HashMap::new();
                 for (view_name, view_metadata) in &keyspace.views {
-                    let cass_view_table_meta = create_table_metadata(
-                        keyspace_name,
-                        view_name,
-                        &view_metadata.view_metadata,
-                        &keyspace.user_defined_types,
-                    );
+                    let cass_view_table_meta =
+                        create_table_metadata(view_name, &view_metadata.view_metadata);
                     let cass_view_meta = CassMaterializedViewMeta {
                         name: view_name.clone(),
                         view_metadata: cass_view_table_meta,
