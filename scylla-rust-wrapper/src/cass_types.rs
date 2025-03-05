@@ -519,29 +519,29 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
         Native(Varint) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
         Collection {
             typ: List(boxed_type),
-            ..
+            frozen,
         } => CassDataTypeInner::List {
             typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
-            frozen: false,
+            frozen: *frozen,
         },
         Collection {
             typ: Map(key, value),
-            ..
+            frozen,
         } => CassDataTypeInner::Map {
             typ: MapDataType::KeyAndValue(
                 Arc::new(get_column_type(key.as_ref())),
                 Arc::new(get_column_type(value.as_ref())),
             ),
-            frozen: false,
+            frozen: *frozen,
         },
         Collection {
             typ: Set(boxed_type),
-            ..
+            frozen,
         } => CassDataTypeInner::Set {
             typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
-            frozen: false,
+            frozen: *frozen,
         },
-        UserDefinedType { definition, .. } => CassDataTypeInner::UDT(UDTDataType {
+        UserDefinedType { definition, frozen } => CassDataTypeInner::UDT(UDTDataType {
             field_types: definition
                 .field_types
                 .iter()
@@ -554,7 +554,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
                 .collect(),
             keyspace: definition.keyspace.clone().into_owned(),
             name: definition.name.clone().into_owned(),
-            frozen: false,
+            frozen: *frozen,
         }),
         Tuple(v) => CassDataTypeInner::Tuple(
             v.iter()
