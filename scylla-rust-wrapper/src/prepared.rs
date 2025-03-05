@@ -1,4 +1,5 @@
-use scylla::{frame::value::MaybeUnset::Unset, transport::PagingState};
+use scylla::response::PagingState;
+use scylla::value::MaybeUnset::Unset;
 use std::{os::raw::c_char, sync::Arc};
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     statement::{BoundPreparedStatement, BoundStatement, CassStatement},
     types::size_t,
 };
-use scylla::prepared_statement::PreparedStatement;
+use scylla::statement::prepared::PreparedStatement;
 
 #[derive(Debug, Clone)]
 pub struct CassPrepared {
@@ -40,7 +41,7 @@ impl CassPrepared {
             .map(|col_spec| Arc::new(get_column_type(col_spec.typ())))
             .collect();
 
-        let result_metadata = Arc::new(CassResultMetadata::from_column_specs(
+        let result_metadata = Arc::new(CassResultMetadata::from_column_spec_views(
             statement.get_result_set_col_specs(),
         ));
 
@@ -116,7 +117,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
     match prepared
         .statement
         .get_variable_col_specs()
-        .get(index as usize)
+        .get_by_index(index as usize)
     {
         Some(col_spec) => {
             write_str_to_c(col_spec.name(), name, name_length);

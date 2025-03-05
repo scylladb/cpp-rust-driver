@@ -170,7 +170,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |v| {
-                use scylla::frame::value::CqlDate;
+                use scylla::value::CqlDate;
                 Ok(Some(Date(CqlDate(v))))
             },
             [v @ cass_uint32_t]
@@ -275,7 +275,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |m, d, n| {
-                Ok(Some(Duration(scylla::frame::value::CqlDuration {
+                Ok(Some(Duration(scylla::value::CqlDuration {
                     months: m,
                     days: d,
                     nanoseconds: n
@@ -290,7 +290,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |v, v_size, scale| {
-                use scylla::frame::value::CqlDecimal;
+                use scylla::value::CqlDecimal;
                 let varint = std::slice::from_raw_parts(v, v_size as usize);
                 Ok(Some(Decimal(CqlDecimal::from_signed_be_bytes_slice_and_exponent(varint, scale))))
             },

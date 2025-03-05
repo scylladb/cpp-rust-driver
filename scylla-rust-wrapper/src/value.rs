@@ -1,20 +1,14 @@
 use std::{convert::TryInto, net::IpAddr, sync::Arc};
 
-use scylla::{
-    frame::{
-        response::result::ColumnType,
-        value::{CqlDate, CqlDecimal, CqlDuration},
-    },
-    serialize::{
-        value::{
-            BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeValue,
-            SetOrListSerializationErrorKind, TupleSerializationErrorKind,
-            UdtSerializationErrorKind,
-        },
-        writers::{CellWriter, WrittenCellProof},
-        SerializationError,
-    },
+use scylla::cluster::metadata::NativeType;
+use scylla::frame::response::result::ColumnType;
+use scylla::serialize::value::{
+    BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeValue,
+    SetOrListSerializationErrorKind, TupleSerializationErrorKind, UdtSerializationErrorKind,
 };
+use scylla::serialize::writers::{CellWriter, WrittenCellProof};
+use scylla::serialize::SerializationError;
+use scylla::value::{CqlDate, CqlDecimal, CqlDuration};
 use uuid::Uuid;
 
 use crate::cass_types::{CassDataType, CassValueType};
@@ -202,6 +196,7 @@ impl CassCqlValue {
         &self,
         writer: CellWriter<'b>,
     ) -> Result<WrittenCellProof<'b>, SerializationError> {
+        use NativeType::*;
         match self {
             // Notice:
             // We make use of builtin rust-driver serialization for simple types.
@@ -214,44 +209,46 @@ impl CassCqlValue {
             // will never fail. Thanks to that, we do not have to reimplement low-level serialization
             // for each type.
             CassCqlValue::TinyInt(v) => {
-                <i8 as SerializeValue>::serialize(v, &ColumnType::TinyInt, writer)
+                <i8 as SerializeValue>::serialize(v, &ColumnType::Native(TinyInt), writer)
             }
             CassCqlValue::SmallInt(v) => {
-                <i16 as SerializeValue>::serialize(v, &ColumnType::SmallInt, writer)
+                <i16 as SerializeValue>::serialize(v, &ColumnType::Native(SmallInt), writer)
             }
-            CassCqlValue::Int(v) => <i32 as SerializeValue>::serialize(v, &ColumnType::Int, writer),
+            CassCqlValue::Int(v) => {
+                <i32 as SerializeValue>::serialize(v, &ColumnType::Native(Int), writer)
+            }
             CassCqlValue::BigInt(v) => {
-                <i64 as SerializeValue>::serialize(v, &ColumnType::BigInt, writer)
+                <i64 as SerializeValue>::serialize(v, &ColumnType::Native(BigInt), writer)
             }
             CassCqlValue::Float(v) => {
-                <f32 as SerializeValue>::serialize(v, &ColumnType::Float, writer)
+                <f32 as SerializeValue>::serialize(v, &ColumnType::Native(Float), writer)
             }
             CassCqlValue::Double(v) => {
-                <f64 as SerializeValue>::serialize(v, &ColumnType::Double, writer)
+                <f64 as SerializeValue>::serialize(v, &ColumnType::Native(Double), writer)
             }
             CassCqlValue::Boolean(v) => {
-                <bool as SerializeValue>::serialize(v, &ColumnType::Boolean, writer)
+                <bool as SerializeValue>::serialize(v, &ColumnType::Native(Boolean), writer)
             }
             CassCqlValue::Text(v) => {
-                <String as SerializeValue>::serialize(v, &ColumnType::Text, writer)
+                <String as SerializeValue>::serialize(v, &ColumnType::Native(Text), writer)
             }
             CassCqlValue::Blob(v) => {
-                <Vec<u8> as SerializeValue>::serialize(v, &ColumnType::Blob, writer)
+                <Vec<u8> as SerializeValue>::serialize(v, &ColumnType::Native(Blob), writer)
             }
             CassCqlValue::Uuid(v) => {
-                <Uuid as SerializeValue>::serialize(v, &ColumnType::Uuid, writer)
+                <uuid::Uuid as SerializeValue>::serialize(v, &ColumnType::Native(Uuid), writer)
             }
             CassCqlValue::Date(v) => {
-                <CqlDate as SerializeValue>::serialize(v, &ColumnType::Date, writer)
+                <CqlDate as SerializeValue>::serialize(v, &ColumnType::Native(Date), writer)
             }
             CassCqlValue::Inet(v) => {
-                <IpAddr as SerializeValue>::serialize(v, &ColumnType::Inet, writer)
+                <IpAddr as SerializeValue>::serialize(v, &ColumnType::Native(Inet), writer)
             }
             CassCqlValue::Duration(v) => {
-                <CqlDuration as SerializeValue>::serialize(v, &ColumnType::Duration, writer)
+                <CqlDuration as SerializeValue>::serialize(v, &ColumnType::Native(Duration), writer)
             }
             CassCqlValue::Decimal(v) => {
-                <CqlDecimal as SerializeValue>::serialize(v, &ColumnType::Decimal, writer)
+                <CqlDecimal as SerializeValue>::serialize(v, &ColumnType::Native(Decimal), writer)
             }
             CassCqlValue::Tuple { fields, .. } => serialize_tuple_like(fields.iter(), writer),
             CassCqlValue::List { values, .. } => {
@@ -416,7 +413,7 @@ fn serialize_udt<'b>(
 mod tests {
     use std::{net::Ipv4Addr, sync::Arc};
 
-    use scylla::frame::value::{CqlDate, CqlDecimal, CqlDuration};
+    use scylla::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
         cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType, UDTDataType},

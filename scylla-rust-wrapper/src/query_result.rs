@@ -12,10 +12,11 @@ use crate::query_error::CassErrorResult;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
-use scylla::frame::response::result::{ColumnSpec, CqlValue, Row};
-use scylla::transport::query_result::{ColumnSpecs, IntoRowsResultError};
-use scylla::transport::PagingStateResponse;
-use scylla::QueryResult;
+use scylla::errors::IntoRowsResultError;
+use scylla::frame::response::result::ColumnSpec;
+use scylla::response::query_result::{ColumnSpecs, QueryResult};
+use scylla::response::PagingStateResponse;
+use scylla::value::{CqlValue, Row};
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
@@ -127,7 +128,7 @@ impl CassResultMetadata {
     // ColumnSpecView<'_> vs ColumnSpec<'_>.
     //
     // This should probably be adjusted on rust-driver side.
-    pub fn from_column_spec_views(col_specs: ColumnSpecs<'_>) -> CassResultMetadata {
+    pub fn from_column_spec_views(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
             .map(|col_spec| {
@@ -256,13 +257,13 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
         (
             CqlValue::UserDefinedType {
                 keyspace,
-                type_name,
+                name,
                 fields,
             },
             CassDataTypeInner::UDT(udt_type),
         ) => CollectionValue(Collection::UserDefinedType {
             keyspace,
-            type_name,
+            type_name: name,
             fields: fields
                 .into_iter()
                 .enumerate()
@@ -1615,12 +1616,10 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
-
-    use scylla::{
-        frame::response::result::{ColumnSpec, ColumnType, CqlValue, Row, TableSpec},
-        transport::PagingStateResponse,
-    };
+    use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType};
+    use scylla::frame::response::result::{ColumnSpec, TableSpec};
+    use scylla::response::PagingStateResponse;
+    use scylla::value::{CqlValue, Row};
 
     use crate::{
         argconv::ArcFFI,
@@ -1631,6 +1630,7 @@ mod tests {
             ptr_to_cstr_n, size_t,
         },
     };
+    use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
 
     use super::{
         cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows, CassResult,
@@ -1646,11 +1646,14 @@ mod tests {
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
         let metadata = Arc::new(CassResultMetadata::from_column_specs(&[
-            col_spec(FIRST_COLUMN_NAME, ColumnType::BigInt),
-            col_spec(SECOND_COLUMN_NAME, ColumnType::Varint),
+            col_spec(FIRST_COLUMN_NAME, ColumnType::Native(NativeType::BigInt)),
+            col_spec(SECOND_COLUMN_NAME, ColumnType::Native(NativeType::Varint)),
             col_spec(
                 THIRD_COLUMN_NAME,
-                ColumnType::List(Box::new(ColumnType::Double)),
+                ColumnType::Collection {
+                    frozen: false,
+                    typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Double))),
+                },
             ),
         ]));
 
