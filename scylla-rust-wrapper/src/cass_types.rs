@@ -296,27 +296,28 @@ impl CassDataType {
 }
 
 fn native_type_to_cass_value_type(native_type: &NativeType) -> CassValueType {
+    use NativeType::*;
     match native_type {
-        NativeType::Ascii => CassValueType::CASS_VALUE_TYPE_ASCII,
-        NativeType::Boolean => CassValueType::CASS_VALUE_TYPE_BOOLEAN,
-        NativeType::Blob => CassValueType::CASS_VALUE_TYPE_BLOB,
-        NativeType::Counter => CassValueType::CASS_VALUE_TYPE_COUNTER,
-        NativeType::Date => CassValueType::CASS_VALUE_TYPE_DATE,
-        NativeType::Decimal => CassValueType::CASS_VALUE_TYPE_DECIMAL,
-        NativeType::Double => CassValueType::CASS_VALUE_TYPE_DOUBLE,
-        NativeType::Duration => CassValueType::CASS_VALUE_TYPE_DURATION,
-        NativeType::Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
-        NativeType::Int => CassValueType::CASS_VALUE_TYPE_INT,
-        NativeType::BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
-        NativeType::Text => CassValueType::CASS_VALUE_TYPE_TEXT,
-        NativeType::Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
-        NativeType::Inet => CassValueType::CASS_VALUE_TYPE_INET,
-        NativeType::SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
-        NativeType::TinyInt => CassValueType::CASS_VALUE_TYPE_TINY_INT,
-        NativeType::Time => CassValueType::CASS_VALUE_TYPE_TIME,
-        NativeType::Timeuuid => CassValueType::CASS_VALUE_TYPE_TIMEUUID,
-        NativeType::Uuid => CassValueType::CASS_VALUE_TYPE_UUID,
-        NativeType::Varint => CassValueType::CASS_VALUE_TYPE_VARINT,
+        Ascii => CassValueType::CASS_VALUE_TYPE_ASCII,
+        Boolean => CassValueType::CASS_VALUE_TYPE_BOOLEAN,
+        Blob => CassValueType::CASS_VALUE_TYPE_BLOB,
+        Counter => CassValueType::CASS_VALUE_TYPE_COUNTER,
+        Date => CassValueType::CASS_VALUE_TYPE_DATE,
+        Decimal => CassValueType::CASS_VALUE_TYPE_DECIMAL,
+        Double => CassValueType::CASS_VALUE_TYPE_DOUBLE,
+        Duration => CassValueType::CASS_VALUE_TYPE_DURATION,
+        Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
+        Int => CassValueType::CASS_VALUE_TYPE_INT,
+        BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
+        Text => CassValueType::CASS_VALUE_TYPE_TEXT,
+        Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
+        Inet => CassValueType::CASS_VALUE_TYPE_INET,
+        SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
+        TinyInt => CassValueType::CASS_VALUE_TYPE_TINY_INT,
+        Time => CassValueType::CASS_VALUE_TYPE_TIME,
+        Timeuuid => CassValueType::CASS_VALUE_TYPE_TIMEUUID,
+        Uuid => CassValueType::CASS_VALUE_TYPE_UUID,
+        Varint => CassValueType::CASS_VALUE_TYPE_VARINT,
 
         // NativeType is non_exhaustive
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
@@ -495,28 +496,8 @@ impl CassDataTypeInner {
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     use CollectionType::*;
     use ColumnType::*;
-    use NativeType::*;
     let inner = match column_type {
-        Native(Ascii) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
-        Native(Boolean) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN),
-        Native(Blob) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
-        Native(Counter) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_COUNTER),
-        Native(Decimal) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DECIMAL),
-        Native(Date) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DATE),
-        Native(Double) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DOUBLE),
-        Native(Float) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_FLOAT),
-        Native(Int) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_INT),
-        Native(BigInt) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BIGINT),
-        Native(Text) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
-        Native(Timestamp) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP),
-        Native(Inet) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_INET),
-        Native(Duration) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DURATION),
-        Native(SmallInt) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT),
-        Native(TinyInt) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT),
-        Native(Time) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIME),
-        Native(Timeuuid) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIMEUUID),
-        Native(Uuid) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_UUID),
-        Native(Varint) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_VARINT),
+        Native(native) => CassDataTypeInner::Value(native_type_to_cass_value_type(native)),
         Collection {
             typ: List(boxed_type),
             frozen,
