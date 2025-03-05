@@ -53,7 +53,7 @@ impl CassResult {
                 // - Some(_) for prepared statements
                 // - None for unprepared statements
                 let metadata = maybe_result_metadata.unwrap_or_else(|| {
-                    Arc::new(CassResultMetadata::from_column_spec_views(
+                    Arc::new(CassResultMetadata::from_column_specs(
                         rows_result.column_specs(),
                     ))
                 });
@@ -103,7 +103,7 @@ pub struct CassResultMetadata {
 }
 
 impl CassResultMetadata {
-    pub fn from_column_spec_views(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
+    pub fn from_column_specs(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
             .map(|col_spec| {
@@ -1621,19 +1621,17 @@ mod tests {
     const SECOND_COLUMN_NAME: &str = "varint_col";
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
-        let metadata = Arc::new(CassResultMetadata::from_column_spec_views(
-            ColumnSpecs::new(&[
-                col_spec(FIRST_COLUMN_NAME, ColumnType::Native(NativeType::BigInt)),
-                col_spec(SECOND_COLUMN_NAME, ColumnType::Native(NativeType::Varint)),
-                col_spec(
-                    THIRD_COLUMN_NAME,
-                    ColumnType::Collection {
-                        frozen: false,
-                        typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Double))),
-                    },
-                ),
-            ]),
-        ));
+        let metadata = Arc::new(CassResultMetadata::from_column_specs(ColumnSpecs::new(&[
+            col_spec(FIRST_COLUMN_NAME, ColumnType::Native(NativeType::BigInt)),
+            col_spec(SECOND_COLUMN_NAME, ColumnType::Native(NativeType::Varint)),
+            col_spec(
+                THIRD_COLUMN_NAME,
+                ColumnType::Collection {
+                    frozen: false,
+                    typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Double))),
+                },
+            ),
+        ])));
 
         let rows = create_cass_rows_from_rows(
             vec![Row {
