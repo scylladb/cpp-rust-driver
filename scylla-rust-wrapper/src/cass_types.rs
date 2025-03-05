@@ -494,49 +494,9 @@ impl CassDataTypeInner {
 
 pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     use CollectionType::*;
-    use NativeType::*;
     let inner = match column_type {
-        ColumnType::Native(Ascii) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_ASCII),
-        ColumnType::Native(Boolean) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BOOLEAN)
-        }
-        ColumnType::Native(Blob) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BLOB),
-        ColumnType::Native(Counter) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_COUNTER)
-        }
-        ColumnType::Native(Decimal) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DECIMAL)
-        }
-        ColumnType::Native(Date) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DATE),
-        ColumnType::Native(Double) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DOUBLE)
-        }
-        ColumnType::Native(Float) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_FLOAT),
-        ColumnType::Native(Int) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_INT),
-        ColumnType::Native(BigInt) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_BIGINT)
-        }
-        ColumnType::Native(Text) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TEXT),
-        ColumnType::Native(Timestamp) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIMESTAMP)
-        }
-        ColumnType::Native(Inet) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_INET),
-        ColumnType::Native(Duration) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_DURATION)
-        }
-        ColumnType::Native(SmallInt) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_SMALL_INT)
-        }
-        ColumnType::Native(TinyInt) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TINY_INT)
-        }
-        ColumnType::Native(Time) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIME),
-        ColumnType::Native(Timeuuid) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_TIMEUUID)
-        }
-        ColumnType::Native(Uuid) => CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_UUID),
-        ColumnType::Native(Varint) => {
-            CassDataTypeInner::Value(CassValueType::CASS_VALUE_TYPE_VARINT)
+        ColumnType::Native(native) => {
+            CassDataTypeInner::Value(native_type_to_cass_value_type(native))
         }
         ColumnType::Collection {
             typ: List(boxed_type),
