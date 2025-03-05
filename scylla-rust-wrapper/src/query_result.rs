@@ -13,7 +13,6 @@ use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use scylla::errors::IntoRowsResultError;
-use scylla::frame::response::result::ColumnSpec;
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
 use scylla::value::{CqlValue, Row};
@@ -104,30 +103,6 @@ pub struct CassResultMetadata {
 }
 
 impl CassResultMetadata {
-    pub fn from_column_specs(col_specs: &[ColumnSpec<'_>]) -> CassResultMetadata {
-        let col_specs = col_specs
-            .iter()
-            .map(|col_spec| {
-                let name = col_spec.name().to_owned();
-                let data_type = Arc::new(get_column_type(col_spec.typ()));
-
-                CassColumnSpec { name, data_type }
-            })
-            .collect();
-
-        CassResultMetadata { col_specs }
-    }
-
-    // I don't like introducing this method, but there is a discrepancy
-    // between the types representing column specs returned from
-    // `QueryRowsResult::column_specs()` (returns ColumnSpecs<'_>) and
-    // `PreparedStatement::get_result_set_col_specs()` (returns &[ColumnSpec<'_>).
-    //
-    // I tried to workaround it with accepting a generic type, such as iterator,
-    // but then again, types of items we are iterating over differ as well -
-    // ColumnSpecView<'_> vs ColumnSpec<'_>.
-    //
-    // This should probably be adjusted on rust-driver side.
     pub fn from_column_spec_views(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
@@ -1618,6 +1593,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 mod tests {
     use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType};
     use scylla::frame::response::result::{ColumnSpec, TableSpec};
+    use scylla::response::query_result::ColumnSpecs;
     use scylla::response::PagingStateResponse;
     use scylla::value::{CqlValue, Row};
 
@@ -1645,17 +1621,19 @@ mod tests {
     const SECOND_COLUMN_NAME: &str = "varint_col";
     const THIRD_COLUMN_NAME: &str = "list_double_col";
     fn create_cass_rows_result() -> CassResult {
-        let metadata = Arc::new(CassResultMetadata::from_column_specs(&[
-            col_spec(FIRST_COLUMN_NAME, ColumnType::Native(NativeType::BigInt)),
-            col_spec(SECOND_COLUMN_NAME, ColumnType::Native(NativeType::Varint)),
-            col_spec(
-                THIRD_COLUMN_NAME,
-                ColumnType::Collection {
-                    frozen: false,
-                    typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Double))),
-                },
-            ),
-        ]));
+        let metadata = Arc::new(CassResultMetadata::from_column_spec_views(
+            ColumnSpecs::new(&[
+                col_spec(FIRST_COLUMN_NAME, ColumnType::Native(NativeType::BigInt)),
+                col_spec(SECOND_COLUMN_NAME, ColumnType::Native(NativeType::Varint)),
+                col_spec(
+                    THIRD_COLUMN_NAME,
+                    ColumnType::Collection {
+                        frozen: false,
+                        typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Double))),
+                    },
+                ),
+            ]),
+        ));
 
         let rows = create_cass_rows_from_rows(
             vec![Row {
