@@ -58,7 +58,7 @@ pub struct CassColumnMeta {
 // Owned by CassTableMeta
 impl RefFFI for CassColumnMeta {}
 
-pub unsafe fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTableMeta {
+pub fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTableMeta {
     let mut columns_metadata = HashMap::new();
     table_metadata
         .columns
