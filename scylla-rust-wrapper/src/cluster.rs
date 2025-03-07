@@ -10,15 +10,17 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
-use scylla::execution_profile::ExecutionProfileBuilder;
+use scylla::client::execution_profile::ExecutionProfileBuilder;
+use scylla::client::session::SessionConfig;
+use scylla::client::session_builder::SessionBuilder;
+use scylla::client::SelfIdentity;
 use scylla::frame::Compression;
-use scylla::load_balancing::LatencyAwarenessBuilder;
-use scylla::load_balancing::{DefaultPolicyBuilder, LoadBalancingPolicy};
-use scylla::retry_policy::RetryPolicy;
-use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
+use scylla::policies::load_balancing::{
+    DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
+};
+use scylla::policies::retry::RetryPolicy;
+use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
-use scylla::transport::SelfIdentity;
-use scylla::{SessionBuilder, SessionConfig};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -824,7 +826,7 @@ pub unsafe extern "C" fn cass_cluster_set_ssl(cluster: *mut CassCluster, ssl: *m
     // Reference count is increased as tokio_openssl will try to free `ssl_context` when calling `SSL_free`.
     SSL_CTX_up_ref(cass_ssl.ssl_context);
 
-    cluster_from_raw.session_builder.config.ssl_context = Some(ssl_context_builder.build());
+    cluster_from_raw.session_builder.config.tls_context = Some(ssl_context_builder.build().into());
 }
 
 #[no_mangle]

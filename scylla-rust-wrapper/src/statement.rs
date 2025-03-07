@@ -8,15 +8,15 @@ use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
-use scylla::frame::value::MaybeUnset;
-use scylla::frame::value::MaybeUnset::{Set, Unset};
-use scylla::query::Query;
+use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::row::{RowSerializationContext, SerializeRow};
 use scylla::serialize::value::SerializeValue;
 use scylla::serialize::writers::RowWriter;
 use scylla::serialize::SerializationError;
+use scylla::statement::unprepared::Statement;
 use scylla::statement::SerialConsistency;
-use scylla::transport::{PagingState, PagingStateResponse};
+use scylla::value::MaybeUnset;
+use scylla::value::MaybeUnset::{Set, Unset};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::{c_char, c_int};
@@ -108,7 +108,7 @@ impl BoundPreparedStatement {
 
 #[derive(Clone)]
 pub struct BoundSimpleQuery {
-    pub query: Query,
+    pub query: Statement,
     pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
     pub name_to_bound_index: HashMap<String, usize>,
 }
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         None => return std::ptr::null_mut(),
     };
 
-    let query = Query::new(query_str.to_string());
+    let query = Statement::new(query_str.to_string());
 
     let simple_query = BoundSimpleQuery {
         query,
@@ -410,10 +410,10 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: *mut CassStatement,
     retry_policy: *const CassRetryPolicy,
 ) -> CassError {
-    let maybe_arced_retry_policy: Option<Arc<dyn scylla::retry_policy::RetryPolicy>> =
+    let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
         ArcFFI::as_maybe_ref(retry_policy).map(|policy| match policy {
             CassRetryPolicy::DefaultRetryPolicy(default) => {
-                default.clone() as Arc<dyn scylla::retry_policy::RetryPolicy>
+                default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
             }
             CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
