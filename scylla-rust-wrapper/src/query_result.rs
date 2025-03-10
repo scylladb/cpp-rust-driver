@@ -95,7 +95,9 @@ impl CassResult {
     }
 }
 
-impl ArcFFI for CassResult {}
+impl FFI for CassResult {
+    type Origin = FromArc;
+}
 
 #[derive(Debug)]
 pub struct CassResultMetadata {
@@ -125,7 +127,9 @@ pub struct CassRow {
     pub result_metadata: Arc<CassResultMetadata>,
 }
 
-impl RefFFI for CassRow {}
+impl FFI for CassRow {
+    type Origin = FromRef;
+}
 
 pub fn create_cass_rows_from_rows(
     rows: Vec<Row>,
@@ -161,7 +165,9 @@ pub struct CassValue {
     pub value_type: Arc<CassDataType>,
 }
 
-impl RefFFI for CassValue {}
+impl FFI for CassValue {
+    type Origin = FromRef;
+}
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
     row.columns
@@ -277,83 +283,87 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
     }
 }
 
-pub struct CassResultIterator {
-    result: Arc<CassResult>,
+pub struct CassResultIterator<'result> {
+    result: &'result CassResult,
     position: Option<usize>,
 }
 
-pub struct CassRowIterator {
-    row: &'static CassRow,
+pub struct CassRowIterator<'result> {
+    row: &'result CassRow,
     position: Option<usize>,
 }
 
-pub struct CassCollectionIterator {
-    value: &'static CassValue,
+pub struct CassCollectionIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassMapIterator {
-    value: &'static CassValue,
+pub struct CassMapIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassUdtIterator {
-    value: &'static CassValue,
+pub struct CassUdtIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassSchemaMetaIterator {
-    value: &'static CassSchemaMeta,
+pub struct CassSchemaMetaIterator<'schema> {
+    value: &'schema CassSchemaMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassKeyspaceMetaIterator {
-    value: &'static CassKeyspaceMeta,
+pub struct CassKeyspaceMetaIterator<'schema> {
+    value: &'schema CassKeyspaceMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassTableMetaIterator {
-    value: &'static CassTableMeta,
+pub struct CassTableMetaIterator<'schema> {
+    value: &'schema CassTableMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassViewMetaIterator {
-    value: &'static CassMaterializedViewMeta,
+pub struct CassViewMetaIterator<'schema> {
+    value: &'schema CassMaterializedViewMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub enum CassIterator {
-    CassResultIterator(CassResultIterator),
-    CassRowIterator(CassRowIterator),
-    CassCollectionIterator(CassCollectionIterator),
-    CassMapIterator(CassMapIterator),
-    CassUdtIterator(CassUdtIterator),
-    CassSchemaMetaIterator(CassSchemaMetaIterator),
-    CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator),
-    CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator),
-    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator),
-    CassTableMetaIterator(CassTableMetaIterator),
-    CassViewMetaIterator(CassViewMetaIterator),
+pub enum CassIterator<'result_or_schema> {
+    CassResultIterator(CassResultIterator<'result_or_schema>),
+    CassRowIterator(CassRowIterator<'result_or_schema>),
+    CassCollectionIterator(CassCollectionIterator<'result_or_schema>),
+    CassMapIterator(CassMapIterator<'result_or_schema>),
+    CassUdtIterator(CassUdtIterator<'result_or_schema>),
+    CassSchemaMetaIterator(CassSchemaMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassTableMetaIterator(CassTableMetaIterator<'result_or_schema>),
+    CassViewMetaIterator(CassViewMetaIterator<'result_or_schema>),
 }
 
-impl BoxFFI for CassIterator {}
+impl FFI for CassIterator<'_> {
+    type Origin = FromBox;
+}
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
+pub unsafe extern "C" fn cass_iterator_free(iterator: CassOwnedMutPtr<CassIterator>) {
     BoxFFI::free(iterator);
 }
 
 // After creating an iterator we have to call next() before accessing the value
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass_bool_t {
-    let mut iter = BoxFFI::as_mut_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_next(
+    iterator: CassBorrowedMutPtr<CassIterator>,
+) -> cass_bool_t {
+    let mut iter = BoxFFI::as_mut_ref(iterator).unwrap();
 
     match &mut iter {
         CassIterator::CassResultIterator(result_iterator) => {
@@ -452,66 +462,68 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_row(iterator: *const CassIterator) -> *const CassRow {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_row<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassRow> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for result iterator, for other types should return null
     if let CassIterator::CassResultIterator(result_iterator) = iter {
         let iter_position = match result_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result_iterator.result.kind else {
-            return std::ptr::null();
+            return RefFFI::null();
         };
 
         let row: &CassRow = match rows.get(iter_position) {
             Some(row) => row,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
-        return row;
+        return RefFFI::as_ptr(row);
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_column(
-    iterator: *const CassIterator,
-) -> *const CassValue {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_column<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassValue> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for row iterator, for other types should return null
     if let CassIterator::CassRowIterator(row_iterator) = iter {
         let iter_position = match row_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let value = match row_iterator.row.columns.get(iter_position) {
             Some(col) => col,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
-        return value as *const CassValue;
+        return RefFFI::as_ptr(value);
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_value(
-    iterator: *const CassIterator,
-) -> *const CassValue {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_value<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassValue> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
     if let CassIterator::CassCollectionIterator(collection_iterator) = iter {
         let iter_position = match collection_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let value = match &collection_iterator.value.value {
@@ -525,80 +537,80 @@ pub unsafe extern "C" fn cass_iterator_get_value(
                 map.get(map_entry_index)
                     .map(|(key, value)| if iter_position % 2 == 0 { key } else { value })
             }
-            _ => return std::ptr::null(),
+            _ => return RefFFI::null(),
         };
 
         if value.is_none() {
-            return std::ptr::null();
+            return RefFFI::null();
         }
 
-        return value.unwrap() as *const CassValue;
+        return RefFFI::as_ptr(value.unwrap());
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_map_key(
-    iterator: *const CassIterator,
-) -> *const CassValue {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassValue> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassMapIterator(map_iterator) = iter {
         let iter_position = match map_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let entry = match &map_iterator.value.value {
             Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return std::ptr::null(),
+            _ => return RefFFI::null(),
         };
 
         if entry.is_none() {
-            return std::ptr::null();
+            return RefFFI::null();
         }
 
-        return &entry.unwrap().0 as *const CassValue;
+        return RefFFI::as_ptr(&entry.unwrap().0);
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_map_value(
-    iterator: *const CassIterator,
-) -> *const CassValue {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_map_value<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassValue> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassMapIterator(map_iterator) = iter {
         let iter_position = match map_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let entry = match &map_iterator.value.value {
             Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return std::ptr::null(),
+            _ => return RefFFI::null(),
         };
 
         if entry.is_none() {
-            return std::ptr::null();
+            return RefFFI::null();
         }
 
-        return &entry.unwrap().1 as *const CassValue;
+        return RefFFI::as_ptr(&entry.unwrap().1);
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
-    iterator: *const CassIterator,
+    iterator: CassBorrowedPtr<CassIterator>,
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let iter = BoxFFI::as_ref(iterator);
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassUdtIterator(udt_iterator) = iter {
         let iter_position = match udt_iterator.position {
@@ -628,46 +640,46 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_user_type_field_value(
-    iterator: *const CassIterator,
-) -> *const CassValue {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassValue> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassUdtIterator(udt_iterator) = iter {
         let iter_position = match udt_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let udt_entry_opt = match &udt_iterator.value.value {
             Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
                 fields.get(iter_position)
             }
-            _ => return std::ptr::null(),
+            _ => return RefFFI::null(),
         };
 
         return match udt_entry_opt {
             Some(udt_entry) => match &udt_entry.1 {
-                Some(value) => value as *const CassValue,
-                None => std::ptr::null(),
+                Some(value) => RefFFI::as_ptr(value),
+                None => RefFFI::null(),
             },
-            None => std::ptr::null(),
+            None => RefFFI::null(),
         };
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_keyspace_meta(
-    iterator: *const CassIterator,
-) -> *const CassKeyspaceMeta {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_keyspace_meta<'schema>(
+    iterator: CassBorrowedPtr<CassIterator<'schema>>,
+) -> CassBorrowedPtr<'schema, CassKeyspaceMeta> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassSchemaMetaIterator(schema_meta_iterator) = iter {
         let iter_position = match schema_meta_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let schema_meta_entry_opt = &schema_meta_iterator
@@ -677,24 +689,24 @@ pub unsafe extern "C" fn cass_iterator_get_keyspace_meta(
             .nth(iter_position);
 
         return match schema_meta_entry_opt {
-            Some(schema_meta_entry) => schema_meta_entry.1 as *const CassKeyspaceMeta,
-            None => std::ptr::null(),
+            Some(schema_meta_entry) => RefFFI::as_ptr(schema_meta_entry.1),
+            None => RefFFI::null(),
         };
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_table_meta(
-    iterator: *const CassIterator,
-) -> *const CassTableMeta {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_table_meta<'schema>(
+    iterator: CassBorrowedPtr<CassIterator<'schema>>,
+) -> CassBorrowedPtr<'schema, CassTableMeta> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassKeyspaceMetaTableIterator(keyspace_meta_iterator) = iter {
         let iter_position = match keyspace_meta_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return RefFFI::null(),
         };
 
         let table_meta_entry_opt = keyspace_meta_iterator
@@ -705,23 +717,23 @@ pub unsafe extern "C" fn cass_iterator_get_table_meta(
 
         return match table_meta_entry_opt {
             Some(table_meta_entry) => RefFFI::as_ptr(table_meta_entry.1.as_ref()),
-            None => std::ptr::null(),
+            None => RefFFI::null(),
         };
     }
 
-    std::ptr::null()
+    RefFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_user_type(
-    iterator: *const CassIterator,
-) -> *const CassDataType {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_user_type<'result>(
+    iterator: CassBorrowedPtr<CassIterator<'result>>,
+) -> CassBorrowedPtr<'result, CassDataType> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::CassKeyspaceMetaUserTypeIterator(keyspace_meta_iterator) = iter {
         let iter_position = match keyspace_meta_iterator.position {
             Some(pos) => pos,
-            None => return std::ptr::null(),
+            None => return ArcFFI::null(),
         };
 
         let udt_to_type_entry_opt = keyspace_meta_iterator
@@ -732,24 +744,24 @@ pub unsafe extern "C" fn cass_iterator_get_user_type(
 
         return match udt_to_type_entry_opt {
             Some(udt_to_type_entry) => ArcFFI::as_ptr(udt_to_type_entry.1),
-            None => std::ptr::null(),
+            None => ArcFFI::null(),
         };
     }
 
-    std::ptr::null()
+    ArcFFI::null()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_column_meta(
-    iterator: *const CassIterator,
-) -> *const CassColumnMeta {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_column_meta<'schema>(
+    iterator: CassBorrowedPtr<CassIterator<'schema>>,
+) -> CassBorrowedPtr<'schema, CassColumnMeta> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     match iter {
         CassIterator::CassTableMetaIterator(table_meta_iterator) => {
             let iter_position = match table_meta_iterator.position {
                 Some(pos) => pos,
-                None => return std::ptr::null(),
+                None => return RefFFI::null(),
             };
 
             let column_meta_entry_opt = table_meta_iterator
@@ -759,14 +771,14 @@ pub unsafe extern "C" fn cass_iterator_get_column_meta(
                 .nth(iter_position);
 
             match column_meta_entry_opt {
-                Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
-                None => std::ptr::null(),
+                Some(column_meta_entry) => RefFFI::as_ptr(column_meta_entry.1),
+                None => RefFFI::null(),
             }
         }
         CassIterator::CassViewMetaIterator(view_meta_iterator) => {
             let iter_position = match view_meta_iterator.position {
                 Some(pos) => pos,
-                None => return std::ptr::null(),
+                None => return RefFFI::null(),
             };
 
             let column_meta_entry_opt = view_meta_iterator
@@ -777,54 +789,56 @@ pub unsafe extern "C" fn cass_iterator_get_column_meta(
                 .nth(iter_position);
 
             match column_meta_entry_opt {
-                Some(column_meta_entry) => column_meta_entry.1 as *const CassColumnMeta,
-                None => std::ptr::null(),
+                Some(column_meta_entry) => RefFFI::as_ptr(column_meta_entry.1),
+                None => RefFFI::null(),
             }
         }
-        _ => std::ptr::null(),
+        _ => RefFFI::null(),
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
-    iterator: *const CassIterator,
-) -> *const CassMaterializedViewMeta {
-    let iter = BoxFFI::as_ref(iterator);
+pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta<'schema>(
+    iterator: CassBorrowedPtr<CassIterator<'schema>>,
+) -> CassBorrowedPtr<'schema, CassMaterializedViewMeta> {
+    let iter = BoxFFI::as_ref(iterator).unwrap();
 
     match iter {
         CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
             let iter_position = match keyspace_meta_iterator.position {
                 Some(pos) => pos,
-                None => return std::ptr::null(),
+                None => return RefFFI::null(),
             };
 
             let view_meta_entry_opt = keyspace_meta_iterator.value.views.iter().nth(iter_position);
 
             match view_meta_entry_opt {
                 Some(view_meta_entry) => RefFFI::as_ptr(view_meta_entry.1.as_ref()),
-                None => std::ptr::null(),
+                None => RefFFI::null(),
             }
         }
         CassIterator::CassTableMetaIterator(table_meta_iterator) => {
             let iter_position = match table_meta_iterator.position {
                 Some(pos) => pos,
-                None => return std::ptr::null(),
+                None => return RefFFI::null(),
             };
 
             let view_meta_entry_opt = table_meta_iterator.value.views.iter().nth(iter_position);
 
             match view_meta_entry_opt {
                 Some(view_meta_entry) => RefFFI::as_ptr(view_meta_entry.1.as_ref()),
-                None => std::ptr::null(),
+                None => RefFFI::null(),
             }
         }
-        _ => std::ptr::null(),
+        _ => RefFFI::null(),
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
-    let result_from_raw = ArcFFI::cloned_from_ptr(result);
+pub unsafe extern "C" fn cass_iterator_from_result(
+    result: CassBorrowedPtr<CassResult>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let result_from_raw = ArcFFI::as_ref(result).unwrap();
 
     let iterator = CassResultIterator {
         result: result_from_raw,
@@ -835,8 +849,10 @@ pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) ->
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut CassIterator {
-    let row_from_raw = RefFFI::as_ref(row);
+pub unsafe extern "C" fn cass_iterator_from_row(
+    row: CassBorrowedPtr<CassRow>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let row_from_raw = RefFFI::as_ref(row).unwrap();
 
     let iterator = CassRowIterator {
         row: row_from_raw,
@@ -848,20 +864,20 @@ pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut Cas
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_collection(
-    value: *const CassValue,
-) -> *mut CassIterator {
-    let is_collection = cass_value_is_collection(value) != 0;
+    value: CassBorrowedPtr<CassValue>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let is_collection = cass_value_is_collection(value.borrow()) != 0;
 
-    if value.is_null() || !is_collection {
-        return std::ptr::null_mut();
+    if RefFFI::is_null(&value) || !is_collection {
+        return BoxFFI::null_mut();
     }
 
-    let val = RefFFI::as_ref(value);
-    let item_count = cass_value_item_count(value);
-    let item_count = match cass_value_type(value) {
+    let item_count = cass_value_item_count(value.borrow());
+    let item_count = match cass_value_type(value.borrow()) {
         CassValueType::CASS_VALUE_TYPE_MAP => item_count * 2,
         _ => item_count,
     };
+    let val = RefFFI::as_ref(value).unwrap();
 
     let iterator = CassCollectionIterator {
         value: val,
@@ -873,8 +889,10 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator {
-    let tuple = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_iterator_from_tuple(
+    value: CassBorrowedPtr<CassValue>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let tuple = RefFFI::as_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
         let item_count = val.len();
@@ -887,12 +905,14 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *m
         return BoxFFI::into_ptr(Box::new(CassIterator::CassCollectionIterator(iterator)));
     }
 
-    std::ptr::null_mut()
+    BoxFFI::null_mut()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut CassIterator {
-    let map = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_iterator_from_map(
+    value: CassBorrowedPtr<CassValue>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let map = RefFFI::as_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
         let item_count = val.len();
@@ -905,14 +925,14 @@ pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut
         return BoxFFI::into_ptr(Box::new(CassIterator::CassMapIterator(iterator)));
     }
 
-    std::ptr::null_mut()
+    BoxFFI::null_mut()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
-    value: *const CassValue,
-) -> *mut CassIterator {
-    let udt = RefFFI::as_ref(value);
+    value: CassBorrowedPtr<CassValue>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let udt = RefFFI::as_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
         let item_count = fields.len();
@@ -925,14 +945,14 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
         return BoxFFI::into_ptr(Box::new(CassIterator::CassUdtIterator(iterator)));
     }
 
-    std::ptr::null_mut()
+    BoxFFI::null_mut()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
-    schema_meta: *const CassSchemaMeta,
-) -> *mut CassIterator {
-    let metadata = BoxFFI::as_ref(schema_meta);
+    schema_meta: CassBorrowedPtr<CassSchemaMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = BoxFFI::as_ref(schema_meta).unwrap();
 
     let iterator = CassSchemaMetaIterator {
         value: metadata,
@@ -945,9 +965,9 @@ pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
-    keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(keyspace_meta);
+    keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -962,9 +982,9 @@ pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
-    keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(keyspace_meta);
+    keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -979,9 +999,9 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
-    keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(keyspace_meta);
+    keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -996,9 +1016,9 @@ pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
-    table_meta: *const CassTableMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(table_meta);
+    table_meta: CassBorrowedPtr<CassTableMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(table_meta).unwrap();
 
     let iterator = CassTableMetaIterator {
         value: metadata,
@@ -1010,9 +1030,9 @@ pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
 }
 
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
-    table_meta: *const CassTableMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(table_meta);
+    table_meta: CassBorrowedPtr<CassTableMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(table_meta).unwrap();
 
     let iterator = CassTableMetaIterator {
         value: metadata,
@@ -1024,9 +1044,9 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
 }
 
 pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta(
-    view_meta: *const CassMaterializedViewMeta,
-) -> *mut CassIterator {
-    let metadata = RefFFI::as_ref(view_meta);
+    view_meta: CassBorrowedPtr<CassMaterializedViewMeta>,
+) -> CassOwnedMutPtr<CassIterator> {
+    let metadata = RefFFI::as_ref(view_meta).unwrap();
 
     let iterator = CassViewMetaIterator {
         value: metadata,
@@ -1038,37 +1058,43 @@ pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_result_free(result_raw: *const CassResult) {
+pub unsafe extern "C" fn cass_result_free(result_raw: CassOwnedPtr<CassResult>) {
     ArcFFI::free(result_raw);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t {
-    let result = ArcFFI::as_ref(result);
+pub unsafe extern "C" fn cass_result_has_more_pages(
+    result: CassBorrowedPtr<CassResult>,
+) -> cass_bool_t {
+    result_has_more_pages(&result)
+}
+
+unsafe fn result_has_more_pages(result: &CassBorrowedPtr<CassResult>) -> cass_bool_t {
+    let result = ArcFFI::as_ref(result.borrow()).unwrap();
     (!result.paging_state_response.finished()) as cass_bool_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_row_get_column(
-    row_raw: *const CassRow,
+    row_raw: CassBorrowedPtr<CassRow>,
     index: size_t,
-) -> *const CassValue {
-    let row: &CassRow = RefFFI::as_ref(row_raw);
+) -> CassBorrowedPtr<CassValue> {
+    let row: &CassRow = RefFFI::as_ref(row_raw).unwrap();
 
     let index_usize: usize = index.try_into().unwrap();
     let column_value = match row.columns.get(index_usize) {
         Some(val) => val,
-        None => return std::ptr::null(),
+        None => return RefFFI::null(),
     };
 
-    column_value as *const CassValue
+    RefFFI::as_ptr(column_value)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_row_get_column_by_name(
-    row: *const CassRow,
+    row: CassBorrowedPtr<CassRow>,
     name: *const c_char,
-) -> *const CassValue {
+) -> CassBorrowedPtr<CassValue> {
     let name_str = ptr_to_cstr(name).unwrap();
     let name_length = name_str.len();
 
@@ -1077,11 +1103,11 @@ pub unsafe extern "C" fn cass_row_get_column_by_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_row_get_column_by_name_n(
-    row: *const CassRow,
+    row: CassBorrowedPtr<CassRow>,
     name: *const c_char,
     name_length: size_t,
-) -> *const CassValue {
-    let row_from_raw = RefFFI::as_ref(row);
+) -> CassBorrowedPtr<CassValue> {
+    let row_from_raw = RefFFI::as_ref(row).unwrap();
     let mut name_str = ptr_to_cstr_n(name, name_length).unwrap();
     let mut is_case_sensitive = false;
 
@@ -1101,20 +1127,20 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
                 || !is_case_sensitive && col_spec.name.eq_ignore_ascii_case(name_str)
         })
         .map(|(index, _)| match row_from_raw.columns.get(index) {
-            Some(value) => value as *const CassValue,
-            None => std::ptr::null(),
+            Some(value) => RefFFI::as_ptr(value),
+            None => RefFFI::null(),
         })
-        .unwrap_or(std::ptr::null())
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_column_name(
-    result: *const CassResult,
+    result: CassBorrowedPtr<CassResult>,
     index: size_t,
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let result_from_raw = ArcFFI::as_ref(result);
+    let result_from_raw = ArcFFI::as_ref(result).unwrap();
     let index_usize: usize = index.try_into().unwrap();
 
     let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
@@ -1134,11 +1160,11 @@ pub unsafe extern "C" fn cass_result_column_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_column_type(
-    result: *const CassResult,
+    result: CassBorrowedPtr<CassResult>,
     index: size_t,
 ) -> CassValueType {
     let data_type_ptr = cass_result_column_data_type(result, index);
-    if data_type_ptr.is_null() {
+    if ArcFFI::is_null(&data_type_ptr) {
         return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
     }
     cass_data_type_type(data_type_ptr)
@@ -1146,51 +1172,53 @@ pub unsafe extern "C" fn cass_result_column_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_column_data_type(
-    result: *const CassResult,
+    result: CassBorrowedPtr<CassResult>,
     index: size_t,
-) -> *const CassDataType {
-    let result_from_raw: &CassResult = ArcFFI::as_ref(result);
+) -> CassBorrowedPtr<CassDataType> {
+    let result_from_raw: &CassResult = ArcFFI::as_ref(result).unwrap();
     let index_usize: usize = index
         .try_into()
         .expect("Provided index is out of bounds. Max possible value is usize::MAX");
 
     let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
-        return std::ptr::null();
+        return ArcFFI::null();
     };
 
     metadata
         .col_specs
         .get(index_usize)
         .map(|col_spec| ArcFFI::as_ptr(&col_spec.data_type))
-        .unwrap_or(std::ptr::null())
+        .unwrap_or(ArcFFI::null())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_type(value: *const CassValue) -> CassValueType {
-    let value_from_raw = RefFFI::as_ref(value);
-
+pub unsafe extern "C" fn cass_value_type(value: CassBorrowedPtr<CassValue>) -> CassValueType {
+    let value_from_raw = RefFFI::as_ref(value).unwrap();
     cass_data_type_type(ArcFFI::as_ptr(&value_from_raw.value_type))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_data_type(value: *const CassValue) -> *const CassDataType {
-    let value_from_raw = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_value_data_type(
+    value: CassBorrowedPtr<CassValue>,
+) -> CassBorrowedPtr<CassDataType> {
+    let value_from_raw = RefFFI::as_ref(value).unwrap();
 
     ArcFFI::as_ptr(&value_from_raw.value_type)
 }
 
 macro_rules! val_ptr_to_ref_ensure_non_null {
     ($ptr:ident) => {{
-        if $ptr.is_null() {
-            return CassError::CASS_ERROR_LIB_NULL_VALUE;
+        let maybe_ref = RefFFI::as_ref($ptr);
+        match maybe_ref {
+            Some(r) => r,
+            None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
         }
-        RefFFI::as_ref($ptr)
     }};
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_float(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_float_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1205,7 +1233,7 @@ pub unsafe extern "C" fn cass_value_get_float(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_double(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_double_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1220,7 +1248,7 @@ pub unsafe extern "C" fn cass_value_get_double(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bool(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_bool_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1237,7 +1265,7 @@ pub unsafe extern "C" fn cass_value_get_bool(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int8(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_int8_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1252,7 +1280,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int16(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_int16_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1267,7 +1295,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_uint32(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_uint32_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1282,7 +1310,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int32(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_int32_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1297,7 +1325,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int64(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut cass_int64_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1319,7 +1347,7 @@ pub unsafe extern "C" fn cass_value_get_int64(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_uuid(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut CassUuid,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1337,7 +1365,7 @@ pub unsafe extern "C" fn cass_value_get_uuid(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_inet(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut CassInet,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
@@ -1352,12 +1380,12 @@ pub unsafe extern "C" fn cass_value_get_inet(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_decimal(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     varint: *mut *const cass_byte_t,
     varint_size: *mut size_t,
     scale: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = RefFFI::as_ref(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     let decimal = match &val.value {
         Some(Value::RegularValue(CqlValue::Decimal(decimal))) => decimal,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -1374,7 +1402,7 @@ pub unsafe extern "C" fn cass_value_get_decimal(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_string(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut *const c_char,
     output_size: *mut size_t,
 ) -> CassError {
@@ -1399,7 +1427,7 @@ pub unsafe extern "C" fn cass_value_get_string(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_duration(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     months: *mut cass_int32_t,
     days: *mut cass_int32_t,
     nanos: *mut cass_int64_t,
@@ -1421,7 +1449,7 @@ pub unsafe extern "C" fn cass_value_get_duration(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
 ) -> CassError {
@@ -1447,14 +1475,16 @@ pub unsafe extern "C" fn cass_value_get_bytes(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_is_null(value: *const CassValue) -> cass_bool_t {
-    let val: &CassValue = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_value_is_null(value: CassBorrowedPtr<CassValue>) -> cass_bool_t {
+    let val: &CassValue = RefFFI::as_ref(value).unwrap();
     val.value.is_none() as cass_bool_t
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> cass_bool_t {
-    let val = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_value_is_collection(
+    value: CassBorrowedPtr<CassValue>,
+) -> cass_bool_t {
+    let val = RefFFI::as_ref(value).unwrap();
 
     matches!(
         val.value_type.get_unchecked().get_value_type(),
@@ -1465,16 +1495,16 @@ pub unsafe extern "C" fn cass_value_is_collection(value: *const CassValue) -> ca
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_is_duration(value: *const CassValue) -> cass_bool_t {
-    let val = RefFFI::as_ref(value);
+pub unsafe extern "C" fn cass_value_is_duration(value: CassBorrowedPtr<CassValue>) -> cass_bool_t {
+    let val = RefFFI::as_ref(value).unwrap();
 
     (val.value_type.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION)
         as cass_bool_t
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_item_count(collection: *const CassValue) -> size_t {
-    let val = RefFFI::as_ref(collection);
+pub unsafe extern "C" fn cass_value_item_count(collection: CassBorrowedPtr<CassValue>) -> size_t {
+    let val = RefFFI::as_ref(collection).unwrap();
 
     match &val.value {
         Some(Value::CollectionValue(Collection::List(list))) => list.len() as size_t,
@@ -1490,9 +1520,9 @@ pub unsafe extern "C" fn cass_value_item_count(collection: *const CassValue) -> 
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_primary_sub_type(
-    collection: *const CassValue,
+    collection: CassBorrowedPtr<CassValue>,
 ) -> CassValueType {
-    let val = RefFFI::as_ref(collection);
+    let val = RefFFI::as_ref(collection).unwrap();
 
     match val.value_type.get_unchecked() {
         CassDataTypeInner::List {
@@ -1509,9 +1539,9 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_secondary_sub_type(
-    collection: *const CassValue,
+    collection: CassBorrowedPtr<CassValue>,
 ) -> CassValueType {
-    let val = RefFFI::as_ref(collection);
+    let val = RefFFI::as_ref(collection).unwrap();
 
     match val.value_type.get_unchecked() {
         CassDataTypeInner::Map {
@@ -1523,8 +1553,8 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) -> size_t {
-    let result = ArcFFI::as_ref(result_raw);
+pub unsafe extern "C" fn cass_result_row_count(result_raw: CassBorrowedPtr<CassResult>) -> size_t {
+    let result = ArcFFI::as_ref(result_raw).unwrap();
 
     let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
         return 0;
@@ -1534,8 +1564,10 @@ pub unsafe extern "C" fn cass_result_row_count(result_raw: *const CassResult) ->
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult) -> size_t {
-    let result = ArcFFI::as_ref(result_raw);
+pub unsafe extern "C" fn cass_result_column_count(
+    result_raw: CassBorrowedPtr<CassResult>,
+) -> size_t {
+    let result = ArcFFI::as_ref(result_raw).unwrap();
 
     let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result.kind else {
         return 0;
@@ -1545,29 +1577,29 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: *const CassResult)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_result_first_row(result_raw: *const CassResult) -> *const CassRow {
-    let result = ArcFFI::as_ref(result_raw);
+pub unsafe extern "C" fn cass_result_first_row(
+    result_raw: CassBorrowedPtr<CassResult>,
+) -> CassBorrowedPtr<CassRow> {
+    let result = ArcFFI::as_ref(result_raw).unwrap();
 
     let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
-        return std::ptr::null();
+        return RefFFI::null();
     };
 
-    rows.first()
-        .map(|row| row as *const CassRow)
-        .unwrap_or(std::ptr::null())
+    rows.first().map(RefFFI::as_ptr).unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_paging_state_token(
-    result: *const CassResult,
+    result: CassBorrowedPtr<CassResult>,
     paging_state: *mut *const c_char,
     paging_state_size: *mut size_t,
 ) -> CassError {
-    if cass_result_has_more_pages(result) == cass_false {
+    if result_has_more_pages(&result) == cass_false {
         return CassError::CASS_ERROR_LIB_NO_PAGING_STATE;
     }
 
-    let result_from_raw = ArcFFI::as_ref(result);
+    let result_from_raw = ArcFFI::as_ref(result).unwrap();
 
     match &result_from_raw.paging_state_response {
         PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
@@ -1598,7 +1630,7 @@ mod tests {
     use scylla::value::{CqlValue, Row};
 
     use crate::{
-        argconv::ArcFFI,
+        argconv::{ArcFFI, RefFFI},
         cass_error::CassError,
         cass_types::{CassDataType, CassDataTypeInner, CassValueType},
         query_result::{
@@ -1609,8 +1641,8 @@ mod tests {
     use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
 
     use super::{
-        cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows, CassResult,
-        CassResultKind, CassResultMetadata, CassRowsResult,
+        cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows,
+        CassBorrowedPtr, CassResult, CassResultKind, CassResultMetadata, CassRowsResult,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
@@ -1656,7 +1688,7 @@ mod tests {
     }
 
     unsafe fn cass_result_column_name_rust_str(
-        result_ptr: *const CassResult,
+        result_ptr: CassBorrowedPtr<CassResult>,
         column_index: u64,
     ) -> Option<&'static str> {
         let mut name_ptr: *const c_char = std::ptr::null();
@@ -1673,36 +1705,39 @@ mod tests {
 
     #[test]
     fn rows_cass_result_api_test() {
-        let result = create_cass_rows_result();
+        let result = Arc::new(create_cass_rows_result());
 
         unsafe {
-            let result_ptr = std::ptr::addr_of!(result);
+            let result_ptr = ArcFFI::as_ptr(&result);
 
             // cass_result_column_count test
             {
-                let column_count = cass_result_column_count(result_ptr);
+                let column_count = cass_result_column_count(result_ptr.borrow());
                 assert_eq!(3, column_count);
             }
 
             // cass_result_column_name test
             {
-                let first_column_name = cass_result_column_name_rust_str(result_ptr, 0).unwrap();
+                let first_column_name =
+                    cass_result_column_name_rust_str(result_ptr.borrow(), 0).unwrap();
                 assert_eq!(FIRST_COLUMN_NAME, first_column_name);
-                let second_column_name = cass_result_column_name_rust_str(result_ptr, 1).unwrap();
+                let second_column_name =
+                    cass_result_column_name_rust_str(result_ptr.borrow(), 1).unwrap();
                 assert_eq!(SECOND_COLUMN_NAME, second_column_name);
-                let third_column_name = cass_result_column_name_rust_str(result_ptr, 2).unwrap();
+                let third_column_name =
+                    cass_result_column_name_rust_str(result_ptr.borrow(), 2).unwrap();
                 assert_eq!(THIRD_COLUMN_NAME, third_column_name);
             }
 
             // cass_result_column_type test
             {
-                let first_col_type = cass_result_column_type(result_ptr, 0);
+                let first_col_type = cass_result_column_type(result_ptr.borrow(), 0);
                 assert_eq!(CassValueType::CASS_VALUE_TYPE_BIGINT, first_col_type);
-                let second_col_type = cass_result_column_type(result_ptr, 1);
+                let second_col_type = cass_result_column_type(result_ptr.borrow(), 1);
                 assert_eq!(CassValueType::CASS_VALUE_TYPE_VARINT, second_col_type);
-                let third_col_type = cass_result_column_type(result_ptr, 2);
+                let third_col_type = cass_result_column_type(result_ptr.borrow(), 2);
                 assert_eq!(CassValueType::CASS_VALUE_TYPE_LIST, third_col_type);
-                let out_of_bound_col_type = cass_result_column_type(result_ptr, 555);
+                let out_of_bound_col_type = cass_result_column_type(result_ptr.borrow(), 555);
                 assert_eq!(
                     CassValueType::CASS_VALUE_TYPE_UNKNOWN,
                     out_of_bound_col_type
@@ -1711,24 +1746,24 @@ mod tests {
 
             // cass_result_column_data_type test
             {
-                let first_col_data_type =
-                    ArcFFI::as_ref(cass_result_column_data_type(result_ptr, 0));
+                let first_col_data_type_ptr = cass_result_column_data_type(result_ptr.borrow(), 0);
+                let first_col_data_type = ArcFFI::as_ref(first_col_data_type_ptr).unwrap();
                 assert_eq!(
                     &CassDataType::new(CassDataTypeInner::Value(
                         CassValueType::CASS_VALUE_TYPE_BIGINT
                     )),
                     first_col_data_type
                 );
-                let second_col_data_type =
-                    ArcFFI::as_ref(cass_result_column_data_type(result_ptr, 1));
+                let second_col_data_type_ptr = cass_result_column_data_type(result_ptr.borrow(), 1);
+                let second_col_data_type = ArcFFI::as_ref(second_col_data_type_ptr).unwrap();
                 assert_eq!(
                     &CassDataType::new(CassDataTypeInner::Value(
                         CassValueType::CASS_VALUE_TYPE_VARINT
                     )),
                     second_col_data_type
                 );
-                let third_col_data_type =
-                    ArcFFI::as_ref(cass_result_column_data_type(result_ptr, 2));
+                let third_col_data_type_ptr = cass_result_column_data_type(result_ptr.borrow(), 2);
+                let third_col_data_type = ArcFFI::as_ref(third_col_data_type_ptr).unwrap();
                 assert_eq!(
                     &CassDataType::new(CassDataTypeInner::List {
                         typ: Some(CassDataType::new_arced(CassDataTypeInner::Value(
@@ -1738,8 +1773,9 @@ mod tests {
                     }),
                     third_col_data_type
                 );
-                let out_of_bound_col_data_type = cass_result_column_data_type(result_ptr, 555);
-                assert!(out_of_bound_col_data_type.is_null());
+                let out_of_bound_col_data_type =
+                    cass_result_column_data_type(result_ptr.borrow(), 555);
+                assert!(ArcFFI::is_null(&out_of_bound_col_data_type));
             }
         }
     }
@@ -1754,19 +1790,22 @@ mod tests {
 
     #[test]
     fn non_rows_cass_result_api_test() {
-        let result = create_non_rows_cass_result();
+        let result = Arc::new(create_non_rows_cass_result());
 
         // Check that API functions do not panic when rows are empty - e.g. for INSERT queries.
         unsafe {
-            let result_ptr = std::ptr::addr_of!(result);
+            let result_ptr = ArcFFI::as_ptr(&result);
 
-            assert_eq!(0, cass_result_column_count(result_ptr));
+            assert_eq!(0, cass_result_column_count(result_ptr.borrow()));
             assert_eq!(
                 CassValueType::CASS_VALUE_TYPE_UNKNOWN,
-                cass_result_column_type(result_ptr, 0)
+                cass_result_column_type(result_ptr.borrow(), 0)
             );
-            assert!(cass_result_column_data_type(result_ptr, 0).is_null());
-            assert!(cass_result_first_row(result_ptr).is_null());
+            assert!(ArcFFI::is_null(&cass_result_column_data_type(
+                result_ptr.borrow(),
+                0
+            )));
+            assert!(RefFFI::is_null(&cass_result_first_row(result_ptr.borrow())));
 
             {
                 let mut name_ptr: *const c_char = std::ptr::null();
@@ -1788,41 +1827,41 @@ mod tests {
 extern "C" {
     pub fn cass_statement_set_paging_state(
         statement: *mut CassStatement,
-        result: *const CassResult,
+        result: CassBorrowedPtr<CassResult>,
     ) -> CassError;
 }
 extern "C" {
-    pub fn cass_result_row_count(result: *const CassResult) -> size_t;
+    pub fn cass_result_row_count(result: CassBorrowedPtr<CassResult>) -> size_t;
 }
 extern "C" {
-    pub fn cass_result_column_count(result: *const CassResult) -> size_t;
+    pub fn cass_result_column_count(result: CassBorrowedPtr<CassResult>) -> size_t;
 }
 extern "C" {
     pub fn cass_result_column_name(
-        result: *const CassResult,
+        result: CassBorrowedPtr<CassResult>,
         index: size_t,
         name: *mut *const ::std::os::raw::c_char,
         name_length: *mut size_t,
     ) -> CassError;
 }
 extern "C" {
-    pub fn cass_result_column_type(result: *const CassResult, index: size_t) -> CassValueType;
+    pub fn cass_result_column_type(result: CassBorrowedPtr<CassResult>, index: size_t) -> CassValueType;
 }
 extern "C" {
     pub fn cass_result_column_data_type(
-        result: *const CassResult,
+        result: CassBorrowedPtr<CassResult>,
         index: size_t,
     ) -> *const CassDataType;
 }
 extern "C" {
-    pub fn cass_result_first_row(result: *const CassResult) -> *const CassRow;
+    pub fn cass_result_first_row(result: CassBorrowedPtr<CassResult>) -> CassBorrowedPtr<CassRow>;
 }
 extern "C" {
-    pub fn cass_result_has_more_pages(result: *const CassResult) -> cass_bool_t;
+    pub fn cass_result_has_more_pages(result: CassBorrowedPtr<CassResult>) -> cass_bool_t;
 }
 extern "C" {
     pub fn cass_result_paging_state_token(
-        result: *const CassResult,
+        result: CassBorrowedPtr<CassResult>,
         paging_state: *mut *const ::std::os::raw::c_char,
         paging_state_size: *mut size_t,
     ) -> CassError;
@@ -1832,120 +1871,120 @@ extern "C" {
 // CassIterator functions:
 /*
 extern "C" {
-    pub fn cass_iterator_type(iterator: *mut CassIterator) -> CassIteratorType;
+    pub fn cass_iterator_type(iterator: CassBorrowedMutPtr<CassIterator>) -> CassIteratorType;
 }
 
 extern "C" {
-    pub fn cass_iterator_from_row(row: *const CassRow) -> *mut CassIterator;
+    pub fn cass_iterator_from_row(row: CassBorrowedPtr<CassRow>) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
-    pub fn cass_iterator_from_collection(value: *const CassValue) -> *mut CassIterator;
+    pub fn cass_iterator_from_collection(value: CassBorrowedPtr<CassValue>) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
-    pub fn cass_iterator_from_map(value: *const CassValue) -> *mut CassIterator;
+    pub fn cass_iterator_from_map(value: CassBorrowedPtr<CassValue>) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
-    pub fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator;
+    pub fn cass_iterator_from_tuple(value: CassBorrowedPtr<CassValue>) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
-    pub fn cass_iterator_fields_from_user_type(value: *const CassValue) -> *mut CassIterator;
+    pub fn cass_iterator_fields_from_user_type(value: CassBorrowedPtr<CassValue>) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_keyspaces_from_schema_meta(
         schema_meta: *const CassSchemaMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_tables_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_materialized_views_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_user_types_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_functions_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_aggregates_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_keyspace_meta(
         keyspace_meta: *const CassKeyspaceMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_columns_from_table_meta(
         table_meta: *const CassTableMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_indexes_from_table_meta(
         table_meta: *const CassTableMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_materialized_views_from_table_meta(
         table_meta: *const CassTableMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_table_meta(
         table_meta: *const CassTableMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_columns_from_materialized_view_meta(
         view_meta: *const CassMaterializedViewMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_materialized_view_meta(
         view_meta: *const CassMaterializedViewMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_column_meta(
         column_meta: *const CassColumnMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_index_meta(
         index_meta: *const CassIndexMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_function_meta(
         function_meta: *const CassFunctionMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
     pub fn cass_iterator_fields_from_aggregate_meta(
         aggregate_meta: *const CassAggregateMeta,
-    ) -> *mut CassIterator;
+    ) -> CassBorrowedMutPtr<CassIterator>;
 }
 extern "C" {
-    pub fn cass_iterator_get_column(iterator: *const CassIterator) -> *const CassValue;
+    pub fn cass_iterator_get_column(iterator: *const CassIterator) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
-    pub fn cass_iterator_get_value(iterator: *const CassIterator) -> *const CassValue;
+    pub fn cass_iterator_get_value(iterator: *const CassIterator) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
-    pub fn cass_iterator_get_map_key(iterator: *const CassIterator) -> *const CassValue;
+    pub fn cass_iterator_get_map_key(iterator: *const CassIterator) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
-    pub fn cass_iterator_get_map_value(iterator: *const CassIterator) -> *const CassValue;
+    pub fn cass_iterator_get_map_value(iterator: *const CassIterator) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
     pub fn cass_iterator_get_user_type_field_name(
@@ -1957,7 +1996,7 @@ extern "C" {
 extern "C" {
     pub fn cass_iterator_get_user_type_field_value(
         iterator: *const CassIterator,
-    ) -> *const CassValue;
+    ) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
     pub fn cass_iterator_get_keyspace_meta(
@@ -1999,7 +2038,7 @@ extern "C" {
     ) -> CassError;
 }
 extern "C" {
-    pub fn cass_iterator_get_meta_field_value(iterator: *const CassIterator) -> *const CassValue;
+    pub fn cass_iterator_get_meta_field_value(iterator: *const CassIterator) -> CassBorrowedPtr<CassValue>;
 }
 */
 
@@ -2007,16 +2046,16 @@ extern "C" {
 /*
 extern "C" {
     pub fn cass_row_get_column_by_name(
-        row: *const CassRow,
+        row: CassBorrowedPtr<CassRow>,
         name: *const ::std::os::raw::c_char,
-    ) -> *const CassValue;
+    ) -> CassBorrowedPtr<CassValue>;
 }
 extern "C" {
     pub fn cass_row_get_column_by_name_n(
-        row: *const CassRow,
+        row: CassBorrowedPtr<CassRow>,
         name: *const ::std::os::raw::c_char,
         name_length: size_t,
-    ) -> *const CassValue;
+    ) -> CassBorrowedPtr<CassValue>;
 }
 */
 
@@ -2024,24 +2063,24 @@ extern "C" {
 /*
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
-    value: *const CassValue,
+    value: CassBorrowedPtr<CassValue>,
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
 ) -> CassError {
 }
 extern "C" {
-    pub fn cass_value_data_type(value: *const CassValue) -> *const CassDataType;
+    pub fn cass_value_data_type(value: CassBorrowedPtr<CassValue>) -> *const CassDataType;
 }
 extern "C" {
-    pub fn cass_value_type(value: *const CassValue) -> CassValueType;
+    pub fn cass_value_type(value: CassBorrowedPtr<CassValue>) -> CassValueType;
 }
 extern "C" {
-    pub fn cass_value_item_count(collection: *const CassValue) -> size_t;
+    pub fn cass_value_item_count(collection: CassBorrowedPtr<CassValue>) -> size_t;
 }
 extern "C" {
-    pub fn cass_value_primary_sub_type(collection: *const CassValue) -> CassValueType;
+    pub fn cass_value_primary_sub_type(collection: CassBorrowedPtr<CassValue>) -> CassValueType;
 }
 extern "C" {
-    pub fn cass_value_secondary_sub_type(collection: *const CassValue) -> CassValueType;
+    pub fn cass_value_secondary_sub_type(collection: CassBorrowedPtr<CassValue>) -> CassValueType;
 }
 */
