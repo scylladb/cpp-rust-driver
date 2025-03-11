@@ -77,7 +77,7 @@ impl CassSessionInner {
         session_opt: &'static RwLock<Option<CassSessionInner>>,
         cluster: &CassCluster,
         keyspace: Option<String>,
-    ) -> *const CassFuture {
+    ) -> *mut CassFuture {
         let session_builder = build_session_builder(cluster);
         let exec_profile_map = cluster.execution_profile_map().clone();
 
@@ -153,7 +153,7 @@ pub unsafe extern "C" fn cass_session_new() -> *mut CassSession {
 pub unsafe extern "C" fn cass_session_connect(
     session_raw: *mut CassSession,
     cluster_raw: *const CassCluster,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let session_opt = ArcFFI::as_ref(session_raw);
     let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
 
@@ -165,8 +165,8 @@ pub unsafe extern "C" fn cass_session_connect_keyspace(
     session_raw: *mut CassSession,
     cluster_raw: *const CassCluster,
     keyspace: *const c_char,
-) -> *const CassFuture {
-    cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace))
+) -> *mut CassFuture {
+    cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace)) as *mut _
 }
 
 #[no_mangle]
@@ -175,19 +175,19 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     cluster_raw: *const CassCluster,
     keyspace: *const c_char,
     keyspace_length: size_t,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let session_opt = ArcFFI::as_ref(session_raw);
     let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw);
     let keyspace = ptr_to_cstr_n(keyspace, keyspace_length).map(ToOwned::to_owned);
 
-    CassSessionInner::connect(session_opt, cluster, keyspace)
+    CassSessionInner::connect(session_opt, cluster, keyspace) as *mut _
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: *mut CassSession,
     batch_raw: *const CassBatch,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let session_opt = ArcFFI::as_ref(session_raw);
     let batch_from_raw = BoxFFI::as_ref(batch_raw);
     let mut state = batch_from_raw.state.clone();
@@ -253,7 +253,7 @@ async fn request_with_timeout(
 pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let session_opt = ArcFFI::as_ref(session_raw);
 
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
@@ -388,7 +388,7 @@ pub unsafe extern "C" fn cass_session_execute(
 pub unsafe extern "C" fn cass_session_prepare_from_existing(
     cass_session: *mut CassSession,
     statement: *const CassStatement,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let session = ArcFFI::as_ref(cass_session);
     let cass_statement = BoxFFI::as_ref(statement);
     let statement = cass_statement.statement.clone();
@@ -424,7 +424,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 pub unsafe extern "C" fn cass_session_prepare(
     session: *mut CassSession,
     query: *const c_char,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     cass_session_prepare_n(session, query, strlen(query))
 }
 
@@ -433,7 +433,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     cass_session_raw: *mut CassSession,
     query: *const c_char,
     query_length: size_t,
-) -> *const CassFuture {
+) -> *mut CassFuture {
     let query_str = ptr_to_cstr_n(query, query_length)
         // Apparently nullptr denotes an empty statement string.
         // It seems to be intended (for some weird reason, why not save a round-trip???)
@@ -473,7 +473,7 @@ pub unsafe extern "C" fn cass_session_free(session_raw: *mut CassSession) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *const CassFuture {
+pub unsafe extern "C" fn cass_session_close(session: *mut CassSession) -> *mut CassFuture {
     let session_opt = ArcFFI::as_ref(session);
 
     CassFuture::make_raw(async move {
@@ -622,12 +622,12 @@ mod tests {
             .try_init();
     }
 
-    unsafe fn cass_future_wait_check_and_free(fut: *const CassFuture) {
+    unsafe fn cass_future_wait_check_and_free(fut: *mut CassFuture) {
         cass_future_wait(fut);
         if cass_future_error_code(fut) != CassError::CASS_OK {
             let mut message: *const c_char = std::ptr::null();
             let mut message_len: size_t = 0;
-            cass_future_error_message(fut as *mut CassFuture, &mut message, &mut message_len);
+            cass_future_error_message(fut, &mut message, &mut message_len);
             eprintln!("{:?}", ptr_to_cstr_n(message, message_len));
         }
         assert_cass_error_eq!(cass_future_error_code(fut), CassError::CASS_OK);

@@ -27,13 +27,13 @@ pub const CASS_SSL_VERIFY_PEER_IDENTITY: i32 = 0x02;
 pub const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_new() -> *const CassSsl {
+pub unsafe extern "C" fn cass_ssl_new() -> *mut CassSsl {
     openssl_sys::init();
     cass_ssl_new_no_lib_init()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> *const CassSsl {
+pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> *mut CassSsl {
     let ssl_context: *mut SSL_CTX = SSL_CTX_new(TLS_method());
     let trusted_store: *mut X509_STORE = X509_STORE_new();
 
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> *const CassSsl {
         trusted_store,
     };
 
-    ArcFFI::into_ptr(Arc::new(ssl))
+    ArcFFI::into_ptr(Arc::new(ssl)) as *mut _
 }
 
 // This is required for the type system to impl Send + Sync for Arc<CassSsl>.

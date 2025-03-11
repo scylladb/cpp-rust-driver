@@ -28,7 +28,7 @@ type CassFutureError = (CassError, String);
 pub type CassFutureResult = Result<CassResultValue, CassFutureError>;
 
 pub type CassFutureCallback =
-    Option<unsafe extern "C" fn(future: *const CassFuture, data: *mut c_void)>;
+    Option<unsafe extern "C" fn(future: *mut CassFuture, data: *mut c_void)>;
 
 struct BoundCallback {
     pub cb: CassFutureCallback,
@@ -42,7 +42,7 @@ unsafe impl Send for BoundCallback {}
 impl BoundCallback {
     fn invoke(self, fut: &CassFuture) {
         unsafe {
-            self.cb.unwrap()(fut as *const CassFuture, self.data);
+            self.cb.unwrap()((fut as *const _) as *mut _, self.data);
         }
     }
 }
@@ -289,7 +289,7 @@ impl CheckSendSync for CassFuture {}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_set_callback(
-    future_raw: *const CassFuture,
+    future_raw: *mut CassFuture,
     callback: CassFutureCallback,
     data: *mut ::std::os::raw::c_void,
 ) -> CassError {
@@ -297,13 +297,13 @@ pub unsafe extern "C" fn cass_future_set_callback(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_wait(future_raw: *const CassFuture) {
+pub unsafe extern "C" fn cass_future_wait(future_raw: *mut CassFuture) {
     ArcFFI::as_ref(future_raw).with_waited_result(|_| ());
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_wait_timed(
-    future_raw: *const CassFuture,
+    future_raw: *mut CassFuture,
     timeout_us: cass_duration_t,
 ) -> cass_bool_t {
     ArcFFI::as_ref(future_raw)
@@ -312,7 +312,7 @@ pub unsafe extern "C" fn cass_future_wait_timed(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cass_bool_t {
+pub unsafe extern "C" fn cass_future_ready(future_raw: *mut CassFuture) -> cass_bool_t {
     let state_guard = ArcFFI::as_ref(future_raw).state.lock().unwrap();
     match state_guard.value {
         None => cass_false,
@@ -321,7 +321,7 @@ pub unsafe extern "C" fn cass_future_ready(future_raw: *const CassFuture) -> cas
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_error_code(future_raw: *const CassFuture) -> CassError {
+pub unsafe extern "C" fn cass_future_error_code(future_raw: *mut CassFuture) -> CassError {
     ArcFFI::as_ref(future_raw).with_waited_result(|r: &mut CassFutureResult| match r {
         Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
         Err((err, _)) => *err,
@@ -349,14 +349,12 @@ pub unsafe extern "C" fn cass_future_error_message(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_free(future_raw: *const CassFuture) {
+pub unsafe extern "C" fn cass_future_free(future_raw: *mut CassFuture) {
     ArcFFI::free(future_raw);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_future_get_result(
-    future_raw: *const CassFuture,
-) -> *const CassResult {
+pub unsafe extern "C" fn cass_future_get_result(future_raw: *mut CassFuture) -> *const CassResult {
     ArcFFI::as_ref(future_raw)
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
@@ -369,7 +367,7 @@ pub unsafe extern "C" fn cass_future_get_result(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_get_error_result(
-    future_raw: *const CassFuture,
+    future_raw: *mut CassFuture,
 ) -> *const CassErrorResult {
     ArcFFI::as_ref(future_raw)
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
@@ -397,7 +395,7 @@ pub unsafe extern "C" fn cass_future_get_prepared(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_future_tracing_id(
-    future: *const CassFuture,
+    future: *mut CassFuture,
     tracing_id: *mut CassUuid,
 ) -> CassError {
     ArcFFI::as_ref(future).with_waited_result(|r: &mut CassFutureResult| match r {
@@ -496,7 +494,7 @@ mod tests {
             const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
 
             let create_future_and_flag = || {
-                unsafe extern "C" fn mark_flag_cb(_fut: *const CassFuture, data: *mut c_void) {
+                unsafe extern "C" fn mark_flag_cb(_fut: *mut CassFuture, data: *mut c_void) {
                     let flag = data as *mut bool;
                     *flag = true;
                 }
