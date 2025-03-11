@@ -254,6 +254,53 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, KeyspaceMetadata) {
   cass_schema_meta_free(schema_meta);
 }
 
+CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, TableMetadataColumnOrder) {
+  // The order should be: d, a, j, h, i, b, c, f, g
+  // First pks by position: d, a, j
+  // Then cks by position: h, i
+  // Then remaining columns alphabetically: b, c, f, g
+
+  session_.execute(format_string("CREATE TABLE %s "
+    "(i int, f int, g int STATIC, b int, c int STATIC, a int, d int, j int, h int, "
+    "PRIMARY KEY( (d, a, j), h, i ) )", "column_order_test"));
+
+  const CassSchemaMeta* schema_meta = session_.schema_meta();
+
+  const CassKeyspaceMeta* keyspace_meta = cass_schema_meta_keyspace_by_name(schema_meta, keyspace_name_.c_str());
+  ASSERT_TRUE(keyspace_meta);
+
+  const CassTableMeta* table_meta = cass_keyspace_meta_table_by_name(keyspace_meta, "column_order_test");
+  ASSERT_TRUE(table_meta);
+
+  ASSERT_EQ(cass_table_meta_column_count(table_meta), 9u);
+
+  ASSERT_EQ(cass_table_meta_partition_key_count(table_meta), 3u);
+  ASSERT_EQ(cass_table_meta_clustering_key_count(table_meta), 2u);
+
+  auto check_column = [&](size_t index, const char* name) {
+    const CassColumnMeta* column_meta;
+    const char* column_meta_name;
+    size_t column_meta_name_length;
+
+    column_meta = cass_table_meta_column(table_meta, index);
+    ASSERT_TRUE(column_meta);
+    cass_column_meta_name(column_meta, &column_meta_name, &column_meta_name_length);
+    ASSERT_EQ(std::string(column_meta_name, column_meta_name_length), name);
+  };
+
+  check_column(0, "d");
+  check_column(1, "a");
+  check_column(2, "j");
+  check_column(3, "h");
+  check_column(4, "i");
+  check_column(5, "b");
+  check_column(6, "c");
+  check_column(7, "f");
+  check_column(8, "g");
+
+  cass_schema_meta_free(schema_meta);
+}
+
 CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, MetadataIterator) {
   const CassSchemaMeta* schema_meta = session_.schema_meta();
 
