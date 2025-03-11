@@ -446,12 +446,8 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     CassDataType::new(inner)
 }
 
-// Changed return type to const ptr - ArcFFI::into_ptr is const.
-// It's probably not a good idea - but cppdriver doesn't guarantee
-// thread safety apart from CassSession and CassFuture.
-// This comment also applies to other functions that create CassDataType.
 #[no_mangle]
-pub unsafe extern "C" fn cass_data_type_new(value_type: CassValueType) -> *const CassDataType {
+pub unsafe extern "C" fn cass_data_type_new(value_type: CassValueType) -> *mut CassDataType {
     let inner = match value_type {
         CassValueType::CASS_VALUE_TYPE_LIST => CassDataTypeInner::List {
             typ: None,
@@ -472,29 +468,29 @@ pub unsafe extern "C" fn cass_data_type_new(value_type: CassValueType) -> *const
         t if t < CassValueType::CASS_VALUE_TYPE_LAST_ENTRY => CassDataTypeInner::Value(t),
         _ => return ptr::null_mut(),
     };
-    ArcFFI::into_ptr(CassDataType::new_arced(inner))
+    ArcFFI::into_ptr(CassDataType::new_arced(inner)) as *mut _
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_new_from_existing(
     data_type: *const CassDataType,
-) -> *const CassDataType {
+) -> *mut CassDataType {
     let data_type = ArcFFI::as_ref(data_type);
-    ArcFFI::into_ptr(CassDataType::new_arced(data_type.get_unchecked().clone()))
+    ArcFFI::into_ptr(CassDataType::new_arced(data_type.get_unchecked().clone())) as *mut _
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_data_type_new_tuple(item_count: size_t) -> *const CassDataType {
+pub unsafe extern "C" fn cass_data_type_new_tuple(item_count: size_t) -> *mut CassDataType {
     ArcFFI::into_ptr(CassDataType::new_arced(CassDataTypeInner::Tuple(
         Vec::with_capacity(item_count as usize),
-    )))
+    ))) as *mut _
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_data_type_new_udt(field_count: size_t) -> *const CassDataType {
+pub unsafe extern "C" fn cass_data_type_new_udt(field_count: size_t) -> *mut CassDataType {
     ArcFFI::into_ptr(CassDataType::new_arced(CassDataTypeInner::UDT(
         UDTDataType::with_capacity(field_count as usize),
-    )))
+    ))) as *mut _
 }
 
 #[no_mangle]
@@ -540,7 +536,7 @@ pub unsafe extern "C" fn cass_data_type_type_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_type_name(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     type_name: *const c_char,
 ) -> CassError {
     cass_data_type_set_type_name_n(data_type, type_name, strlen(type_name))
@@ -548,7 +544,7 @@ pub unsafe extern "C" fn cass_data_type_set_type_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_type_name_n(
-    data_type_raw: *const CassDataType,
+    data_type_raw: *mut CassDataType,
     type_name: *const c_char,
     type_name_length: size_t,
 ) -> CassError {
@@ -584,7 +580,7 @@ pub unsafe extern "C" fn cass_data_type_keyspace(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_keyspace(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     keyspace: *const c_char,
 ) -> CassError {
     cass_data_type_set_keyspace_n(data_type, keyspace, strlen(keyspace))
@@ -592,7 +588,7 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> CassError {
@@ -628,7 +624,7 @@ pub unsafe extern "C" fn cass_data_type_class_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_class_name(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     class_name: *const ::std::os::raw::c_char,
 ) -> CassError {
     cass_data_type_set_class_name_n(data_type, class_name, strlen(class_name))
@@ -636,7 +632,7 @@ pub unsafe extern "C" fn cass_data_type_set_class_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_set_class_name_n(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     class_name: *const ::std::os::raw::c_char,
     class_name_length: size_t,
 ) -> CassError {
@@ -740,7 +736,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_type(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     sub_data_type: *const CassDataType,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type);
@@ -755,7 +751,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     name: *const c_char,
     sub_data_type: *const CassDataType,
 ) -> CassError {
@@ -764,7 +760,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
-    data_type_raw: *const CassDataType,
+    data_type_raw: *mut CassDataType,
     name: *const c_char,
     name_length: size_t,
     sub_data_type_raw: *const CassDataType,
@@ -786,7 +782,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     sub_value_type: CassValueType,
 ) -> CassError {
     let sub_data_type = CassDataType::new_arced(CassDataTypeInner::Value(sub_value_type));
@@ -795,7 +791,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     name: *const c_char,
     sub_value_type: CassValueType,
 ) -> CassError {
@@ -805,7 +801,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
-    data_type: *const CassDataType,
+    data_type: *mut CassDataType,
     name: *const c_char,
     name_length: size_t,
     sub_value_type: CassValueType,
