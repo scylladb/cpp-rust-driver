@@ -86,7 +86,7 @@ impl CassFuture {
             state: Mutex::new(Default::default()),
             wait_for_value: Condvar::new(),
         });
-        let cass_fut_clone = cass_fut.clone();
+        let cass_fut_clone = Arc::clone(&cass_fut);
         let join_handle = RUNTIME.spawn(async move {
             let r = fut.await;
             let maybe_cb = {
@@ -358,7 +358,7 @@ pub unsafe extern "C" fn cass_future_get_result(future_raw: *mut CassFuture) -> 
     ArcFFI::as_ref(future_raw)
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
-                CassResultValue::QueryResult(qr) => Some(qr.clone()),
+                CassResultValue::QueryResult(qr) => Some(Arc::clone(qr)),
                 _ => None,
             }
         })
@@ -372,7 +372,7 @@ pub unsafe extern "C" fn cass_future_get_error_result(
     ArcFFI::as_ref(future_raw)
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
             match r.as_ref().ok()? {
-                CassResultValue::QueryError(qr) => Some(qr.clone()),
+                CassResultValue::QueryError(qr) => Some(Arc::clone(qr)),
                 _ => None,
             }
         })
@@ -386,7 +386,7 @@ pub unsafe extern "C" fn cass_future_get_prepared(
     ArcFFI::as_ref(future_raw)
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassPrepared>> {
             match r.as_ref().ok()? {
-                CassResultValue::Prepared(p) => Some(p.clone()),
+                CassResultValue::Prepared(p) => Some(Arc::clone(p)),
                 _ => None,
             }
         })
