@@ -74,6 +74,14 @@ pub enum CassColumnsMetaIterator<'schema> {
     FromView(CassViewMetaIterator<'schema>),
 }
 
+/// An iterator over materialized views.
+/// Can be constructed from either keyspace or table metadata.
+/// To be used by [`cass_iterator_get_materialized_view_meta()`].
+pub enum CassMaterializedViewsMetaIterator<'schema> {
+    FromKeyspace(CassKeyspaceMetaIterator<'schema>),
+    FromTable(CassTableMetaIterator<'schema>),
+}
+
 pub enum CassIterator<'result_or_schema> {
     CassResultIterator(CassResultIterator<'result_or_schema>),
     CassRowIterator(CassRowIterator<'result_or_schema>),
@@ -85,6 +93,7 @@ pub enum CassIterator<'result_or_schema> {
     CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator<'result_or_schema>),
     CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator<'result_or_schema>),
     CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassMaterializedViewsMetaIterator(CassMaterializedViewsMetaIterator<'result_or_schema>),
     CassColumnsMetaIterator(CassColumnsMetaIterator<'result_or_schema>),
     CassTableMetaIterator(CassTableMetaIterator<'result_or_schema>),
     CassViewMetaIterator(CassViewMetaIterator<'result_or_schema>),
@@ -119,6 +128,9 @@ pub unsafe extern "C" fn cass_iterator_type(iterator: *mut CassIterator) -> Cass
             CassIteratorType::CASS_ITERATOR_TYPE_TYPE_META
         }
         CassIterator::CassKeyspaceMetaViewIterator(_) => {
+            CassIteratorType::CASS_ITERATOR_TYPE_MATERIALIZED_VIEW_META
+        }
+        CassIterator::CassMaterializedViewsMetaIterator(_) => {
             CassIteratorType::CASS_ITERATOR_TYPE_MATERIALIZED_VIEW_META
         }
         CassIterator::CassColumnsMetaIterator(_) => {
@@ -205,7 +217,10 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             (new_pos < keyspace_meta_iterator.count) as cass_bool_t
         }
-        CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
+        CassIterator::CassMaterializedViewsMetaIterator(
+            CassMaterializedViewsMetaIterator::FromKeyspace(keyspace_meta_iterator),
+        )
+        | CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
             let new_pos: usize = keyspace_meta_iterator
                 .position
                 .map_or(0, |prev_pos| prev_pos + 1);
@@ -214,7 +229,10 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             (new_pos < keyspace_meta_iterator.count) as cass_bool_t
         }
-        CassIterator::CassColumnsMetaIterator(CassColumnsMetaIterator::FromTable(
+        CassIterator::CassMaterializedViewsMetaIterator(
+            CassMaterializedViewsMetaIterator::FromTable(table_iterator),
+        )
+        | CassIterator::CassColumnsMetaIterator(CassColumnsMetaIterator::FromTable(
             table_iterator,
         ))
         | CassIterator::CassTableMetaIterator(table_iterator) => {
@@ -582,7 +600,9 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
     let iter = BoxFFI::as_ref(iterator);
 
     match iter {
-        CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
+        CassIterator::CassMaterializedViewsMetaIterator(
+            CassMaterializedViewsMetaIterator::FromKeyspace(keyspace_meta_iterator),
+        ) => {
             let iter_position = match keyspace_meta_iterator.position {
                 Some(pos) => pos,
                 None => return std::ptr::null(),
@@ -595,7 +615,9 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
                 None => std::ptr::null(),
             }
         }
-        CassIterator::CassTableMetaIterator(table_meta_iterator) => {
+        CassIterator::CassMaterializedViewsMetaIterator(
+            CassMaterializedViewsMetaIterator::FromTable(table_meta_iterator),
+        ) => {
             let iter_position = match table_meta_iterator.position {
                 Some(pos) => pos,
                 None => return std::ptr::null(),
@@ -770,8 +792,8 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta<'sc
         position: None,
     };
 
-    BoxFFI::into_ptr(Box::new(CassIterator::CassKeyspaceMetaViewIterator(
-        iterator,
+    BoxFFI::into_ptr(Box::new(CassIterator::CassMaterializedViewsMetaIterator(
+        CassMaterializedViewsMetaIterator::FromKeyspace(iterator),
     )))
 }
 
@@ -820,7 +842,9 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta<'schem
         position: None,
     };
 
-    BoxFFI::into_ptr(Box::new(CassIterator::CassTableMetaIterator(iterator)))
+    BoxFFI::into_ptr(Box::new(CassIterator::CassMaterializedViewsMetaIterator(
+        CassMaterializedViewsMetaIterator::FromTable(iterator),
+    )))
 }
 
 pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta<'schema>(
