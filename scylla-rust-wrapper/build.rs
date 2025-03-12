@@ -148,4 +148,9 @@ fn main() {
         &["CassCompressionType_", "CassCompressionType"],
         &out_path,
     );
+    prepare_cppdriver_data(
+        "cppdriver_iterator_types.rs",
+        &["CassIteratorType_", "CassIteratorType"],
+        &out_path,
+    );
 }

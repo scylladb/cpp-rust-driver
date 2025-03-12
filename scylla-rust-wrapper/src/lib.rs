@@ -111,6 +111,11 @@ pub mod cass_uuid_types {
     include_bindgen_generated!("cppdriver_uuid_types.rs");
 }
 
+/// CassIteratorType
+pub mod cass_iterator_types {
+    include_bindgen_generated!("cppdriver_iterator_types.rs");
+}
+
 pub static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 pub static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
     RwLock::new(Logger {
