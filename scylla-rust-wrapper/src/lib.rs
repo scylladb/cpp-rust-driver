@@ -20,6 +20,7 @@ mod external;
 pub mod future;
 pub mod inet;
 pub mod integration_testing;
+pub mod iterator;
 mod logging;
 pub mod metadata;
 pub mod misc;
