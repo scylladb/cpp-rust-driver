@@ -71,6 +71,7 @@ pub enum CassIterator<'result_or_schema> {
     CassRowIterator(CassRowIterator<'result_or_schema>),
     CassCollectionIterator(CassCollectionIterator<'result_or_schema>),
     CassMapIterator(CassMapIterator<'result_or_schema>),
+    CassTupleIterator(CassCollectionIterator<'result_or_schema>),
     CassUdtIterator(CassUdtIterator<'result_or_schema>),
     CassSchemaMetaIterator(CassSchemaMetaIterator<'result_or_schema>),
     CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator<'result_or_schema>),
@@ -97,6 +98,7 @@ pub unsafe extern "C" fn cass_iterator_type(iterator: *mut CassIterator) -> Cass
         CassIterator::CassRowIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_ROW,
         CassIterator::CassCollectionIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLLECTION,
         CassIterator::CassMapIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_MAP,
+        CassIterator::CassTupleIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_TUPLE,
         CassIterator::CassUdtIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_USER_TYPE_FIELD,
         CassIterator::CassSchemaMetaIterator(_) => {
             CassIteratorType::CASS_ITERATOR_TYPE_KEYSPACE_META
@@ -140,7 +142,8 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
 
             (new_pos < row_iterator.row.columns.len()) as cass_bool_t
         }
-        CassIterator::CassCollectionIterator(collection_iterator) => {
+        CassIterator::CassCollectionIterator(collection_iterator)
+        | CassIterator::CassTupleIterator(collection_iterator) => {
             let new_pos: usize = collection_iterator
                 .position
                 .map_or(0, |prev_pos| prev_pos + 1);
@@ -273,7 +276,9 @@ pub unsafe extern "C" fn cass_iterator_get_value(
     let iter = BoxFFI::as_ref(iterator);
 
     // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
-    if let CassIterator::CassCollectionIterator(collection_iterator) = iter {
+    if let CassIterator::CassCollectionIterator(collection_iterator)
+    | CassIterator::CassTupleIterator(collection_iterator) = iter
+    {
         let iter_position = match collection_iterator.position {
             Some(pos) => pos,
             None => return std::ptr::null(),
@@ -655,7 +660,7 @@ pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
             position: None,
         };
 
-        return BoxFFI::into_ptr(Box::new(CassIterator::CassCollectionIterator(iterator)));
+        return BoxFFI::into_ptr(Box::new(CassIterator::CassTupleIterator(iterator)));
     }
 
     std::ptr::null_mut()
