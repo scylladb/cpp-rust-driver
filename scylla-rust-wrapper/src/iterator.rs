@@ -10,6 +10,8 @@ use crate::query_result::{
 };
 use crate::types::{cass_bool_t, size_t};
 
+pub use crate::cass_iterator_types::CassIteratorType;
+
 use std::os::raw::c_char;
 
 pub struct CassResultIterator<'result> {
@@ -83,6 +85,34 @@ impl BoxFFI for CassIterator<'_> {}
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
     BoxFFI::free(iterator);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_iterator_type(iterator: *mut CassIterator) -> CassIteratorType {
+    let iter = BoxFFI::as_ref(iterator);
+
+    // TODO: Adjust CassIterator enum hierarchy (done later in this PR).
+    match iter {
+        CassIterator::CassResultIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_RESULT,
+        CassIterator::CassRowIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_ROW,
+        CassIterator::CassCollectionIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLLECTION,
+        CassIterator::CassMapIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_MAP,
+        CassIterator::CassUdtIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_USER_TYPE_FIELD,
+        CassIterator::CassSchemaMetaIterator(_) => {
+            CassIteratorType::CASS_ITERATOR_TYPE_KEYSPACE_META
+        }
+        CassIterator::CassKeyspaceMetaTableIterator(_) => {
+            CassIteratorType::CASS_ITERATOR_TYPE_TABLE_META
+        }
+        CassIterator::CassKeyspaceMetaUserTypeIterator(_) => {
+            CassIteratorType::CASS_ITERATOR_TYPE_TYPE_META
+        }
+        CassIterator::CassKeyspaceMetaViewIterator(_) => {
+            CassIteratorType::CASS_ITERATOR_TYPE_MATERIALIZED_VIEW_META
+        }
+        CassIterator::CassTableMetaIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLUMN_META,
+        CassIterator::CassViewMetaIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLUMN_META,
+    }
 }
 
 // After creating an iterator we have to call next() before accessing the value
