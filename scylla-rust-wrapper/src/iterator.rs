@@ -92,11 +92,8 @@ pub enum CassIterator<'result_or_schema> {
     CassSchemaMetaIterator(CassSchemaMetaIterator<'result_or_schema>),
     CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator<'result_or_schema>),
     CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator<'result_or_schema>),
-    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator<'result_or_schema>),
     CassMaterializedViewsMetaIterator(CassMaterializedViewsMetaIterator<'result_or_schema>),
     CassColumnsMetaIterator(CassColumnsMetaIterator<'result_or_schema>),
-    CassTableMetaIterator(CassTableMetaIterator<'result_or_schema>),
-    CassViewMetaIterator(CassViewMetaIterator<'result_or_schema>),
 }
 
 impl BoxFFI for CassIterator<'_> {}
@@ -127,17 +124,12 @@ pub unsafe extern "C" fn cass_iterator_type(iterator: *mut CassIterator) -> Cass
         CassIterator::CassKeyspaceMetaUserTypeIterator(_) => {
             CassIteratorType::CASS_ITERATOR_TYPE_TYPE_META
         }
-        CassIterator::CassKeyspaceMetaViewIterator(_) => {
-            CassIteratorType::CASS_ITERATOR_TYPE_MATERIALIZED_VIEW_META
-        }
         CassIterator::CassMaterializedViewsMetaIterator(_) => {
             CassIteratorType::CASS_ITERATOR_TYPE_MATERIALIZED_VIEW_META
         }
         CassIterator::CassColumnsMetaIterator(_) => {
             CassIteratorType::CASS_ITERATOR_TYPE_COLUMN_META
         }
-        CassIterator::CassTableMetaIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLUMN_META,
-        CassIterator::CassViewMetaIterator(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLUMN_META,
     }
 }
 
@@ -219,8 +211,7 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
         }
         CassIterator::CassMaterializedViewsMetaIterator(
             CassMaterializedViewsMetaIterator::FromKeyspace(keyspace_meta_iterator),
-        )
-        | CassIterator::CassKeyspaceMetaViewIterator(keyspace_meta_iterator) => {
+        ) => {
             let new_pos: usize = keyspace_meta_iterator
                 .position
                 .map_or(0, |prev_pos| prev_pos + 1);
@@ -234,16 +225,14 @@ pub unsafe extern "C" fn cass_iterator_next(iterator: *mut CassIterator) -> cass
         )
         | CassIterator::CassColumnsMetaIterator(CassColumnsMetaIterator::FromTable(
             table_iterator,
-        ))
-        | CassIterator::CassTableMetaIterator(table_iterator) => {
+        )) => {
             let new_pos: usize = table_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
             table_iterator.position = Some(new_pos);
 
             (new_pos < table_iterator.count) as cass_bool_t
         }
-        CassIterator::CassColumnsMetaIterator(CassColumnsMetaIterator::FromView(view_iterator))
-        | CassIterator::CassViewMetaIterator(view_iterator) => {
+        CassIterator::CassColumnsMetaIterator(CassColumnsMetaIterator::FromView(view_iterator)) => {
             let new_pos: usize = view_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
 
             view_iterator.position = Some(new_pos);
