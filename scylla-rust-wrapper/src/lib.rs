@@ -20,6 +20,7 @@ mod external;
 pub mod future;
 pub mod inet;
 pub mod integration_testing;
+pub mod iterator;
 mod logging;
 pub mod metadata;
 pub mod misc;
@@ -108,6 +109,11 @@ pub mod cass_uuid_types {
     #![allow(non_camel_case_types, non_snake_case)]
 
     include_bindgen_generated!("cppdriver_uuid_types.rs");
+}
+
+/// CassIteratorType
+pub mod cass_iterator_types {
+    include_bindgen_generated!("cppdriver_iterator_types.rs");
 }
 
 pub static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
