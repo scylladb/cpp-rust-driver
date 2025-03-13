@@ -53,7 +53,7 @@ impl RefFFI for CassMaterializedViewMeta {}
 
 pub struct CassColumnMeta {
     pub name: String,
-    pub column_type: CassDataType,
+    pub column_type: Arc<CassDataType>,
     pub column_kind: CassColumnType,
 }
 
@@ -68,7 +68,7 @@ pub fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTa
         .for_each(|(column_name, column_metadata)| {
             let cass_column_meta = CassColumnMeta {
                 name: column_name.clone(),
-                column_type: get_column_type(&column_metadata.typ),
+                column_type: Arc::new(get_column_type(&column_metadata.typ)),
                 column_kind: match column_metadata.kind {
                     ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
                     ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
@@ -368,7 +368,7 @@ pub unsafe extern "C" fn cass_column_meta_data_type(
     column_meta: *const CassColumnMeta,
 ) -> *const CassDataType {
     let column_meta = RefFFI::as_ref(column_meta);
-    &column_meta.column_type as *const CassDataType
+    ArcFFI::as_ptr(&column_meta.column_type)
 }
 
 #[no_mangle]
@@ -496,7 +496,14 @@ pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
     view_meta: *const CassMaterializedViewMeta,
 ) -> *const CassTableMeta {
     let view_meta = RefFFI::as_ref(view_meta);
-    view_meta.base_table.as_ptr()
+
+    match view_meta.base_table.upgrade() {
+        Some(arc) => RefFFI::as_ptr(&arc),
+        None => {
+            tracing::error!("Failed to upgrade a weak reference to table metadata from materialized view metadata! This is a driver bug!");
+            std::ptr::null()
+        }
+    }
 }
 
 #[no_mangle]
