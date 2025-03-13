@@ -32,6 +32,8 @@ pub struct CassTableMeta {
     pub columns_metadata: HashMap<String, CassColumnMeta>,
     pub partition_keys: Vec<String>,
     pub clustering_keys: Vec<String>,
+    /// Non-key columns sorted alphabetically by name.
+    pub non_key_sorted_columns: Vec<String>,
     pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
 
@@ -81,11 +83,25 @@ pub fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTa
             columns_metadata.insert(column_name.clone(), cass_column_meta);
         });
 
+    let mut non_key_sorted_columns = columns_metadata
+        .iter()
+        .filter(|(_, column)| {
+            !matches!(
+                column.column_kind,
+                CassColumnType::CASS_COLUMN_TYPE_PARTITION_KEY
+                    | CassColumnType::CASS_COLUMN_TYPE_CLUSTERING_KEY,
+            )
+        })
+        .map(|(name, _column)| name.to_owned())
+        .collect::<Vec<_>>();
+    non_key_sorted_columns.sort_unstable();
+
     CassTableMeta {
         name: table_name.to_owned(),
         columns_metadata,
         partition_keys: table_metadata.partition_key.clone(),
         clustering_keys: table_metadata.clustering_key.clone(),
+        non_key_sorted_columns,
         views: HashMap::new(),
     }
 }
@@ -207,6 +223,59 @@ pub unsafe extern "C" fn cass_table_meta_name(
 pub unsafe extern "C" fn cass_table_meta_column_count(table_meta: *const CassTableMeta) -> size_t {
     let table_meta = RefFFI::as_ref(table_meta);
     table_meta.columns_metadata.len() as size_t
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cass_table_meta_column(
+    table_meta: *const CassTableMeta,
+    index: size_t,
+) -> *const CassColumnMeta {
+    // The order of columns in cpp-driver (and in DESCRIBE TABLE in cqlsh):
+    // 1. partition keys sorted by position <- this is guaranteed by rust-driver.
+    //    Table::partition_keys is a Vector of pk names, sorted by position.
+    // 2. clustering keys sorted by position <- this is guaranteed by rust-driver (same reasoning as above).
+    // 3. remaining columns in alphabetical order <- this is something we need to guarantee.
+    //
+    // Example:
+    // CREATE TABLE t
+    // (
+    //   i int, f int, g int STATIC, b int, c int STATIC, a int, d int, j int, h int,
+    //   PRIMARY KEY( (d, a, j), h, i )
+    // );
+    //
+    // The order should be: d, a, j, h, i, b, c, f, g
+    // First pks by position: d, a, j
+    // Then cks by position: h, i
+    // Then remaining columns alphabetically: b, c, f, g
+
+    let table_meta = RefFFI::as_ref(table_meta);
+    let index = index as usize;
+
+    // Check if the index lands in partition keys. If so, simply return the corresponding column.
+    if let Some(pk_name) = table_meta.partition_keys.get(index) {
+        // unwrap: partition key must exist in columns_metadata. This is ensured by rust-driver.
+        return RefFFI::as_ptr(table_meta.columns_metadata.get(pk_name).unwrap());
+    }
+
+    // Update the index to search in clustering keys
+    let index = index - table_meta.partition_keys.len();
+
+    // Check if the index lands in clustering keys. If so, simply return the corresponding column.
+    if let Some(ck_name) = table_meta.clustering_keys.get(index) {
+        // unwrap: clustering key must exist in columns_metadata. This is ensured by rust-driver.
+        return RefFFI::as_ptr(table_meta.columns_metadata.get(ck_name).unwrap());
+    }
+
+    // Update the index to search in remaining columns
+    let index = index - table_meta.clustering_keys.len();
+
+    table_meta
+        .non_key_sorted_columns
+        .get(index)
+        .map_or(std::ptr::null(), |column_name| {
+            // unwrap: We guarantee that column_name exists in columns_metadata. See `create_table_metadata`.
+            RefFFI::as_ptr(table_meta.columns_metadata.get(column_name).unwrap())
+        })
 }
 
 #[no_mangle]
