@@ -19,12 +19,11 @@ use crate::types::{cass_bool_t, size_t};
 pub use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
-use std::sync::Arc;
 
 pub struct CassRowsResultIterator<'result> {
     iterator: TypedRowIterator<'result, 'result, Row>,
-    result_metadata: Arc<CassResultMetadata>,
-    current_row: Option<CassRow>,
+    result_metadata: &'result CassResultMetadata,
+    current_row: Option<CassRow<'result>>,
 }
 
 pub enum CassResultIterator<'result> {
@@ -33,7 +32,7 @@ pub enum CassResultIterator<'result> {
 }
 
 pub struct CassRowIterator<'result> {
-    row: &'result CassRow,
+    row: &'result CassRow<'result>,
     position: Option<usize>,
 }
 
@@ -185,7 +184,7 @@ pub unsafe extern "C" fn cass_iterator_next(
                     }
                 })
                 .map(|row| {
-                    CassRow::from_row_and_metadata(row, &rows_result_iterator.result_metadata)
+                    CassRow::from_row_and_metadata(row, rows_result_iterator.result_metadata)
                 });
 
             rows_result_iterator.current_row = new_row;
@@ -284,7 +283,7 @@ pub unsafe extern "C" fn cass_iterator_next(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_row<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassRow, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassRow<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for result iterator, for other types should return null
@@ -663,7 +662,7 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
             CassResultIterator::Rows(CassRowsResultIterator {
                 // unwrap: Row always passes the typecheck.
                 iterator: cass_rows_result.raw_rows.rows_iter::<Row>().unwrap(),
-                result_metadata: Arc::clone(&cass_rows_result.metadata),
+                result_metadata: &cass_rows_result.metadata,
                 current_row: None,
             })
         }
@@ -675,7 +674,7 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_row<'result>(
-    row: CassBorrowedSharedPtr<'result, CassRow, CConst>,
+    row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let row_from_raw = RefFFI::as_ref(row).unwrap();
 
