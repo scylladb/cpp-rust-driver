@@ -17,9 +17,14 @@ pub use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
 
-pub struct CassResultIterator<'result> {
-    result: &'result CassResult,
+pub struct CassRowsResultIterator<'result> {
+    result: &'result CassRowsResult,
     position: Option<usize>,
+}
+
+pub enum CassResultIterator<'result> {
+    NonRows,
+    Rows(CassRowsResultIterator<'result>),
 }
 
 pub struct CassRowIterator<'result> {
@@ -158,16 +163,17 @@ pub unsafe extern "C" fn cass_iterator_next(
 
     match &mut iter {
         CassIterator::Result(result_iterator) => {
-            let new_pos: usize = result_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
+            let CassResultIterator::Rows(rows_result_iterator) = result_iterator else {
+                return false as cass_bool_t;
+            };
 
-            result_iterator.position = Some(new_pos);
+            let new_pos: usize = rows_result_iterator
+                .position
+                .map_or(0, |prev_pos| prev_pos + 1);
 
-            match &result_iterator.result.kind {
-                CassResultKind::Rows(rows_result) => {
-                    (new_pos < rows_result.rows.len()) as cass_bool_t
-                }
-                CassResultKind::NonRows => false as cass_bool_t,
-            }
+            rows_result_iterator.position = Some(new_pos);
+
+            (new_pos < rows_result_iterator.result.rows.len()) as cass_bool_t
         }
         CassIterator::Row(row_iterator) => {
             let new_pos: usize = row_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
@@ -265,25 +271,21 @@ pub unsafe extern "C" fn cass_iterator_get_row<'result>(
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for result iterator, for other types should return null
-    if let CassIterator::Result(result_iterator) = iter {
-        let iter_position = match result_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIterator::Result(CassResultIterator::Rows(rows_result_iterator)) = iter else {
+        return RefFFI::null();
+    };
 
-        let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result_iterator.result.kind else {
-            return RefFFI::null();
-        };
+    let iter_position = match rows_result_iterator.position {
+        Some(pos) => pos,
+        None => return RefFFI::null(),
+    };
 
-        let row: &CassRow = match rows.get(iter_position) {
-            Some(row) => row,
-            None => return RefFFI::null(),
-        };
+    let row: &CassRow = match rows_result_iterator.result.rows.get(iter_position) {
+        Some(row) => row,
+        None => return RefFFI::null(),
+    };
 
-        return RefFFI::as_ptr(row);
-    }
-
-    RefFFI::null()
+    RefFFI::as_ptr(row)
 }
 
 #[no_mangle]
@@ -644,9 +646,12 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let result_from_raw = ArcFFI::as_ref(result).unwrap();
 
-    let iterator = CassResultIterator {
-        result: result_from_raw,
-        position: None,
+    let iterator = match &result_from_raw.kind {
+        CassResultKind::NonRows => CassResultIterator::NonRows,
+        CassResultKind::Rows(rows_result) => CassResultIterator::Rows(CassRowsResultIterator {
+            result: rows_result,
+            position: None,
+        }),
     };
 
     BoxFFI::into_ptr(Box::new(CassIterator::Result(iterator)))
