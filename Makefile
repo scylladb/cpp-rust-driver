@@ -63,7 +63,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 endif
 
 ifndef CCM_COMMIT_ID
-	export CCM_COMMIT_ID := master
+	# TODO: change it back to master/next when https://github.com/scylladb/scylla-ccm/issues/646 is fixed.
+	export CCM_COMMIT_ID := 5392dd68
 endif
 
 ifndef SCYLLA_VERSION
