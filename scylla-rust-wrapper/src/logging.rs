@@ -1,4 +1,6 @@
-use crate::argconv::{arr_to_cstr, ptr_to_cstr, str_to_arr, RefFFI};
+use crate::argconv::{
+    arr_to_cstr, ptr_to_cstr, str_to_arr, CConst, CassBorrowedSharedPtr, FromRef, RefFFI, FFI,
+};
 use crate::cass_log_types::{CassLogLevel, CassLogMessage};
 use crate::types::size_t;
 use crate::LOGGER;
@@ -14,12 +16,19 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 
-impl RefFFI for CassLogMessage {}
+impl FFI for CassLogMessage {
+    type Origin = FromRef;
+}
 
-pub type CassLogCallback =
-    Option<unsafe extern "C" fn(message: *const CassLogMessage, data: *mut c_void)>;
+pub type CassLogCallback = Option<
+    unsafe extern "C" fn(message: CassBorrowedSharedPtr<CassLogMessage, CConst>, data: *mut c_void),
+>;
 
-unsafe extern "C" fn noop_log_callback(_message: *const CassLogMessage, _data: *mut c_void) {}
+unsafe extern "C" fn noop_log_callback(
+    _message: CassBorrowedSharedPtr<CassLogMessage, CConst>,
+    _data: *mut c_void,
+) {
+}
 
 pub struct Logger {
     pub cb: CassLogCallback,
@@ -64,8 +73,11 @@ impl TryFrom<CassLogLevel> for Level {
 
 pub const CASS_LOG_MAX_MESSAGE_SIZE: usize = 1024;
 
-pub unsafe extern "C" fn stderr_log_callback(message: *const CassLogMessage, _data: *mut c_void) {
-    let message = RefFFI::as_ref(message);
+pub unsafe extern "C" fn stderr_log_callback(
+    message: CassBorrowedSharedPtr<CassLogMessage, CConst>,
+    _data: *mut c_void,
+) {
+    let message = RefFFI::as_ref(message).unwrap();
 
     eprintln!(
         "{} [{}] ({}:{}) {}",
@@ -132,7 +144,7 @@ where
 
         if let Some(log_cb) = logger.cb {
             unsafe {
-                log_cb(&log_message as *const CassLogMessage, logger.data);
+                log_cb(RefFFI::as_ptr(&log_message), logger.data);
             }
         }
     }
