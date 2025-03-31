@@ -32,38 +32,13 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 endif
 
 ifndef CASSANDRA_TEST_FILTER
-CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
-:BasicsTests.*\
-:ConfigTests.*\
-:NullStringApiArgsTest.*\
-:ConsistencyTwoNodeClusterTests.*\
-:ConsistencyThreeNodeClusterTests.*\
-:SerialConsistencyTests.*\
-:HeartbeatTests.*\
-:PreparedTests.*\
-:NamedParametersTests.*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
-:ErrorTests.*\
-:SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
-:TracingTests.*\
-:ByNameTests.*\
-:CompressionTests.*\
-:LoggingTests.*\
-:PreparedMetadataTests.*\
-:UseKeyspaceCaseSensitiveTests.*\
-:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
-:PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
-:HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
-:SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
-:ExecutionProfileTest.InvalidName\
-:*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ConsistencyThreeNodeClusterTests.Integration_Cassandra_DowngradingRetryPolicy\
+:HeartbeatTests.Integration_Cassandra_HeartbeatEnabled\
+:HeartbeatTests.Integration_Cassandra_HeartbeatDisabled)
 endif
 
 ifndef CCM_COMMIT_ID
-	export CCM_COMMIT_ID := master
+	export CCM_COMMIT_ID := 5392dd68
 endif
 
 ifndef SCYLLA_VERSION
