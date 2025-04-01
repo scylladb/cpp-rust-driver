@@ -249,12 +249,12 @@ unsafe impl Sync for CassDataType {}
 
 impl CassDataType {
     pub unsafe fn get_unchecked(&self) -> &CassDataTypeInner {
-        &*self.0.get()
+        unsafe { &*self.0.get() }
     }
 
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn get_mut_unchecked(&self) -> &mut CassDataTypeInner {
-        &mut *self.0.get()
+        unsafe { &mut *self.0.get() }
     }
 
     pub const fn new(inner: CassDataTypeInner) -> CassDataType {
@@ -479,7 +479,9 @@ pub unsafe extern "C" fn cass_data_type_new_from_existing(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    ArcFFI::into_ptr(CassDataType::new_arced(data_type.get_unchecked().clone()))
+    ArcFFI::into_ptr(CassDataType::new_arced(
+        unsafe { data_type.get_unchecked() }.clone(),
+    ))
 }
 
 #[no_mangle]
@@ -510,7 +512,7 @@ pub unsafe extern "C" fn cass_data_type_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassValueType {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    data_type.get_unchecked().get_value_type()
+    unsafe { data_type.get_unchecked() }.get_value_type()
 }
 
 #[no_mangle]
@@ -518,7 +520,7 @@ pub unsafe extern "C" fn cass_data_type_is_frozen(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> cass_bool_t {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    let is_frozen = match data_type.get_unchecked() {
+    let is_frozen = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => udt.frozen,
         CassDataTypeInner::List { frozen, .. } => *frozen,
         CassDataTypeInner::Set { frozen, .. } => *frozen,
@@ -536,9 +538,9 @@ pub unsafe extern "C" fn cass_data_type_type_name(
     type_name_length: *mut size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
-            write_str_to_c(name, type_name, type_name_length);
+            unsafe { write_str_to_c(name, type_name, type_name_length) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -550,7 +552,7 @@ pub unsafe extern "C" fn cass_data_type_set_type_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     type_name: *const c_char,
 ) -> CassError {
-    cass_data_type_set_type_name_n(data_type, type_name, strlen(type_name))
+    unsafe { cass_data_type_set_type_name_n(data_type, type_name, strlen(type_name)) }
 }
 
 #[no_mangle]
@@ -560,11 +562,11 @@ pub unsafe extern "C" fn cass_data_type_set_type_name_n(
     type_name_length: size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type_raw).unwrap();
-    let type_name_string = ptr_to_cstr_n(type_name, type_name_length)
+    let type_name_string = unsafe { ptr_to_cstr_n(type_name, type_name_length) }
         .unwrap()
         .to_string();
 
-    match data_type.get_mut_unchecked() {
+    match unsafe { data_type.get_mut_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
             udt_data_type.name = type_name_string;
             CassError::CASS_OK
@@ -580,9 +582,9 @@ pub unsafe extern "C" fn cass_data_type_keyspace(
     keyspace_length: *mut size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
-            write_str_to_c(name, keyspace, keyspace_length);
+            unsafe { write_str_to_c(name, keyspace, keyspace_length) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -594,7 +596,7 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     keyspace: *const c_char,
 ) -> CassError {
-    cass_data_type_set_keyspace_n(data_type, keyspace, strlen(keyspace))
+    unsafe { cass_data_type_set_keyspace_n(data_type, keyspace, strlen(keyspace)) }
 }
 
 #[no_mangle]
@@ -604,11 +606,11 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
     keyspace_length: size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    let keyspace_string = ptr_to_cstr_n(keyspace, keyspace_length)
+    let keyspace_string = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }
         .unwrap()
         .to_string();
 
-    match data_type.get_mut_unchecked() {
+    match unsafe { data_type.get_mut_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
             udt_data_type.keyspace = keyspace_string;
             CassError::CASS_OK
@@ -624,9 +626,9 @@ pub unsafe extern "C" fn cass_data_type_class_name(
     class_name_length: *mut size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Custom(name) => {
-            write_str_to_c(name, class_name, class_name_length);
+            unsafe { write_str_to_c(name, class_name, class_name_length) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -638,7 +640,7 @@ pub unsafe extern "C" fn cass_data_type_set_class_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     class_name: *const ::std::os::raw::c_char,
 ) -> CassError {
-    cass_data_type_set_class_name_n(data_type, class_name, strlen(class_name))
+    unsafe { cass_data_type_set_class_name_n(data_type, class_name, strlen(class_name)) }
 }
 
 #[no_mangle]
@@ -648,10 +650,10 @@ pub unsafe extern "C" fn cass_data_type_set_class_name_n(
     class_name_length: size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    let class_string = ptr_to_cstr_n(class_name, class_name_length)
+    let class_string = unsafe { ptr_to_cstr_n(class_name, class_name_length) }
         .unwrap()
         .to_string();
-    match data_type.get_mut_unchecked() {
+    match unsafe { data_type.get_mut_unchecked() } {
         CassDataTypeInner::Custom(name) => {
             *name = class_string;
             CassError::CASS_OK
@@ -665,7 +667,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_count(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> size_t {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Value(..) => 0,
         CassDataTypeInner::UDT(udt_data_type) => udt_data_type.field_types.len() as size_t,
         CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
@@ -685,7 +687,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_count(
 pub unsafe extern "C" fn cass_data_sub_type_count(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> size_t {
-    cass_data_type_sub_type_count(data_type)
+    unsafe { cass_data_type_sub_type_count(data_type) }
 }
 
 #[no_mangle]
@@ -695,7 +697,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type(
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
     let sub_type: Option<&Arc<CassDataType>> =
-        data_type.get_unchecked().get_sub_data_type(index as usize);
+        unsafe { data_type.get_unchecked() }.get_sub_data_type(index as usize);
 
     match sub_type {
         None => ArcFFI::null(),
@@ -709,7 +711,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     name: *const ::std::os::raw::c_char,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    cass_data_type_sub_data_type_by_name_n(data_type, name, strlen(name))
+    unsafe { cass_data_type_sub_data_type_by_name_n(data_type, name, strlen(name)) }
 }
 
 #[no_mangle]
@@ -719,8 +721,8 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name_n(
     name_length: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    let name_str = ptr_to_cstr_n(name, name_length).unwrap();
-    match data_type.get_unchecked() {
+    let name_str = unsafe { ptr_to_cstr_n(name, name_length) }.unwrap();
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => match udt.get_field_by_name(name_str) {
             None => ArcFFI::null(),
             Some(t) => ArcFFI::as_ptr(t),
@@ -737,11 +739,11 @@ pub unsafe extern "C" fn cass_data_type_sub_type_name(
     name_length: *mut size_t,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => match udt.field_types.get(index as usize) {
             None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
             Some((field_name, _)) => {
-                write_str_to_c(field_name, name, name_length);
+                unsafe { write_str_to_c(field_name, name, name_length) };
                 CassError::CASS_OK
             }
         },
@@ -755,8 +757,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type(
     sub_data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassError {
     let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match data_type
-        .get_mut_unchecked()
+    match unsafe { data_type.get_mut_unchecked() }
         .add_sub_data_type(ArcFFI::cloned_from_ptr(sub_data_type).unwrap())
     {
         Ok(()) => CassError::CASS_OK,
@@ -770,7 +771,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name(
     name: *const c_char,
     sub_data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassError {
-    cass_data_type_add_sub_type_by_name_n(data_type, name, strlen(name), sub_data_type)
+    unsafe { cass_data_type_add_sub_type_by_name_n(data_type, name, strlen(name), sub_data_type) }
 }
 
 #[no_mangle]
@@ -780,11 +781,13 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
     name_length: size_t,
     sub_data_type_raw: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassError {
-    let name_string = ptr_to_cstr_n(name, name_length).unwrap().to_string();
+    let name_string = unsafe { ptr_to_cstr_n(name, name_length) }
+        .unwrap()
+        .to_string();
     let sub_data_type = ArcFFI::cloned_from_ptr(sub_data_type_raw).unwrap();
 
     let data_type = ArcFFI::as_ref(data_type_raw).unwrap();
-    match data_type.get_mut_unchecked() {
+    match unsafe { data_type.get_mut_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
             // The Cpp Driver does not check whether field_types size
             // exceeded field_count.
@@ -801,7 +804,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type(
     sub_value_type: CassValueType,
 ) -> CassError {
     let sub_data_type = CassDataType::new_arced(CassDataTypeInner::Value(sub_value_type));
-    cass_data_type_add_sub_type(data_type, ArcFFI::as_ptr(&sub_data_type))
+    unsafe { cass_data_type_add_sub_type(data_type, ArcFFI::as_ptr(&sub_data_type)) }
 }
 
 #[no_mangle]
@@ -811,7 +814,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name(
     sub_value_type: CassValueType,
 ) -> CassError {
     let sub_data_type = CassDataType::new_arced(CassDataTypeInner::Value(sub_value_type));
-    cass_data_type_add_sub_type_by_name(data_type, name, ArcFFI::as_ptr(&sub_data_type))
+    unsafe { cass_data_type_add_sub_type_by_name(data_type, name, ArcFFI::as_ptr(&sub_data_type)) }
 }
 
 #[no_mangle]
@@ -822,12 +825,14 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
     sub_value_type: CassValueType,
 ) -> CassError {
     let sub_data_type = CassDataType::new_arced(CassDataTypeInner::Value(sub_value_type));
-    cass_data_type_add_sub_type_by_name_n(
-        data_type,
-        name,
-        name_length,
-        ArcFFI::as_ptr(&sub_data_type),
-    )
+    unsafe {
+        cass_data_type_add_sub_type_by_name_n(
+            data_type,
+            name,
+            name_length,
+            ArcFFI::as_ptr(&sub_data_type),
+        )
+    }
 }
 
 impl TryFrom<CassConsistency> for Consistency {

@@ -82,10 +82,10 @@ pub unsafe extern "C" fn stderr_log_callback(
     eprintln!(
         "{} [{}] ({}:{}) {}",
         message.time_ms,
-        ptr_to_cstr(cass_log_level_string(message.severity)).unwrap(),
-        ptr_to_cstr(message.file).unwrap(),
+        unsafe { ptr_to_cstr(cass_log_level_string(message.severity)) }.unwrap(),
+        unsafe { ptr_to_cstr(message.file) }.unwrap(),
         message.line,
-        arr_to_cstr::<{ CASS_LOG_MAX_MESSAGE_SIZE }>(&message.message).unwrap(),
+        unsafe { arr_to_cstr::<{ CASS_LOG_MAX_MESSAGE_SIZE }>(&message.message) }.unwrap(),
     )
 }
 
@@ -211,8 +211,10 @@ pub unsafe extern "C" fn cass_log_get_callback_and_data(
 ) {
     let logger = LOGGER.read().unwrap();
 
-    *callback_out = logger.cb;
-    *data_out = logger.data;
+    unsafe {
+        *callback_out = logger.cb;
+        *data_out = logger.data;
+    }
 }
 
 #[no_mangle]

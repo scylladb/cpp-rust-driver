@@ -80,7 +80,7 @@ macro_rules! make_name_binder {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
-            let name = ptr_to_cstr(name).unwrap();
+            let name = unsafe { ptr_to_cstr(name) }.unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), name, v),
                 Err(e) => e,
@@ -102,7 +102,7 @@ macro_rules! make_name_n_binder {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
-            let name = ptr_to_cstr_n(name, name_length).unwrap();
+            let name = unsafe { ptr_to_cstr_n(name, name_length) }.unwrap();
             match ($e)($($arg), *) {
                 Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), name, v),
                 Err(e) => e,
@@ -217,7 +217,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |v| Ok(Some(Text(ptr_to_cstr(v).unwrap().to_string()))),
+            |v| Ok(Some(Text(unsafe { ptr_to_cstr(v) }.unwrap().to_string()))),
             [v @ *const std::os::raw::c_char]
         );
     };
@@ -226,7 +226,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |v, n| Ok(Some(Text(ptr_to_cstr_n(v, n).unwrap().to_string()))),
+            |v, n| Ok(Some(Text(unsafe { ptr_to_cstr_n(v, n) }.unwrap().to_string()))),
             [v @ *const std::os::raw::c_char, n @ size_t]
         );
     };
@@ -236,7 +236,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |v, v_size| {
-                let v_vec = std::slice::from_raw_parts(v, v_size as usize).to_vec();
+                let v_vec = unsafe { std::slice::from_raw_parts(v, v_size as usize) }.to_vec();
                 Ok(Some(Blob(v_vec)))
             },
             [v @ *const cass_byte_t, v_size @ size_t]
@@ -291,7 +291,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $fn,
             |v, v_size, scale| {
                 use scylla::value::CqlDecimal;
-                let varint = std::slice::from_raw_parts(v, v_size as usize);
+                let varint = unsafe { std::slice::from_raw_parts(v, v_size as usize) };
                 Ok(Some(Decimal(CqlDecimal::from_signed_be_bytes_slice_and_exponent(varint, scale))))
             },
             [v @ *const cass_byte_t, v_size @ size_t, scale @ cass_int32_t]

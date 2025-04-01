@@ -7,20 +7,20 @@ use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
 
 pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
-    CStr::from_ptr(ptr).to_str().ok()
+    unsafe { CStr::from_ptr(ptr) }.to_str().ok()
 }
 
 pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     if ptr.is_null() {
         return None;
     }
-    std::str::from_utf8(std::slice::from_raw_parts(ptr as *const u8, size as usize)).ok()
+    std::str::from_utf8(unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) }).ok()
 }
 
 pub unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
     let null_char = '\0' as c_char;
     let end_index = arr[..N].iter().position(|c| c == &null_char).unwrap_or(N);
-    ptr_to_cstr_n(arr.as_ptr(), end_index as size_t)
+    unsafe { ptr_to_cstr_n(arr.as_ptr(), end_index as size_t) }
 }
 
 pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
@@ -41,15 +41,17 @@ pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
 }
 
 pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
-    *c_str = s.as_ptr() as *const c_char;
-    *c_strlen = s.len() as u64;
+    unsafe {
+        *c_str = s.as_ptr() as *const c_char;
+        *c_strlen = s.len() as u64;
+    }
 }
 
 pub unsafe fn strlen(ptr: *const c_char) -> size_t {
     if ptr.is_null() {
         return 0;
     }
-    libc::strlen(ptr) as size_t
+    unsafe { libc::strlen(ptr) as size_t }
 }
 
 #[cfg(test)]

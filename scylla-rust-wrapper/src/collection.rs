@@ -161,7 +161,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     item_count: size_t,
 ) -> CassOwnedExclusivePtr<CassCollection, CMut> {
     let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
-    let (capacity, collection_type) = match data_type.get_unchecked() {
+    let (capacity, collection_type) = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::List { .. } => {
             (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
         }

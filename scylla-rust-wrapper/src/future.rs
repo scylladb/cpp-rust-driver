@@ -303,9 +303,13 @@ pub unsafe extern "C" fn cass_future_set_callback(
     callback: CassFutureCallback,
     data: *mut ::std::os::raw::c_void,
 ) -> CassError {
-    ArcFFI::as_ref(future_raw.borrow())
-        .unwrap()
-        .set_callback(future_raw.borrow(), callback, data)
+    unsafe {
+        ArcFFI::as_ref(future_raw.borrow()).unwrap().set_callback(
+            future_raw.borrow(),
+            callback,
+            data,
+        )
+    }
 }
 
 #[no_mangle]
@@ -367,7 +371,7 @@ pub unsafe extern "C" fn cass_future_error_message(
                     Err((_, s)) => s.msg(),
                     _ => "".to_string(),
                 });
-            write_str_to_c(msg.as_str(), message, message_length);
+            unsafe { write_str_to_c(msg.as_str(), message, message_length) };
         });
 }
 
@@ -431,7 +435,7 @@ pub unsafe extern "C" fn cass_future_tracing_id(
         .with_waited_result(|r: &mut CassFutureResult| match r {
             Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
                 Some(id) => {
-                    *tracing_id = CassUuid::from(id);
+                    unsafe { *tracing_id = CassUuid::from(id) };
                     CassError::CASS_OK
                 }
                 None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
@@ -527,97 +531,105 @@ mod tests {
     #[ntest::timeout(600)]
     #[allow(clippy::disallowed_methods)]
     fn test_cass_future_callback() {
-        unsafe {
-            const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
-            const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+        const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
 
-            let create_future_and_flag = || {
-                unsafe extern "C" fn mark_flag_cb(
-                    _fut: CassBorrowedSharedPtr<CassFuture, CMut>,
-                    data: *mut c_void,
-                ) {
-                    let flag = data as *mut bool;
+        let create_future_and_flag = || {
+            unsafe extern "C" fn mark_flag_cb(
+                _fut: CassBorrowedSharedPtr<CassFuture, CMut>,
+                data: *mut c_void,
+            ) {
+                let flag = data as *mut bool;
+                unsafe {
                     *flag = true;
                 }
+            }
 
-                let fut = async move {
-                    tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
-                    Err((CassError::CASS_OK, ERROR_MSG.into()))
-                };
-                let cass_fut = CassFuture::make_raw(fut);
-                let flag = Box::new(false);
-                let flag_ptr = Box::into_raw(flag);
+            let fut = async move {
+                tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
+                Err((CassError::CASS_OK, ERROR_MSG.into()))
+            };
+            let cass_fut = CassFuture::make_raw(fut);
+            let flag = Box::new(false);
+            let flag_ptr = Box::into_raw(flag);
 
+            unsafe {
                 assert_cass_error_eq!(
                     cass_future_set_callback(
                         cass_fut.borrow(),
                         Some(mark_flag_cb),
-                        flag_ptr as *mut c_void
+                        flag_ptr as *mut c_void,
                     ),
                     CassError::CASS_OK
-                );
-
-                (cass_fut, flag_ptr)
+                )
             };
 
-            // Callback executed after awaiting.
-            {
-                let (cass_fut, flag_ptr) = create_future_and_flag();
-                cass_future_wait(cass_fut.borrow());
+            (cass_fut, flag_ptr)
+        };
 
+        // Callback executed after awaiting.
+        {
+            let (cass_fut, flag_ptr) = create_future_and_flag();
+            unsafe { cass_future_wait(cass_fut.borrow()) };
+
+            unsafe {
                 assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
-                assert!(*flag_ptr);
-
-                cass_future_free(cass_fut);
-                let _ = Box::from_raw(flag_ptr);
             }
+            assert!(unsafe { *flag_ptr });
 
-            // Future awaited via `assert_cass_future_error_message_eq`.
-            {
-                let (cass_fut, flag_ptr) = create_future_and_flag();
+            unsafe { cass_future_free(cass_fut) };
+            let _ = unsafe { Box::from_raw(flag_ptr) };
+        }
 
+        // Future awaited via `assert_cass_future_error_message_eq`.
+        {
+            let (cass_fut, flag_ptr) = create_future_and_flag();
+
+            unsafe {
                 assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
-                assert!(*flag_ptr);
-
-                cass_future_free(cass_fut);
-                let _ = Box::from_raw(flag_ptr);
             }
+            assert!(unsafe { *flag_ptr });
 
-            // Callback executed after timeouts.
-            {
-                let (cass_fut, flag_ptr) = create_future_and_flag();
+            unsafe { cass_future_free(cass_fut) };
+            let _ = unsafe { Box::from_raw(flag_ptr) };
+        }
 
-                // This should timeout on tokio::time::timeout.
-                let timed_result =
-                    cass_future_wait_timed(cass_fut.borrow(), HUNDRED_MILLIS_IN_MICROS / 5);
-                assert_eq!(0, timed_result);
-                // This should timeout as well.
-                let timed_result =
-                    cass_future_wait_timed(cass_fut.borrow(), HUNDRED_MILLIS_IN_MICROS / 5);
-                assert_eq!(0, timed_result);
+        // Callback executed after timeouts.
+        {
+            let (cass_fut, flag_ptr) = create_future_and_flag();
 
-                // Await and check result.
+            // This should timeout on tokio::time::timeout.
+            let timed_result =
+                unsafe { cass_future_wait_timed(cass_fut.borrow(), HUNDRED_MILLIS_IN_MICROS / 5) };
+            assert_eq!(0, timed_result);
+            // This should timeout as well.
+            let timed_result =
+                unsafe { cass_future_wait_timed(cass_fut.borrow(), HUNDRED_MILLIS_IN_MICROS / 5) };
+            assert_eq!(0, timed_result);
+
+            // Await and check result.
+            unsafe {
                 assert_cass_future_error_message_eq!(cass_fut, Some(ERROR_MSG));
-                assert!(*flag_ptr);
-
-                cass_future_free(cass_fut);
-                let _ = Box::from_raw(flag_ptr);
             }
+            assert!(unsafe { *flag_ptr });
 
-            // Don't await the future. Just sleep.
-            {
-                let (cass_fut, flag_ptr) = create_future_and_flag();
+            unsafe { cass_future_free(cass_fut) };
+            let _ = unsafe { Box::from_raw(flag_ptr) };
+        }
 
-                RUNTIME.block_on(async {
-                    tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS + 10 * 1000))
-                        .await
-                });
+        // Don't await the future. Just sleep.
+        {
+            let (cass_fut, flag_ptr) = create_future_and_flag();
 
-                assert!(*flag_ptr);
+            RUNTIME.block_on(async {
+                tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS + 10 * 1000))
+                    .await
+            });
 
-                cass_future_free(cass_fut);
-                let _ = Box::from_raw(flag_ptr);
-            }
+            assert!(unsafe { *flag_ptr });
+
+            unsafe { cass_future_free(cass_fut) };
+            let _ = unsafe { Box::from_raw(flag_ptr) };
         }
     }
 }

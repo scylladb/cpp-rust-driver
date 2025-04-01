@@ -265,7 +265,7 @@ pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
 ) -> CassOwnedExclusivePtr<CassStatement, CMut> {
-    cass_statement_new_n(query, strlen(query), parameter_count)
+    unsafe { cass_statement_new_n(query, strlen(query), parameter_count) }
 }
 
 #[no_mangle]
@@ -274,7 +274,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
     query_length: size_t,
     parameter_count: size_t,
 ) -> CassOwnedExclusivePtr<CassStatement, CMut> {
-    let query_str = match ptr_to_cstr_n(query, query_length) {
+    let query_str = match unsafe { ptr_to_cstr_n(query, query_length) } {
         Some(v) => v,
         None => return BoxFFI::null_mut(),
     };
@@ -374,7 +374,8 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     }
 
     let paging_state_usize: usize = paging_state_size.try_into().unwrap();
-    let paging_state_bytes = slice::from_raw_parts(paging_state as *const u8, paging_state_usize);
+    let paging_state_bytes =
+        unsafe { slice::from_raw_parts(paging_state as *const u8, paging_state_usize) };
     statement_from_raw.paging_state = PagingState::new_from_raw_bytes(paging_state_bytes);
     CassError::CASS_OK
 }

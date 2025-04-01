@@ -43,7 +43,7 @@ impl FromPrimitive for CassInetLength {
 unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetLength) -> CassInet {
     let mut array = [0; 16];
     let length = address_length as usize;
-    array[0..length].clone_from_slice(from_raw_parts(address, length));
+    array[0..length].clone_from_slice(unsafe { from_raw_parts(address, length) });
 
     CassInet {
         address: array,
@@ -53,12 +53,12 @@ unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetL
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_inet_init_v4(address: *const cass_uint8_t) -> CassInet {
-    cass_inet_init(address, CassInetLength::CASS_INET_V4)
+    unsafe { cass_inet_init(address, CassInetLength::CASS_INET_V4) }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_inet_init_v6(address: *const cass_uint8_t) -> CassInet {
-    cass_inet_init(address, CassInetLength::CASS_INET_V6)
+    unsafe { cass_inet_init(address, CassInetLength::CASS_INET_V6) }
 }
 
 #[no_mangle]
@@ -69,15 +69,17 @@ pub unsafe extern "C" fn cass_inet_string(inet: CassInet, output: *mut c_char) {
     };
 
     let string_representation = ip_addr.to_string();
-    std::ptr::copy_nonoverlapping(
-        string_representation.as_ptr(),
-        output as *mut u8,
-        string_representation.len(),
-    );
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            string_representation.as_ptr(),
+            output as *mut u8,
+            string_representation.len(),
+        )
+    };
 
     // Null-terminate
-    let null_byte = output.add(string_representation.len()) as *mut c_char;
-    *null_byte = 0;
+    let null_byte = unsafe { output.add(string_representation.len()) as *mut c_char };
+    unsafe { *null_byte = 0 };
 }
 
 #[no_mangle]
@@ -85,7 +87,7 @@ pub unsafe extern "C" fn cass_inet_from_string(
     input: *const c_char,
     inet: *mut CassInet,
 ) -> CassError {
-    cass_inet_from_string_n(input, strlen(input), inet)
+    unsafe { cass_inet_from_string_n(input, strlen(input), inet) }
 }
 
 #[no_mangle]
@@ -94,7 +96,7 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
     input_length: size_t,
     inet_raw: *mut CassInet,
 ) -> CassError {
-    let input = ptr_to_cstr_n(input_raw, input_length);
+    let input = unsafe { ptr_to_cstr_n(input_raw, input_length) };
     if input.is_none() {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
@@ -104,7 +106,7 @@ pub unsafe extern "C" fn cass_inet_from_string_n(
 
     match ip_addr {
         Ok(ip_addr) => {
-            std::ptr::write(inet_raw, ip_addr.into());
+            unsafe { std::ptr::write(inet_raw, ip_addr.into()) };
             CassError::CASS_OK
         }
         Err(_) => CassError::CASS_ERROR_LIB_BAD_PARAMS,

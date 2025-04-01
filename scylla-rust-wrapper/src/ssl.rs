@@ -31,16 +31,18 @@ pub const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_new() -> CassOwnedSharedPtr<CassSsl, CMut> {
     openssl_sys::init();
-    cass_ssl_new_no_lib_init()
+    unsafe { cass_ssl_new_no_lib_init() }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> CassOwnedSharedPtr<CassSsl, CMut> {
-    let ssl_context: *mut SSL_CTX = SSL_CTX_new(TLS_method());
-    let trusted_store: *mut X509_STORE = X509_STORE_new();
+    let ssl_context: *mut SSL_CTX = unsafe { SSL_CTX_new(TLS_method()) };
+    let trusted_store: *mut X509_STORE = unsafe { X509_STORE_new() };
 
-    SSL_CTX_set_cert_store(ssl_context, trusted_store);
-    SSL_CTX_set_verify(ssl_context, CASS_SSL_VERIFY_NONE, None);
+    unsafe {
+        SSL_CTX_set_cert_store(ssl_context, trusted_store);
+        SSL_CTX_set_verify(ssl_context, CASS_SSL_VERIFY_NONE, None);
+    }
 
     let ssl = CassSsl {
         ssl_context,
@@ -80,7 +82,7 @@ unsafe extern "C" fn pem_password_callback(
         return 0;
     }
 
-    let len = strlen(u as *const c_char);
+    let len = unsafe { strlen(u as *const c_char) };
     if len == 0 {
         return 0;
     }
@@ -91,7 +93,7 @@ unsafe extern "C" fn pem_password_callback(
     }
 
     // Same as: memcpy(buf, u, to_copy);
-    std::ptr::copy_nonoverlapping(u as *const c_char, buf, to_copy as usize);
+    unsafe { std::ptr::copy_nonoverlapping(u as *const c_char, buf, to_copy as usize) };
 
     len as c_int
 }
@@ -105,7 +107,7 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert(
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    cass_ssl_add_trusted_cert_n(ssl, cert, strlen(cert).try_into().unwrap())
+    unsafe { cass_ssl_add_trusted_cert_n(ssl, cert, strlen(cert).try_into().unwrap()) }
 }
 
 #[no_mangle]
@@ -115,27 +117,31 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
     cert_length: size_t,
 ) -> CassError {
     let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
-    let bio = BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap());
+    let bio = unsafe { BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap()) };
 
     if bio.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    let x509 = PEM_read_bio_X509(
-        bio,
-        std::ptr::null_mut(),
-        Some(pem_password_callback),
-        std::ptr::null_mut(),
-    );
+    let x509 = unsafe {
+        PEM_read_bio_X509(
+            bio,
+            std::ptr::null_mut(),
+            Some(pem_password_callback),
+            std::ptr::null_mut(),
+        )
+    };
 
-    BIO_free_all(bio);
+    unsafe { BIO_free_all(bio) };
 
     if x509.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    X509_STORE_add_cert(ssl.trusted_store, x509);
-    X509_free(x509);
+    unsafe {
+        X509_STORE_add_cert(ssl.trusted_store, x509);
+        X509_free(x509);
+    }
 
     CassError::CASS_OK
 }
@@ -148,12 +154,12 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(
     let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
 
     match flags {
-        CASS_SSL_VERIFY_NONE => {
+        CASS_SSL_VERIFY_NONE => unsafe {
             SSL_CTX_set_verify(ssl.ssl_context, SslVerifyMode::NONE.bits(), None)
-        }
-        CASS_SSL_VERIFY_PEER_CERT => {
+        },
+        CASS_SSL_VERIFY_PEER_CERT => unsafe {
             SSL_CTX_set_verify(ssl.ssl_context, SslVerifyMode::PEER.bits(), None)
-        }
+        },
         _ => {
             if flags & CASS_SSL_VERIFY_PEER_IDENTITY != 0 {
                 eprintln!("The CASS_SSL_VERIFY_PEER_CERT_IDENTITY is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context.");
@@ -163,7 +169,7 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(
                 eprintln!("The CASS_SSL_VERIFY_PEER_CERT_IDENTITY_DNS is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context.");
             }
 
-            SSL_CTX_set_verify(ssl.ssl_context, SslVerifyMode::PEER.bits(), None);
+            unsafe { SSL_CTX_set_verify(ssl.ssl_context, SslVerifyMode::PEER.bits(), None) };
         }
     }
 }
@@ -177,7 +183,7 @@ pub unsafe extern "C" fn cass_ssl_set_cert(
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    cass_ssl_set_cert_n(ssl, cert, strlen(cert).try_into().unwrap())
+    unsafe { cass_ssl_set_cert_n(ssl, cert, strlen(cert).try_into().unwrap()) }
 }
 
 #[no_mangle]
@@ -187,14 +193,14 @@ pub unsafe extern "C" fn cass_ssl_set_cert_n(
     cert_length: size_t,
 ) -> CassError {
     let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
-    let bio = BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap());
+    let bio = unsafe { BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap()) };
 
     if bio.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    let rc = SSL_CTX_use_certificate_chain_bio(ssl.ssl_context, bio);
-    BIO_free_all(bio);
+    let rc = unsafe { SSL_CTX_use_certificate_chain_bio(ssl.ssl_context, bio) };
+    unsafe { BIO_free_all(bio) };
 
     if rc == 0 {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
@@ -209,36 +215,40 @@ unsafe extern "C" fn SSL_CTX_use_certificate_chain_bio(
     bio: *mut BIO,
 ) -> c_int {
     let mut ret = 0;
-    let x = PEM_read_bio_X509(
-        bio,
-        std::ptr::null_mut(),
-        Some(pem_password_callback),
-        std::ptr::null_mut(),
-    );
+    let x = unsafe {
+        PEM_read_bio_X509(
+            bio,
+            std::ptr::null_mut(),
+            Some(pem_password_callback),
+            std::ptr::null_mut(),
+        )
+    };
 
     if x.is_null() {
         return ret;
     }
 
-    ret = SSL_CTX_use_certificate(ssl_context, x);
+    ret = unsafe { SSL_CTX_use_certificate(ssl_context, x) };
 
     if ret != 1 {
         loop {
-            let ca = PEM_read_bio_X509(
-                bio,
-                std::ptr::null_mut(),
-                Some(pem_password_callback),
-                std::ptr::null_mut(),
-            );
+            let ca = unsafe {
+                PEM_read_bio_X509(
+                    bio,
+                    std::ptr::null_mut(),
+                    Some(pem_password_callback),
+                    std::ptr::null_mut(),
+                )
+            };
 
             if ca.is_null() {
                 ret = 0;
                 break;
             }
 
-            let r = SSL_CTX_add_extra_chain_cert(ssl_context, ca);
+            let r = unsafe { SSL_CTX_add_extra_chain_cert(ssl_context, ca) };
             if r == 0 {
-                X509_free(ca);
+                unsafe { X509_free(ca) };
                 ret = 0;
                 break;
             }
@@ -246,7 +256,7 @@ unsafe extern "C" fn SSL_CTX_use_certificate_chain_bio(
     }
 
     if !x.is_null() {
-        X509_free(x)
+        unsafe { X509_free(x) }
     };
 
     ret
@@ -262,13 +272,15 @@ pub unsafe extern "C" fn cass_ssl_set_private_key(
         return CassError::CASS_ERROR_SSL_INVALID_PRIVATE_KEY;
     }
 
-    cass_ssl_set_private_key_n(
-        ssl,
-        key,
-        strlen(key).try_into().unwrap(),
-        password,
-        strlen(password).try_into().unwrap(),
-    )
+    unsafe {
+        cass_ssl_set_private_key_n(
+            ssl,
+            key,
+            strlen(key).try_into().unwrap(),
+            password,
+            strlen(password).try_into().unwrap(),
+        )
+    }
 }
 
 #[no_mangle]
@@ -280,27 +292,31 @@ pub unsafe extern "C" fn cass_ssl_set_private_key_n(
     _password_length: size_t,
 ) -> CassError {
     let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
-    let bio = BIO_new_mem_buf(key as *const c_void, key_length.try_into().unwrap());
+    let bio = unsafe { BIO_new_mem_buf(key as *const c_void, key_length.try_into().unwrap()) };
 
     if bio.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
 
-    let pkey = PEM_read_bio_PrivateKey(
-        bio,
-        std::ptr::null_mut(),
-        Some(pem_password_callback),
-        password as *mut c_void,
-    );
+    let pkey = unsafe {
+        PEM_read_bio_PrivateKey(
+            bio,
+            std::ptr::null_mut(),
+            Some(pem_password_callback),
+            password as *mut c_void,
+        )
+    };
 
-    BIO_free_all(bio);
+    unsafe { BIO_free_all(bio) };
 
     if pkey.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_PRIVATE_KEY;
     }
 
-    SSL_CTX_use_PrivateKey(ssl.ssl_context, pkey);
-    EVP_PKEY_free(pkey);
+    unsafe {
+        SSL_CTX_use_PrivateKey(ssl.ssl_context, pkey);
+        EVP_PKEY_free(pkey);
+    }
 
     CassError::CASS_OK
 }

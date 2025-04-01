@@ -35,18 +35,22 @@ pub unsafe extern "C" fn testing_cluster_get_contact_points(
 
     match CString::new(contact_points_string) {
         Ok(cstring) => {
-            *contact_points = cstring.into_raw();
-            *contact_points_length = length as size_t;
+            unsafe {
+                *contact_points = cstring.into_raw();
+                *contact_points_length = length as size_t
+            };
         }
         Err(_) => {
             // The contact points string contained a nul byte in the middle.
-            *contact_points = std::ptr::null_mut();
-            *contact_points_length = 0;
+            unsafe {
+                *contact_points = std::ptr::null_mut();
+                *contact_points_length = 0
+            };
         }
     }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn testing_free_contact_points(contact_points: *mut c_char) {
-    let _ = CString::from_raw(contact_points);
+    let _ = unsafe { CString::from_raw(contact_points) };
 }

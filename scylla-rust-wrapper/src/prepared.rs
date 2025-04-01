@@ -124,7 +124,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
         .get_by_index(index as usize)
     {
         Some(col_spec) => {
-            write_str_to_c(col_spec.name(), name, name_length);
+            unsafe { write_str_to_c(col_spec.name(), name, name_length) };
             CassError::CASS_OK
         }
         None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     name: *const c_char,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    cass_prepared_parameter_data_type_by_name_n(prepared_raw, name, strlen(name))
+    unsafe { cass_prepared_parameter_data_type_by_name_n(prepared_raw, name, strlen(name)) }
 }
 
 #[no_mangle]
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let prepared = ArcFFI::as_ref(prepared_raw).unwrap();
     let parameter_name =
-        ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8");
+        unsafe { ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8") };
 
     let data_type = prepared.get_variable_data_type_by_name(parameter_name);
     match data_type {
