@@ -79,7 +79,7 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassTuple, CMut> {
     let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
-    let item_count = match data_type.get_unchecked() {
+    let item_count = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Tuple(v) => v.len(),
         _ => return BoxFFI::null_mut(),
     };

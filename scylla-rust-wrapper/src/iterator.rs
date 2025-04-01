@@ -427,7 +427,7 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
         match udt_entry_opt {
             Some(udt_entry) => {
                 let field_name = &udt_entry.0;
-                write_str_to_c(field_name.as_str(), name, name_length);
+                unsafe { write_str_to_c(field_name.as_str(), name, name_length) };
             }
             None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
         }
@@ -672,14 +672,14 @@ pub unsafe extern "C" fn cass_iterator_from_row<'result>(
 pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let is_collection = cass_value_is_collection(value.borrow()) != 0;
+    let is_collection = unsafe { cass_value_is_collection(value.borrow()) } != 0;
 
     if RefFFI::is_null(&value) || !is_collection {
         return BoxFFI::null_mut();
     }
 
-    let item_count = cass_value_item_count(value.borrow());
-    let item_count = match cass_value_type(value.borrow()) {
+    let item_count = unsafe { cass_value_item_count(value.borrow()) };
+    let item_count = match unsafe { cass_value_type(value.borrow()) } {
         CassValueType::CASS_VALUE_TYPE_MAP => item_count * 2,
         _ => item_count,
     };

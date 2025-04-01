@@ -247,7 +247,7 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     contact_points: *const c_char,
 ) -> CassError {
-    cass_cluster_set_contact_points_n(cluster, contact_points, strlen(contact_points))
+    unsafe { cass_cluster_set_contact_points_n(cluster, contact_points, strlen(contact_points)) }
 }
 
 #[no_mangle]
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points_n(
     contact_points: *const c_char,
     contact_points_length: size_t,
 ) -> CassError {
-    match cluster_set_contact_points(cluster, contact_points, contact_points_length) {
+    match unsafe { cluster_set_contact_points(cluster, contact_points, contact_points_length) } {
         Ok(()) => CassError::CASS_OK,
         Err(err) => err,
     }
@@ -268,7 +268,7 @@ unsafe fn cluster_set_contact_points(
     contact_points_length: size_t,
 ) -> Result<(), CassError> {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
-    let mut contact_points = ptr_to_cstr_n(contact_points_raw, contact_points_length)
+    let mut contact_points = unsafe { ptr_to_cstr_n(contact_points_raw, contact_points_length) }
         .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
         .split(',')
         .filter(|s| !s.is_empty()) // Extra commas should be ignored.
@@ -306,7 +306,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_name(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_name: *const c_char,
 ) {
-    cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name))
+    unsafe { cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name)) }
 }
 
 #[no_mangle]
@@ -316,7 +316,9 @@ pub unsafe extern "C" fn cass_cluster_set_application_name_n(
     app_name_len: size_t,
 ) {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
-    let app_name = ptr_to_cstr_n(app_name, app_name_len).unwrap().to_string();
+    let app_name = unsafe { ptr_to_cstr_n(app_name, app_name_len) }
+        .unwrap()
+        .to_string();
 
     cluster
         .session_builder
@@ -330,7 +332,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_version: *const c_char,
 ) {
-    cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version))
+    unsafe { cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version)) }
 }
 
 #[no_mangle]
@@ -340,7 +342,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_version_n(
     app_version_len: size_t,
 ) {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
-    let app_version = ptr_to_cstr_n(app_version, app_version_len)
+    let app_version = unsafe { ptr_to_cstr_n(app_version, app_version_len) }
         .unwrap()
         .to_string();
 
@@ -486,13 +488,15 @@ pub unsafe extern "C" fn cass_cluster_set_credentials(
     username: *const c_char,
     password: *const c_char,
 ) {
-    cass_cluster_set_credentials_n(
-        cluster,
-        username,
-        strlen(username),
-        password,
-        strlen(password),
-    )
+    unsafe {
+        cass_cluster_set_credentials_n(
+            cluster,
+            username,
+            strlen(username),
+            password,
+            strlen(password),
+        )
+    }
 }
 
 #[no_mangle]
@@ -504,8 +508,8 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     password_length: size_t,
 ) {
     // TODO: string error handling
-    let username = ptr_to_cstr_n(username_raw, username_length).unwrap();
-    let password = ptr_to_cstr_n(password_raw, password_length).unwrap();
+    let username = unsafe { ptr_to_cstr_n(username_raw, username_length) }.unwrap();
+    let password = unsafe { ptr_to_cstr_n(password_raw, password_length) }.unwrap();
 
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
     cluster.auth_username = Some(username.to_string());
@@ -527,13 +531,15 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
     used_hosts_per_remote_dc: c_uint,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    cass_cluster_set_load_balance_dc_aware_n(
-        cluster,
-        local_dc,
-        strlen(local_dc),
-        used_hosts_per_remote_dc,
-        allow_remote_dcs_for_local_cl,
-    )
+    unsafe {
+        cass_cluster_set_load_balance_dc_aware_n(
+            cluster,
+            local_dc,
+            strlen(local_dc),
+            used_hosts_per_remote_dc,
+            allow_remote_dcs_for_local_cl,
+        )
+    }
 }
 
 pub(crate) unsafe fn set_load_balance_dc_aware_n(
@@ -552,7 +558,7 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    let local_dc = ptr_to_cstr_n(local_dc_raw, local_dc_length)
+    let local_dc = unsafe { ptr_to_cstr_n(local_dc_raw, local_dc_length) }
         .unwrap()
         .to_string();
 
@@ -571,13 +577,15 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
 ) -> CassError {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
 
-    set_load_balance_dc_aware_n(
-        &mut cluster.load_balancing_config,
-        local_dc_raw,
-        local_dc_length,
-        used_hosts_per_remote_dc,
-        allow_remote_dcs_for_local_cl,
-    )
+    unsafe {
+        set_load_balance_dc_aware_n(
+            &mut cluster.load_balancing_config,
+            local_dc_raw,
+            local_dc_length,
+            used_hosts_per_remote_dc,
+            allow_remote_dcs_for_local_cl,
+        )
+    }
 }
 
 #[no_mangle]
@@ -586,13 +594,15 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware(
     local_dc_raw: *const c_char,
     local_rack_raw: *const c_char,
 ) -> CassError {
-    cass_cluster_set_load_balance_rack_aware_n(
-        cluster_raw,
-        local_dc_raw,
-        strlen(local_dc_raw),
-        local_rack_raw,
-        strlen(local_rack_raw),
-    )
+    unsafe {
+        cass_cluster_set_load_balance_rack_aware_n(
+            cluster_raw,
+            local_dc_raw,
+            strlen(local_dc_raw),
+            local_rack_raw,
+            strlen(local_rack_raw),
+        )
+    }
 }
 
 #[no_mangle]
@@ -605,13 +615,15 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware_n(
 ) -> CassError {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
 
-    set_load_balance_rack_aware_n(
-        &mut cluster.load_balancing_config,
-        local_dc_raw,
-        local_dc_length,
-        local_rack_raw,
-        local_rack_length,
-    )
+    unsafe {
+        set_load_balance_rack_aware_n(
+            &mut cluster.load_balancing_config,
+            local_dc_raw,
+            local_dc_length,
+            local_rack_raw,
+            local_rack_length,
+        )
+    }
 }
 
 pub(crate) unsafe fn set_load_balance_rack_aware_n(
@@ -622,8 +634,8 @@ pub(crate) unsafe fn set_load_balance_rack_aware_n(
     local_rack_length: size_t,
 ) -> CassError {
     let (local_dc, local_rack) = match (
-        ptr_to_cstr_n(local_dc_raw, local_dc_length),
-        ptr_to_cstr_n(local_rack_raw, local_rack_length),
+        unsafe { ptr_to_cstr_n(local_dc_raw, local_dc_length) },
+        unsafe { ptr_to_cstr_n(local_rack_raw, local_rack_length) },
     ) {
         (Some(local_dc_str), Some(local_rack_str))
             if local_dc_length > 0 && local_rack_length > 0 =>
@@ -649,7 +661,7 @@ pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
     path_length: size_t,
 ) -> CassError {
     // FIXME: Should unzip file associated with the path
-    let zip_file = ptr_to_cstr_n(path, path_length).unwrap();
+    let zip_file = unsafe { ptr_to_cstr_n(path, path_length) }.unwrap();
 
     if zip_file == "invalid_filename" {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
@@ -831,9 +843,9 @@ pub unsafe extern "C" fn cass_cluster_set_ssl(
     let cluster_from_raw = BoxFFI::as_mut_ref(cluster).unwrap();
     let cass_ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
 
-    let ssl_context_builder = SslContextBuilder::from_ptr(cass_ssl.ssl_context);
+    let ssl_context_builder = unsafe { SslContextBuilder::from_ptr(cass_ssl.ssl_context) };
     // Reference count is increased as tokio_openssl will try to free `ssl_context` when calling `SSL_free`.
-    SSL_CTX_up_ref(cass_ssl.ssl_context);
+    unsafe { SSL_CTX_up_ref(cass_ssl.ssl_context) };
 
     cluster_from_raw.session_builder.config.tls_context = Some(ssl_context_builder.build().into());
 }
@@ -922,7 +934,7 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile(
     name: *const c_char,
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
 ) -> CassError {
-    cass_cluster_set_execution_profile_n(cluster, name, strlen(name), profile)
+    unsafe { cass_cluster_set_execution_profile_n(cluster, name, strlen(name), profile) }
 }
 
 #[no_mangle]
@@ -934,7 +946,7 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
 ) -> CassError {
     let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
     let name = if let Some(name) =
-        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok())
+        unsafe { ptr_to_cstr_n(name, name_length) }.and_then(|name| name.to_owned().try_into().ok())
     {
         name
     } else {

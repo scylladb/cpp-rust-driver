@@ -215,14 +215,14 @@ pub unsafe extern "C" fn cass_error_result_keyspace(
             DbError::AlreadyExists { keyspace, .. },
             _,
         ))) => {
-            write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len);
+            unsafe { write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len) };
             CassError::CASS_OK
         }
         CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
             DbError::FunctionFailure { keyspace, .. },
             _,
         ))) => {
-            write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len);
+            unsafe { write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_ERROR_RESULT_TYPE,
@@ -241,7 +241,7 @@ pub unsafe extern "C" fn cass_error_result_table(
             DbError::AlreadyExists { table, .. },
             _,
         ))) => {
-            write_str_to_c(table.as_str(), c_table, c_table_len);
+            unsafe { write_str_to_c(table.as_str(), c_table, c_table_len) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_ERROR_RESULT_TYPE,
@@ -260,7 +260,7 @@ pub unsafe extern "C" fn cass_error_result_function(
             DbError::FunctionFailure { function, .. },
             _,
         ))) => {
-            write_str_to_c(function.as_str(), c_function, c_function_len);
+            unsafe { write_str_to_c(function.as_str(), c_function, c_function_len) };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_ERROR_RESULT_TYPE,
@@ -297,11 +297,13 @@ pub unsafe extern "C" fn cass_error_result_arg_type(
             if index >= arg_types.len() as size_t {
                 return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
             }
-            write_str_to_c(
-                arg_types[index as usize].as_str(),
-                arg_type,
-                arg_type_length,
-            );
+            unsafe {
+                write_str_to_c(
+                    arg_types[index as usize].as_str(),
+                    arg_type,
+                    arg_type_length,
+                )
+            };
             CassError::CASS_OK
         }
         _ => CassError::CASS_ERROR_LIB_INVALID_ERROR_RESULT_TYPE,

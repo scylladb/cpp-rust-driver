@@ -289,7 +289,7 @@ pub unsafe extern "C" fn cass_result_free(result_raw: CassOwnedSharedPtr<CassRes
 pub unsafe extern "C" fn cass_result_has_more_pages(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> cass_bool_t {
-    result_has_more_pages(&result)
+    unsafe { result_has_more_pages(&result) }
 }
 
 unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CConst>) -> cass_bool_t {
@@ -318,10 +318,10 @@ pub unsafe extern "C" fn cass_row_get_column_by_name(
     row: CassBorrowedSharedPtr<CassRow, CConst>,
     name: *const c_char,
 ) -> CassBorrowedSharedPtr<CassValue, CConst> {
-    let name_str = ptr_to_cstr(name).unwrap();
+    let name_str = unsafe { ptr_to_cstr(name) }.unwrap();
     let name_length = name_str.len();
 
-    cass_row_get_column_by_name_n(row, name, name_length as size_t)
+    unsafe { cass_row_get_column_by_name_n(row, name, name_length as size_t) }
 }
 
 #[no_mangle]
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n(
     name_length: size_t,
 ) -> CassBorrowedSharedPtr<CassValue, CConst> {
     let row_from_raw = RefFFI::as_ref(row).unwrap();
-    let mut name_str = ptr_to_cstr_n(name, name_length).unwrap();
+    let mut name_str = unsafe { ptr_to_cstr_n(name, name_length).unwrap() };
     let mut is_case_sensitive = false;
 
     if name_str.starts_with('\"') && name_str.ends_with('\"') {
@@ -376,7 +376,7 @@ pub unsafe extern "C" fn cass_result_column_name(
 
     let column_name = &metadata.col_specs.get(index_usize).unwrap().name;
 
-    write_str_to_c(column_name, name, name_length);
+    unsafe { write_str_to_c(column_name, name, name_length) };
 
     CassError::CASS_OK
 }
@@ -386,11 +386,11 @@ pub unsafe extern "C" fn cass_result_column_type(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     index: size_t,
 ) -> CassValueType {
-    let data_type_ptr = cass_result_column_data_type(result, index);
+    let data_type_ptr = unsafe { cass_result_column_data_type(result, index) };
     if ArcFFI::is_null(&data_type_ptr) {
         return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
     }
-    cass_data_type_type(data_type_ptr)
+    unsafe { cass_data_type_type(data_type_ptr) }
 }
 
 #[no_mangle]
@@ -419,7 +419,7 @@ pub unsafe extern "C" fn cass_value_type(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
     let value_from_raw = RefFFI::as_ref(value).unwrap();
-    cass_data_type_type(ArcFFI::as_ptr(&value_from_raw.value_type))
+    unsafe { cass_data_type_type(ArcFFI::as_ptr(&value_from_raw.value_type)) }
 }
 
 #[no_mangle]
@@ -448,7 +448,7 @@ pub unsafe extern "C" fn cass_value_get_float(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Float(f))) => std::ptr::write(output, f),
+        Some(Value::RegularValue(CqlValue::Float(f))) => unsafe { std::ptr::write(output, f) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -463,7 +463,7 @@ pub unsafe extern "C" fn cass_value_get_double(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Double(d))) => std::ptr::write(output, d),
+        Some(Value::RegularValue(CqlValue::Double(d))) => unsafe { std::ptr::write(output, d) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -478,9 +478,9 @@ pub unsafe extern "C" fn cass_value_get_bool(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Boolean(b))) => {
+        Some(Value::RegularValue(CqlValue::Boolean(b))) => unsafe {
             std::ptr::write(output, b as cass_bool_t)
-        }
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -495,7 +495,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::TinyInt(i))) => std::ptr::write(output, i),
+        Some(Value::RegularValue(CqlValue::TinyInt(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -510,7 +510,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::SmallInt(i))) => std::ptr::write(output, i),
+        Some(Value::RegularValue(CqlValue::SmallInt(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -525,7 +525,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Date(u))) => std::ptr::write(output, u.0), // FIXME: hack
+        Some(Value::RegularValue(CqlValue::Date(u))) => unsafe { std::ptr::write(output, u.0) }, // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -540,7 +540,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Int(i))) => std::ptr::write(output, i),
+        Some(Value::RegularValue(CqlValue::Int(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -555,14 +555,14 @@ pub unsafe extern "C" fn cass_value_get_int64(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::BigInt(i))) => std::ptr::write(output, i),
-        Some(Value::RegularValue(CqlValue::Counter(i))) => {
+        Some(Value::RegularValue(CqlValue::BigInt(i))) => unsafe { std::ptr::write(output, i) },
+        Some(Value::RegularValue(CqlValue::Counter(i))) => unsafe {
             std::ptr::write(output, i.0 as cass_int64_t)
-        }
-        Some(Value::RegularValue(CqlValue::Time(d))) => std::ptr::write(output, d.0),
-        Some(Value::RegularValue(CqlValue::Timestamp(d))) => {
+        },
+        Some(Value::RegularValue(CqlValue::Time(d))) => unsafe { std::ptr::write(output, d.0) },
+        Some(Value::RegularValue(CqlValue::Timestamp(d))) => unsafe {
             std::ptr::write(output, d.0 as cass_int64_t)
-        }
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -577,10 +577,12 @@ pub unsafe extern "C" fn cass_value_get_uuid(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => std::ptr::write(output, uuid.into()),
-        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => {
+        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => unsafe {
+            std::ptr::write(output, uuid.into())
+        },
+        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => unsafe {
             std::ptr::write(output, Into::<Uuid>::into(uuid).into())
-        }
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -595,7 +597,9 @@ pub unsafe extern "C" fn cass_value_get_inet(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
-        Some(Value::RegularValue(CqlValue::Inet(inet))) => std::ptr::write(output, inet.into()),
+        Some(Value::RegularValue(CqlValue::Inet(inet))) => unsafe {
+            std::ptr::write(output, inet.into())
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     };
@@ -618,9 +622,11 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     };
 
     let (varint_value, scale_value) = decimal.as_signed_be_bytes_slice_and_exponent();
-    std::ptr::write(varint_size, varint_value.len() as size_t);
-    std::ptr::write(varint, varint_value.as_ptr());
-    std::ptr::write(scale, scale_value);
+    unsafe {
+        std::ptr::write(varint_size, varint_value.len() as size_t);
+        std::ptr::write(varint, varint_value.as_ptr());
+        std::ptr::write(scale, scale_value);
+    }
 
     CassError::CASS_OK
 }
@@ -637,12 +643,12 @@ pub unsafe extern "C" fn cass_value_get_string(
         // on any type and get internal represenation. I don't see how to do it easily in
         // a compatible way in rust, so let's do something sensible - only return result
         // for string values.
-        Some(Value::RegularValue(CqlValue::Ascii(s))) => {
+        Some(Value::RegularValue(CqlValue::Ascii(s))) => unsafe {
             write_str_to_c(s.as_str(), output, output_size)
-        }
-        Some(Value::RegularValue(CqlValue::Text(s))) => {
+        },
+        Some(Value::RegularValue(CqlValue::Text(s))) => unsafe {
             write_str_to_c(s.as_str(), output, output_size)
-        }
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     }
@@ -660,11 +666,11 @@ pub unsafe extern "C" fn cass_value_get_duration(
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
 
     match &val.value {
-        Some(Value::RegularValue(CqlValue::Duration(duration))) => {
+        Some(Value::RegularValue(CqlValue::Duration(duration))) => unsafe {
             std::ptr::write(months, duration.months);
             std::ptr::write(days, duration.days);
             std::ptr::write(nanos, duration.nanoseconds);
-        }
+        },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
     }
@@ -683,14 +689,16 @@ pub unsafe extern "C" fn cass_value_get_bytes(
     // FIXME: This should be implemented for all CQL types
     // Note: currently rust driver does not allow to get raw bytes of the CQL value.
     match &value_from_raw.value {
-        Some(Value::RegularValue(CqlValue::Blob(bytes))) => {
+        Some(Value::RegularValue(CqlValue::Blob(bytes))) => unsafe {
             *output = bytes.as_ptr() as *const cass_byte_t;
             *output_size = bytes.len() as u64;
-        }
+        },
         Some(Value::RegularValue(CqlValue::Varint(varint))) => {
             let bytes = varint.as_signed_bytes_be_slice();
-            std::ptr::write(output, bytes.as_ptr());
-            std::ptr::write(output_size, bytes.len() as size_t);
+            unsafe {
+                std::ptr::write(output, bytes.as_ptr());
+                std::ptr::write(output_size, bytes.len() as size_t);
+            }
         }
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
         None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
@@ -714,7 +722,7 @@ pub unsafe extern "C" fn cass_value_is_collection(
     let val = RefFFI::as_ref(value).unwrap();
 
     matches!(
-        val.value_type.get_unchecked().get_value_type(),
+        unsafe { val.value_type.get_unchecked() }.get_value_type(),
         CassValueType::CASS_VALUE_TYPE_LIST
             | CassValueType::CASS_VALUE_TYPE_SET
             | CassValueType::CASS_VALUE_TYPE_MAP
@@ -727,8 +735,8 @@ pub unsafe extern "C" fn cass_value_is_duration(
 ) -> cass_bool_t {
     let val = RefFFI::as_ref(value).unwrap();
 
-    (val.value_type.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_DURATION)
-        as cass_bool_t
+    (unsafe { val.value_type.get_unchecked() }.get_value_type()
+        == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
 }
 
 #[no_mangle]
@@ -755,15 +763,17 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 ) -> CassValueType {
     let val = RefFFI::as_ref(collection).unwrap();
 
-    match val.value_type.get_unchecked() {
+    match unsafe { val.value_type.get_unchecked() } {
         CassDataTypeInner::List {
             typ: Some(list), ..
-        } => list.get_unchecked().get_value_type(),
-        CassDataTypeInner::Set { typ: Some(set), .. } => set.get_unchecked().get_value_type(),
+        } => unsafe { list.get_unchecked() }.get_value_type(),
+        CassDataTypeInner::Set { typ: Some(set), .. } => {
+            unsafe { set.get_unchecked() }.get_value_type()
+        }
         CassDataTypeInner::Map {
             typ: MapDataType::Key(key) | MapDataType::KeyAndValue(key, _),
             ..
-        } => key.get_unchecked().get_value_type(),
+        } => unsafe { key.get_unchecked() }.get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
@@ -774,11 +784,11 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 ) -> CassValueType {
     let val = RefFFI::as_ref(collection).unwrap();
 
-    match val.value_type.get_unchecked() {
+    match unsafe { val.value_type.get_unchecked() } {
         CassDataTypeInner::Map {
             typ: MapDataType::KeyAndValue(_, value),
             ..
-        } => value.get_unchecked().get_value_type(),
+        } => unsafe { value.get_unchecked() }.get_value_type(),
         _ => CassValueType::CASS_VALUE_TYPE_UNKNOWN,
     }
 }
@@ -828,7 +838,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
     paging_state: *mut *const c_char,
     paging_state_size: *mut size_t,
 ) -> CassError {
-    if result_has_more_pages(&result) == cass_false {
+    if unsafe { result_has_more_pages(&result) } == cass_false {
         return CassError::CASS_ERROR_LIB_NO_PAGING_STATE;
     }
 
@@ -836,19 +846,19 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 
     match &result_from_raw.paging_state_response {
         PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
-            Some(result_paging_state) => {
+            Some(result_paging_state) => unsafe {
                 *paging_state_size = result_paging_state.len() as u64;
                 *paging_state = result_paging_state.as_ptr() as *const c_char;
-            }
-            None => {
+            },
+            None => unsafe {
                 *paging_state_size = 0;
                 *paging_state = std::ptr::null();
-            }
+            },
         },
-        PagingStateResponse::NoMorePages => {
+        PagingStateResponse::NoMorePages => unsafe {
             *paging_state_size = 0;
             *paging_state = std::ptr::null();
-        }
+        },
     }
 
     CassError::CASS_OK
@@ -927,14 +937,16 @@ mod tests {
     ) -> Option<&'static str> {
         let mut name_ptr: *const c_char = std::ptr::null();
         let mut name_length: size_t = 0;
-        let cass_err = cass_result_column_name(
-            result_ptr,
-            column_index,
-            addr_of_mut!(name_ptr),
-            addr_of_mut!(name_length),
-        );
+        let cass_err = unsafe {
+            cass_result_column_name(
+                result_ptr,
+                column_index,
+                addr_of_mut!(name_ptr),
+                addr_of_mut!(name_length),
+            )
+        };
         assert_eq!(CassError::CASS_OK, cass_err);
-        ptr_to_cstr_n(name_ptr, name_length)
+        unsafe { ptr_to_cstr_n(name_ptr, name_length) }
     }
 
     #[test]

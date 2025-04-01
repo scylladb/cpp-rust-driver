@@ -86,7 +86,7 @@ pub unsafe extern "C" fn cass_uuid_min_from_time(timestamp: cass_uint64_t, outpu
         clock_seq_and_node: MIN_CLOCK_SEQ_AND_NODE,
     };
 
-    std::ptr::write(output, uuid);
+    unsafe { std::ptr::write(output, uuid) };
 }
 
 #[no_mangle]
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn cass_uuid_max_from_time(timestamp: cass_uint64_t, outpu
         clock_seq_and_node: MAX_CLOCK_SEQ_AND_NODE,
     };
 
-    std::ptr::write(output, uuid);
+    unsafe { std::ptr::write(output, uuid) };
 }
 
 #[no_mangle]
@@ -145,7 +145,7 @@ pub unsafe extern "C" fn cass_uuid_gen_time(
         clock_seq_and_node: uuid_gen.clock_seq_and_node,
     };
 
-    std::ptr::write(output, uuid);
+    unsafe { std::ptr::write(output, uuid) };
 }
 
 #[no_mangle]
@@ -159,7 +159,7 @@ pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, outpu
         clock_seq_and_node: (clock_seq_and_node & 0x3FFFFFFFFFFFFFFF) | 0x8000000000000000,
     };
 
-    std::ptr::write(output, uuid);
+    unsafe { std::ptr::write(output, uuid) };
 }
 
 #[no_mangle]
@@ -175,7 +175,7 @@ pub unsafe extern "C" fn cass_uuid_gen_from_time(
         clock_seq_and_node: uuid_gen.clock_seq_and_node,
     };
 
-    std::ptr::write(output, uuid);
+    unsafe { std::ptr::write(output, uuid) };
 }
 
 // Implemented ourselves:
@@ -218,15 +218,17 @@ pub unsafe extern "C" fn cass_uuid_string(uuid_raw: CassUuid, output: *mut c_cha
     let uuid: Uuid = uuid_raw.into();
 
     let string_representation = uuid.hyphenated().to_string();
-    std::ptr::copy_nonoverlapping(
-        string_representation.as_ptr(),
-        output as *mut u8,
-        string_representation.len(),
-    );
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            string_representation.as_ptr(),
+            output as *mut u8,
+            string_representation.len(),
+        );
 
-    // Null-terminate
-    let null_byte = output.add(string_representation.len()) as *mut c_char;
-    *null_byte = 0;
+        // Null-terminate
+        let null_byte = output.add(string_representation.len()) as *mut c_char;
+        *null_byte = 0;
+    }
 }
 
 #[no_mangle]
@@ -234,7 +236,7 @@ pub unsafe extern "C" fn cass_uuid_from_string(
     value: *const c_char,
     output: *mut CassUuid,
 ) -> CassError {
-    cass_uuid_from_string_n(value, strlen(value), output)
+    unsafe { cass_uuid_from_string_n(value, strlen(value), output) }
 }
 
 #[no_mangle]
@@ -243,12 +245,12 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
     value_length: size_t,
     output: *mut CassUuid,
 ) -> CassError {
-    let value_str = ptr_to_cstr_n(value, value_length);
+    let value_str = unsafe { ptr_to_cstr_n(value, value_length) };
 
     match value_str {
         Some(value_str) => {
             Uuid::parse_str(value_str).map_or(CassError::CASS_ERROR_LIB_BAD_PARAMS, |parsed_uuid| {
-                std::ptr::write(output, parsed_uuid.into());
+                unsafe { std::ptr::write(output, parsed_uuid.into()) };
                 CassError::CASS_OK
             })
         }

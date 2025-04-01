@@ -195,7 +195,7 @@ pub unsafe extern "C" fn cass_statement_set_execution_profile(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     name: *const c_char,
 ) -> CassError {
-    cass_statement_set_execution_profile_n(statement, name, strlen(name))
+    unsafe { cass_statement_set_execution_profile_n(statement, name, strlen(name)) }
 }
 
 #[no_mangle]
@@ -205,8 +205,8 @@ pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
     name_length: size_t,
 ) -> CassError {
     let statement = BoxFFI::as_mut_ref(statement).unwrap();
-    let name: Option<ExecProfileName> =
-        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
+    let name: Option<ExecProfileName> = unsafe { ptr_to_cstr_n(name, name_length) }
+        .and_then(|name| name.to_owned().try_into().ok());
     statement.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
 
     CassError::CASS_OK
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn cass_batch_set_execution_profile(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     name: *const c_char,
 ) -> CassError {
-    cass_batch_set_execution_profile_n(batch, name, strlen(name))
+    unsafe { cass_batch_set_execution_profile_n(batch, name, strlen(name)) }
 }
 
 #[no_mangle]
@@ -227,8 +227,8 @@ pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
     name_length: size_t,
 ) -> CassError {
     let batch = BoxFFI::as_mut_ref(batch).unwrap();
-    let name: Option<ExecProfileName> =
-        ptr_to_cstr_n(name, name_length).and_then(|name| name.to_owned().try_into().ok());
+    let name: Option<ExecProfileName> = unsafe { ptr_to_cstr_n(name, name_length) }
+        .and_then(|name| name.to_owned().try_into().ok());
     batch.exec_profile = name.map(PerStatementExecProfile::new_unresolved);
 
     CassError::CASS_OK
@@ -342,13 +342,15 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware(
     used_hosts_per_remote_dc: cass_uint32_t,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    cass_execution_profile_set_load_balance_dc_aware_n(
-        profile,
-        local_dc,
-        strlen(local_dc),
-        used_hosts_per_remote_dc,
-        allow_remote_dcs_for_local_cl,
-    )
+    unsafe {
+        cass_execution_profile_set_load_balance_dc_aware_n(
+            profile,
+            local_dc,
+            strlen(local_dc),
+            used_hosts_per_remote_dc,
+            allow_remote_dcs_for_local_cl,
+        )
+    }
 }
 
 #[no_mangle]
@@ -361,13 +363,15 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
 ) -> CassError {
     let profile_builder = BoxFFI::as_mut_ref(profile).unwrap();
 
-    set_load_balance_dc_aware_n(
-        &mut profile_builder.load_balancing_config,
-        local_dc,
-        local_dc_length,
-        used_hosts_per_remote_dc,
-        allow_remote_dcs_for_local_cl,
-    )
+    unsafe {
+        set_load_balance_dc_aware_n(
+            &mut profile_builder.load_balancing_config,
+            local_dc,
+            local_dc_length,
+            used_hosts_per_remote_dc,
+            allow_remote_dcs_for_local_cl,
+        )
+    }
 }
 
 #[no_mangle]
@@ -376,13 +380,15 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware(
     local_dc_raw: *const c_char,
     local_rack_raw: *const c_char,
 ) -> CassError {
-    cass_execution_profile_set_load_balance_rack_aware_n(
-        profile,
-        local_dc_raw,
-        strlen(local_dc_raw),
-        local_rack_raw,
-        strlen(local_rack_raw),
-    )
+    unsafe {
+        cass_execution_profile_set_load_balance_rack_aware_n(
+            profile,
+            local_dc_raw,
+            strlen(local_dc_raw),
+            local_rack_raw,
+            strlen(local_rack_raw),
+        )
+    }
 }
 
 #[no_mangle]
@@ -395,13 +401,15 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
 ) -> CassError {
     let profile_builder = BoxFFI::as_mut_ref(profile).unwrap();
 
-    set_load_balance_rack_aware_n(
-        &mut profile_builder.load_balancing_config,
-        local_dc_raw,
-        local_dc_length,
-        local_rack_raw,
-        local_rack_length,
-    )
+    unsafe {
+        set_load_balance_rack_aware_n(
+            &mut profile_builder.load_balancing_config,
+            local_dc_raw,
+            local_dc_length,
+            local_rack_raw,
+            local_rack_length,
+        )
+    }
 }
 
 #[no_mangle]

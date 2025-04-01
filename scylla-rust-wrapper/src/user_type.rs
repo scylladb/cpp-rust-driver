@@ -89,7 +89,7 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
 ) -> CassOwnedExclusivePtr<CassUserType, CMut> {
     let data_type = ArcFFI::cloned_from_ptr(data_type_raw).unwrap();
 
-    match data_type.get_unchecked() {
+    match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
             BoxFFI::into_ptr(Box::new(CassUserType {

@@ -128,7 +128,9 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name(
     schema_meta: CassBorrowedSharedPtr<CassSchemaMeta, CConst>,
     keyspace_name: *const c_char,
 ) -> CassBorrowedSharedPtr<CassKeyspaceMeta, CConst> {
-    cass_schema_meta_keyspace_by_name_n(schema_meta, keyspace_name, strlen(keyspace_name))
+    unsafe {
+        cass_schema_meta_keyspace_by_name_n(schema_meta, keyspace_name, strlen(keyspace_name))
+    }
 }
 
 #[no_mangle]
@@ -142,7 +144,7 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
     }
 
     let metadata = BoxFFI::as_ref(schema_meta).unwrap();
-    let keyspace = ptr_to_cstr_n(keyspace_name, keyspace_name_length).unwrap();
+    let keyspace = unsafe { ptr_to_cstr_n(keyspace_name, keyspace_name_length) }.unwrap();
 
     let keyspace_meta = metadata.keyspaces.get(keyspace);
 
@@ -159,7 +161,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_name(
     name_length: *mut size_t,
 ) {
     let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
-    write_str_to_c(keyspace_meta.name.as_str(), name, name_length)
+    unsafe { write_str_to_c(keyspace_meta.name.as_str(), name, name_length) }
 }
 
 #[no_mangle]
@@ -167,7 +169,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     type_: *const c_char,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    cass_keyspace_meta_user_type_by_name_n(keyspace_meta, type_, strlen(type_))
+    unsafe { cass_keyspace_meta_user_type_by_name_n(keyspace_meta, type_, strlen(type_)) }
 }
 
 #[no_mangle]
@@ -181,7 +183,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
     }
 
     let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
-    let user_type_name = ptr_to_cstr_n(type_, type_length).unwrap();
+    let user_type_name = unsafe { ptr_to_cstr_n(type_, type_length) }.unwrap();
 
     match keyspace_meta
         .user_defined_type_data_type
@@ -197,7 +199,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     table: *const c_char,
 ) -> CassBorrowedSharedPtr<CassTableMeta, CConst> {
-    cass_keyspace_meta_table_by_name_n(keyspace_meta, table, strlen(table))
+    unsafe { cass_keyspace_meta_table_by_name_n(keyspace_meta, table, strlen(table)) }
 }
 
 #[no_mangle]
@@ -211,7 +213,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     }
 
     let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
-    let table_name = ptr_to_cstr_n(table, table_length).unwrap();
+    let table_name = unsafe { ptr_to_cstr_n(table, table_length) }.unwrap();
 
     let table_meta = keyspace_meta.tables.get(table_name);
 
@@ -228,7 +230,7 @@ pub unsafe extern "C" fn cass_table_meta_name(
     name_length: *mut size_t,
 ) {
     let table_meta = RefFFI::as_ref(table_meta).unwrap();
-    write_str_to_c(table_meta.name.as_str(), name, name_length)
+    unsafe { write_str_to_c(table_meta.name.as_str(), name, name_length) }
 }
 
 #[no_mangle]
@@ -345,7 +347,7 @@ pub unsafe extern "C" fn cass_table_meta_column_by_name(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     column: *const c_char,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    cass_table_meta_column_by_name_n(table_meta, column, strlen(column))
+    unsafe { cass_table_meta_column_by_name_n(table_meta, column, strlen(column)) }
 }
 
 #[no_mangle]
@@ -359,7 +361,7 @@ pub unsafe extern "C" fn cass_table_meta_column_by_name_n(
     }
 
     let table_meta = RefFFI::as_ref(table_meta).unwrap();
-    let column_name = ptr_to_cstr_n(column, column_length).unwrap();
+    let column_name = unsafe { ptr_to_cstr_n(column, column_length) }.unwrap();
 
     match table_meta.columns_metadata.get(column_name) {
         Some(column_meta) => RefFFI::as_ptr(column_meta),
@@ -374,7 +376,7 @@ pub unsafe extern "C" fn cass_column_meta_name(
     name_length: *mut size_t,
 ) {
     let column_meta = RefFFI::as_ref(column_meta).unwrap();
-    write_str_to_c(column_meta.name.as_str(), name, name_length)
+    unsafe { write_str_to_c(column_meta.name.as_str(), name, name_length) }
 }
 
 #[no_mangle]
@@ -398,7 +400,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     view: *const c_char,
 ) -> CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst> {
-    cass_keyspace_meta_materialized_view_by_name_n(keyspace_meta, view, strlen(view))
+    unsafe { cass_keyspace_meta_materialized_view_by_name_n(keyspace_meta, view, strlen(view)) }
 }
 
 #[no_mangle]
@@ -412,7 +414,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name_n(
     }
 
     let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
-    let view_name = ptr_to_cstr_n(view, view_length).unwrap();
+    let view_name = unsafe { ptr_to_cstr_n(view, view_length).unwrap() };
 
     match keyspace_meta.views.get(view_name) {
         Some(view_meta) => RefFFI::as_ptr(view_meta.as_ref()),
@@ -425,7 +427,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     view: *const c_char,
 ) -> CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst> {
-    cass_table_meta_materialized_view_by_name_n(table_meta, view, strlen(view))
+    unsafe { cass_table_meta_materialized_view_by_name_n(table_meta, view, strlen(view)) }
 }
 
 #[no_mangle]
@@ -439,7 +441,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
     }
 
     let table_meta = RefFFI::as_ref(table_meta).unwrap();
-    let view_name = ptr_to_cstr_n(view, view_length).unwrap();
+    let view_name = unsafe { ptr_to_cstr_n(view, view_length).unwrap() };
 
     match table_meta.views.get(view_name) {
         Some(view_meta) => RefFFI::as_ptr(view_meta.as_ref()),
@@ -473,7 +475,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     column: *const c_char,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    cass_materialized_view_meta_column_by_name_n(view_meta, column, strlen(column))
+    unsafe { cass_materialized_view_meta_column_by_name_n(view_meta, column, strlen(column)) }
 }
 
 #[no_mangle]
@@ -487,7 +489,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name_n(
     }
 
     let view_meta = RefFFI::as_ref(view_meta).unwrap();
-    let column_name = ptr_to_cstr_n(column, column_length).unwrap();
+    let column_name = unsafe { ptr_to_cstr_n(column, column_length).unwrap() };
 
     match view_meta.view_metadata.columns_metadata.get(column_name) {
         Some(column_meta) => RefFFI::as_ptr(column_meta),
@@ -502,7 +504,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_name(
     name_length: *mut size_t,
 ) {
     let view_meta = RefFFI::as_ref(view_meta).unwrap();
-    write_str_to_c(view_meta.name.as_str(), name, name_length)
+    unsafe { write_str_to_c(view_meta.name.as_str(), name, name_length) }
 }
 
 #[no_mangle]
@@ -511,7 +513,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
 ) -> CassBorrowedSharedPtr<CassTableMeta, CConst> {
     let view_meta = RefFFI::as_ref(view_meta).unwrap();
 
-    let ptr = RefFFI::weak_as_ptr(&view_meta.base_table);
+    let ptr = unsafe { RefFFI::weak_as_ptr(&view_meta.base_table) };
     if RefFFI::is_null(&ptr) {
         tracing::error!("Failed to upgrade a weak reference to table metadata from materialized view metadata! This is a driver bug!");
     }

@@ -164,7 +164,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace(
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
     keyspace: *const c_char,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace))
+    unsafe { cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace)) }
 }
 
 #[no_mangle]
@@ -176,7 +176,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
     let session_opt = ArcFFI::cloned_from_ptr(session_raw).unwrap();
     let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw).unwrap();
-    let keyspace = ptr_to_cstr_n(keyspace, keyspace_length).map(ToOwned::to_owned);
+    let keyspace = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }.map(ToOwned::to_owned);
 
     CassSessionInner::connect(session_opt, cluster, keyspace)
 }
@@ -423,7 +423,7 @@ pub unsafe extern "C" fn cass_session_prepare(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
     query: *const c_char,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    cass_session_prepare_n(session, query, strlen(query))
+    unsafe { cass_session_prepare_n(session, query, strlen(query)) }
 }
 
 #[no_mangle]
@@ -432,7 +432,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     query: *const c_char,
     query_length: size_t,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let query_str = ptr_to_cstr_n(query, query_length)
+    let query_str = unsafe { ptr_to_cstr_n(query, query_length) }
         // Apparently nullptr denotes an empty statement string.
         // It seems to be intended (for some weird reason, why not save a round-trip???)
         // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
@@ -627,15 +627,17 @@ mod tests {
     }
 
     unsafe fn cass_future_wait_check_and_free(fut: CassOwnedSharedPtr<CassFuture, CMut>) {
-        cass_future_wait(fut.borrow());
-        if cass_future_error_code(fut.borrow()) != CassError::CASS_OK {
+        unsafe { cass_future_wait(fut.borrow()) };
+        if unsafe { cass_future_error_code(fut.borrow()) } != CassError::CASS_OK {
             let mut message: *const c_char = std::ptr::null();
             let mut message_len: size_t = 0;
-            cass_future_error_message(fut.borrow(), &mut message, &mut message_len);
-            eprintln!("{:?}", ptr_to_cstr_n(message, message_len));
+            unsafe { cass_future_error_message(fut.borrow(), &mut message, &mut message_len) };
+            eprintln!("{:?}", unsafe { ptr_to_cstr_n(message, message_len) });
         }
-        assert_cass_error_eq!(cass_future_error_code(fut.borrow()), CassError::CASS_OK);
-        cass_future_free(fut);
+        unsafe {
+            assert_cass_error_eq!(cass_future_error_code(fut.borrow()), CassError::CASS_OK);
+        }
+        unsafe { cass_future_free(fut) };
     }
 
     fn handshake_rules() -> impl IntoIterator<Item = RequestRule> {
@@ -1175,17 +1177,21 @@ mod tests {
                     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
                     statement_raw: CassBorrowedSharedPtr<CassStatement, CConst>,
                 ) -> CassError {
-                    cass_future_error_code(
-                        cass_session_execute(session_raw, statement_raw).borrow(),
-                    )
+                    unsafe {
+                        cass_future_error_code(
+                            cass_session_execute(session_raw, statement_raw).borrow(),
+                        )
+                    }
                 }
                 unsafe fn execute_batch(
                     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
                     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
                 ) -> CassError {
-                    cass_future_error_code(
-                        cass_session_execute_batch(session_raw, batch_raw).borrow(),
-                    )
+                    unsafe {
+                        cass_future_error_code(
+                            cass_session_execute_batch(session_raw, batch_raw).borrow(),
+                        )
+                    }
                 }
 
                 fn reset_proxy_rules(proxy: &mut RunningProxy) {
@@ -1203,15 +1209,17 @@ mod tests {
                     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
                 ) {
                     reset_proxy_rules(&mut *proxy);
-                    assert_cass_error_eq!(
-                        execute_query(session_raw.borrow(), statement_raw),
-                        CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
-                    );
-                    reset_proxy_rules(&mut *proxy);
-                    assert_cass_error_eq!(
-                        execute_batch(session_raw, batch_raw),
-                        CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
-                    );
+                    unsafe {
+                        assert_cass_error_eq!(
+                            execute_query(session_raw.borrow(), statement_raw),
+                            CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
+                        );
+                        reset_proxy_rules(&mut *proxy);
+                        assert_cass_error_eq!(
+                            execute_batch(session_raw, batch_raw),
+                            CassError::CASS_ERROR_SERVER_READ_TIMEOUT,
+                        );
+                    }
                 }
 
                 unsafe fn assert_query_with_default_policy(
@@ -1221,15 +1229,17 @@ mod tests {
                     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
                 ) {
                     reset_proxy_rules(&mut *proxy);
-                    assert_cass_error_eq!(
-                        execute_query(session_raw.borrow(), statement_raw),
-                        CassError::CASS_ERROR_SERVER_READ_FAILURE
-                    );
-                    reset_proxy_rules(&mut *proxy);
-                    assert_cass_error_eq!(
-                        execute_batch(session_raw, batch_raw),
-                        CassError::CASS_ERROR_SERVER_READ_FAILURE
-                    );
+                    unsafe {
+                        assert_cass_error_eq!(
+                            execute_query(session_raw.borrow(), statement_raw),
+                            CassError::CASS_ERROR_SERVER_READ_FAILURE
+                        );
+                        reset_proxy_rules(&mut *proxy);
+                        assert_cass_error_eq!(
+                            execute_batch(session_raw, batch_raw),
+                            CassError::CASS_ERROR_SERVER_READ_FAILURE
+                        );
+                    }
                 }
 
                 unsafe fn set_provided_exec_profile(
@@ -1238,47 +1248,55 @@ mod tests {
                     batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
                 ) {
                     // Set statement/batch exec profile.
-                    assert_cass_error_eq!(
-                        cass_statement_set_execution_profile(statement_raw, name,),
-                        CassError::CASS_OK
-                    );
-                    assert_cass_error_eq!(
-                        cass_batch_set_execution_profile(batch_raw, name,),
-                        CassError::CASS_OK
-                    );
+                    unsafe {
+                        assert_cass_error_eq!(
+                            cass_statement_set_execution_profile(statement_raw, name,),
+                            CassError::CASS_OK
+                        );
+                        assert_cass_error_eq!(
+                            cass_batch_set_execution_profile(batch_raw, name,),
+                            CassError::CASS_OK
+                        );
+                    }
                 }
                 unsafe fn set_exec_profile(
                     profile_name_c_str: *const c_char,
                     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
                     batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
                 ) {
-                    set_provided_exec_profile(profile_name_c_str, statement_raw, batch_raw);
+                    unsafe {
+                        set_provided_exec_profile(profile_name_c_str, statement_raw, batch_raw)
+                    };
                 }
                 unsafe fn unset_exec_profile(
                     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
                     batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
                 ) {
-                    set_provided_exec_profile(std::ptr::null::<i8>(), statement_raw, batch_raw);
+                    unsafe {
+                        set_provided_exec_profile(std::ptr::null::<i8>(), statement_raw, batch_raw)
+                    };
                 }
                 unsafe fn set_retry_policy_on_stmt(
                     policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
                     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
                     batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
                 ) {
-                    assert_cass_error_eq!(
-                        cass_statement_set_retry_policy(statement_raw, policy.borrow(),),
-                        CassError::CASS_OK
-                    );
-                    assert_cass_error_eq!(
-                        cass_batch_set_retry_policy(batch_raw, policy,),
-                        CassError::CASS_OK
-                    );
+                    unsafe {
+                        assert_cass_error_eq!(
+                            cass_statement_set_retry_policy(statement_raw, policy.borrow()),
+                            CassError::CASS_OK
+                        );
+                        assert_cass_error_eq!(
+                            cass_batch_set_retry_policy(batch_raw, policy,),
+                            CassError::CASS_OK
+                        );
+                    }
                 }
                 unsafe fn unset_retry_policy_on_stmt(
                     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
                     batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
                 ) {
-                    set_retry_policy_on_stmt(ArcFFI::null(), statement_raw, batch_raw);
+                    unsafe { set_retry_policy_on_stmt(ArcFFI::null(), statement_raw, batch_raw) };
                 }
 
                 // ### START TESTING
