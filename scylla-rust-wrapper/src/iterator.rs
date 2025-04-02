@@ -31,9 +31,45 @@ pub enum CassResultIterator<'result> {
     Rows(CassRowsResultIterator<'result>),
 }
 
+impl CassResultIterator<'_> {
+    fn next(&mut self) -> bool {
+        let CassResultIterator::Rows(rows_result_iterator) = self else {
+            return false;
+        };
+
+        let new_row = rows_result_iterator
+            .iterator
+            .next()
+            .and_then(|res| match res {
+                Ok(row) => Some(row),
+                Err(e) => {
+                    // We have no way to propagate the error (return type is bool).
+                    // Let's at least log the deserialization error.
+                    tracing::error!("Failed to deserialize next row: {e}");
+                    None
+                }
+            })
+            .map(|row| CassRow::from_row_and_metadata(row, rows_result_iterator.result_metadata));
+
+        rows_result_iterator.current_row = new_row;
+
+        rows_result_iterator.current_row.is_some()
+    }
+}
+
 pub struct CassRowIterator<'result> {
     row: &'result CassRow<'result>,
     position: Option<usize>,
+}
+
+impl CassRowIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.row.columns.len()
+    }
 }
 
 pub struct CassCollectionIterator<'result> {
@@ -42,10 +78,30 @@ pub struct CassCollectionIterator<'result> {
     position: Option<usize>,
 }
 
+impl CassCollectionIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count.try_into().unwrap()
+    }
+}
+
 pub struct CassMapIterator<'result> {
     value: &'result CassValue,
     count: u64,
     position: Option<usize>,
+}
+
+impl CassMapIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count.try_into().unwrap()
+    }
 }
 
 pub struct CassUdtIterator<'result> {
@@ -54,10 +110,30 @@ pub struct CassUdtIterator<'result> {
     position: Option<usize>,
 }
 
+impl CassUdtIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count.try_into().unwrap()
+    }
+}
+
 pub struct CassSchemaMetaIterator<'schema> {
     value: &'schema CassSchemaMeta,
     count: usize,
     position: Option<usize>,
+}
+
+impl CassSchemaMetaIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count
+    }
 }
 
 pub struct CassKeyspaceMetaIterator<'schema> {
@@ -66,16 +142,46 @@ pub struct CassKeyspaceMetaIterator<'schema> {
     position: Option<usize>,
 }
 
+impl CassKeyspaceMetaIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count
+    }
+}
+
 pub struct CassTableMetaIterator<'schema> {
     value: &'schema CassTableMeta,
     count: usize,
     position: Option<usize>,
 }
 
+impl CassTableMetaIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count
+    }
+}
+
 pub struct CassViewMetaIterator<'schema> {
     value: &'schema CassMaterializedViewMeta,
     count: usize,
     position: Option<usize>,
+}
+
+impl CassViewMetaIterator<'_> {
+    fn next(&mut self) -> bool {
+        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+
+        self.position = Some(new_pos);
+
+        new_pos < self.count
+    }
 }
 
 /// An iterator over columns metadata.
@@ -165,119 +271,31 @@ pub unsafe extern "C" fn cass_iterator_next(
 ) -> cass_bool_t {
     let mut iter = BoxFFI::as_mut_ref(iterator).unwrap();
 
-    match &mut iter {
-        CassIterator::Result(result_iterator) => {
-            let CassResultIterator::Rows(rows_result_iterator) = result_iterator else {
-                return false as cass_bool_t;
-            };
-
-            let new_row = rows_result_iterator
-                .iterator
-                .next()
-                .and_then(|res| match res {
-                    Ok(row) => Some(row),
-                    Err(e) => {
-                        // We have no way to propagate the error (return type is bool).
-                        // Let's at least log the deserialization error.
-                        tracing::error!("Failed to deserialize next row: {e}");
-                        None
-                    }
-                })
-                .map(|row| {
-                    CassRow::from_row_and_metadata(row, rows_result_iterator.result_metadata)
-                });
-
-            rows_result_iterator.current_row = new_row;
-
-            rows_result_iterator.current_row.is_some() as cass_bool_t
-        }
-        CassIterator::Row(row_iterator) => {
-            let new_pos: usize = row_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
-
-            row_iterator.position = Some(new_pos);
-
-            (new_pos < row_iterator.row.columns.len()) as cass_bool_t
-        }
+    let result = match &mut iter {
+        CassIterator::Result(result_iterator) => result_iterator.next(),
+        CassIterator::Row(row_iterator) => row_iterator.next(),
         CassIterator::Collection(collection_iterator)
-        | CassIterator::Tuple(collection_iterator) => {
-            let new_pos: usize = collection_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
-
-            collection_iterator.position = Some(new_pos);
-
-            (new_pos < collection_iterator.count.try_into().unwrap()) as cass_bool_t
-        }
-        CassIterator::Map(map_iterator) => {
-            let new_pos: usize = map_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
-
-            map_iterator.position = Some(new_pos);
-
-            (new_pos < map_iterator.count.try_into().unwrap()) as cass_bool_t
-        }
-        CassIterator::UdtFields(udt_iterator) => {
-            let new_pos: usize = udt_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
-
-            udt_iterator.position = Some(new_pos);
-
-            (new_pos < udt_iterator.count.try_into().unwrap()) as cass_bool_t
-        }
-        CassIterator::KeyspacesMeta(schema_meta_iterator) => {
-            let new_pos: usize = schema_meta_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
-
-            schema_meta_iterator.position = Some(new_pos);
-
-            (new_pos < schema_meta_iterator.count) as cass_bool_t
-        }
-        CassIterator::TablesMeta(keyspace_meta_iterator) => {
-            let new_pos: usize = keyspace_meta_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
-
-            keyspace_meta_iterator.position = Some(new_pos);
-
-            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
-        }
-        CassIterator::UserTypes(keyspace_meta_iterator) => {
-            let new_pos: usize = keyspace_meta_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
-
-            keyspace_meta_iterator.position = Some(new_pos);
-
-            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
-        }
-        CassIterator::MaterializedViewsMeta(CassMaterializedViewsMetaIterator::FromKeyspace(
+        | CassIterator::Tuple(collection_iterator) => collection_iterator.next(),
+        CassIterator::Map(map_iterator) => map_iterator.next(),
+        CassIterator::UdtFields(udt_iterator) => udt_iterator.next(),
+        CassIterator::KeyspacesMeta(schema_meta_iterator) => schema_meta_iterator.next(),
+        CassIterator::TablesMeta(keyspace_meta_iterator)
+        | CassIterator::UserTypes(keyspace_meta_iterator)
+        | CassIterator::MaterializedViewsMeta(CassMaterializedViewsMetaIterator::FromKeyspace(
             keyspace_meta_iterator,
-        )) => {
-            let new_pos: usize = keyspace_meta_iterator
-                .position
-                .map_or(0, |prev_pos| prev_pos + 1);
-
-            keyspace_meta_iterator.position = Some(new_pos);
-
-            (new_pos < keyspace_meta_iterator.count) as cass_bool_t
-        }
+        )) => keyspace_meta_iterator.next(),
         CassIterator::MaterializedViewsMeta(CassMaterializedViewsMetaIterator::FromTable(
             table_iterator,
         ))
         | CassIterator::ColumnsMeta(CassColumnsMetaIterator::FromTable(table_iterator)) => {
-            let new_pos: usize = table_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
-
-            table_iterator.position = Some(new_pos);
-
-            (new_pos < table_iterator.count) as cass_bool_t
+            table_iterator.next()
         }
         CassIterator::ColumnsMeta(CassColumnsMetaIterator::FromView(view_iterator)) => {
-            let new_pos: usize = view_iterator.position.map_or(0, |prev_pos| prev_pos + 1);
-
-            view_iterator.position = Some(new_pos);
-
-            (new_pos < view_iterator.count) as cass_bool_t
+            view_iterator.next()
         }
-    }
+    };
+
+    result as cass_bool_t
 }
 
 #[no_mangle]
