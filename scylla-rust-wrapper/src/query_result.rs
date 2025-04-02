@@ -4,8 +4,8 @@ use crate::cass_types::{
     cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
     CassValueType, MapDataType,
 };
+use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
-use crate::query_error::CassErrorResult;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
@@ -148,7 +148,7 @@ mod row_with_self_borrowed_metadata {
     use scylla::value::Row;
     use yoke::{Yoke, Yokeable};
 
-    use crate::query_error::CassErrorResult;
+    use crate::execution_error::CassErrorResult;
 
     use super::{CassResultMetadata, CassRow};
 

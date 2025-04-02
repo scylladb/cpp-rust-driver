@@ -2,7 +2,7 @@ use scylla::errors::*;
 
 // Re-export error types.
 pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
-use crate::query_error::CassErrorResult;
+use crate::execution_error::CassErrorResult;
 use crate::statement::UnknownNamedParameterError;
 
 pub trait ToCassError {
@@ -12,7 +12,7 @@ pub trait ToCassError {
 impl ToCassError for CassErrorResult {
     fn to_cass_error(&self) -> CassError {
         match self {
-            CassErrorResult::Query(query_error) => query_error.to_cass_error(),
+            CassErrorResult::Execution(execution_error) => execution_error.to_cass_error(),
 
             // TODO:
             // For now let's leave these as LIB_INVALID_DATA.
