@@ -4,12 +4,14 @@ use crate::cass_types::{
     cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
     CassValueType, MapDataType,
 };
+use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
-use crate::query_error::CassErrorResult;
 use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
+use row_with_self_borrowed_metadata::RowWithSelfBorrowedMetadata;
 use scylla::errors::IntoRowsResultError;
+use scylla::frame::response::result::DeserializedMetadataAndRawRows;
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
 use scylla::value::{CqlValue, Row};
@@ -24,7 +26,10 @@ pub enum CassResultKind {
 }
 
 pub struct CassRowsResult {
-    pub rows: Vec<CassRow>,
+    pub raw_rows: DeserializedMetadataAndRawRows,
+    // 'static, because of self-borrowing.
+    // CassRow borrows `metadata` field.
+    pub first_row: Option<RowWithSelfBorrowedMetadata>,
     pub metadata: Arc<CassResultMetadata>,
 }
 
@@ -55,21 +60,18 @@ impl CassResult {
                     ))
                 });
 
-                // For now, let's eagerly deserialize rows into type-erased CqlValues.
-                // Lazy deserialization requires a non-trivial refactor that needs to be discussed.
-                let rows: Vec<Row> = rows_result
-                    .rows::<Row>()
-                    // SAFETY: this unwrap is safe, because `Row` always
-                    // passes the typecheck, no matter the type of the columns.
-                    .unwrap()
-                    .collect::<Result<_, _>>()?;
-                let cass_rows = create_cass_rows_from_rows(rows, &metadata);
+                let (raw_rows, tracing_id, _) = rows_result.into_inner();
+                let first_row = RowWithSelfBorrowedMetadata::first_from_raw_rows_and_metadata(
+                    &raw_rows,
+                    Arc::clone(&metadata),
+                )?;
 
                 let cass_result = CassResult {
-                    tracing_id: rows_result.tracing_id(),
+                    tracing_id,
                     paging_state_response,
                     kind: CassResultKind::Rows(CassRowsResult {
-                        rows: cass_rows,
+                        raw_rows,
+                        first_row,
                         metadata,
                     }),
                 };
@@ -119,25 +121,86 @@ impl CassResultMetadata {
 
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
-pub struct CassRow {
+pub struct CassRow<'result> {
     pub columns: Vec<CassValue>,
-    pub result_metadata: Arc<CassResultMetadata>,
+    pub result_metadata: &'result CassResultMetadata,
 }
 
-impl FFI for CassRow {
+impl FFI for CassRow<'_> {
     type Origin = FromRef;
 }
 
-pub fn create_cass_rows_from_rows(
-    rows: Vec<Row>,
-    metadata: &Arc<CassResultMetadata>,
-) -> Vec<CassRow> {
-    rows.into_iter()
-        .map(|r| CassRow {
-            columns: create_cass_row_columns(r, metadata),
-            result_metadata: metadata.clone(),
-        })
-        .collect()
+impl<'result> CassRow<'result> {
+    pub fn from_row_and_metadata(row: Row, result_metadata: &'result CassResultMetadata) -> Self {
+        Self {
+            columns: create_cass_row_columns(row, result_metadata),
+            result_metadata,
+        }
+    }
+}
+
+/// Module defining [`RowWithSelfBorrowedMetadata`] struct.
+/// The purpose of this module is so the `query_result` module does not directly depend on `yoke`.
+mod row_with_self_borrowed_metadata {
+    use std::sync::Arc;
+
+    use scylla::frame::response::result::DeserializedMetadataAndRawRows;
+    use scylla::value::Row;
+    use yoke::{Yoke, Yokeable};
+
+    use crate::execution_error::CassErrorResult;
+
+    use super::{CassResultMetadata, CassRow};
+
+    /// A simple wrapper over CassRow.
+    /// Needed, so we can implement Yokeable for it, instead of implementing it for CassRow.
+    #[derive(Yokeable)]
+    struct CassRowWrapper<'result>(CassRow<'result>);
+
+    /// A wrapper over struct which self-borrows the metadata allocated using Arc.
+    ///
+    /// It's needed to safely express the relationship between [`CassRowsResult`][super::CassRowsResult]
+    /// and its `first_row` field. The relationship is as follows:
+    /// 1. `CassRowsResult` owns `metadata` field, which is an `Arc<CassResultMetadata>`.
+    /// 2. `CassRowsResult` owns the row (`first_row`)
+    /// 3. `CassRow` borrows `metadata` field (as a reference)
+    ///
+    /// This struct is a shared owner of the metadata, and self-borrows the metadata
+    /// to the `CassRow` it contains.
+    pub struct RowWithSelfBorrowedMetadata(Yoke<CassRowWrapper<'static>, Arc<CassResultMetadata>>);
+
+    impl RowWithSelfBorrowedMetadata {
+        /// Constructs [`RowWithSelfBorrowedMetadata`] based on the first row from `raw_rows`.
+        pub(super) fn first_from_raw_rows_and_metadata(
+            raw_rows: &DeserializedMetadataAndRawRows,
+            metadata: Arc<CassResultMetadata>,
+        ) -> Result<Option<Self>, CassErrorResult> {
+            let row = raw_rows
+                .rows_iter::<Row>()
+                // unwrap: Row always passes the typecheck.
+                .unwrap()
+                .next()
+                .transpose()?
+                .map(|row: Row| Self::new_from_row_and_metadata(row, metadata));
+
+            Ok(row)
+        }
+
+        pub(super) fn row(&self) -> &CassRow<'_> {
+            &self.0.get().0
+        }
+
+        pub(super) fn new_from_row_and_metadata(
+            row: Row,
+            metadata: Arc<CassResultMetadata>,
+        ) -> Self {
+            let yoke = Yoke::attach_to_cart(metadata, |metadata_ref| {
+                CassRowWrapper(CassRow::from_row_and_metadata(row, metadata_ref))
+            });
+
+            Self(yoke)
+        }
+    }
 }
 
 pub enum Value {
@@ -166,7 +229,7 @@ impl FFI for CassValue {
     type Origin = FromRef;
 }
 
-fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
+fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<CassValue> {
     row.columns
         .into_iter()
         .zip(metadata.col_specs.iter())
@@ -298,10 +361,10 @@ unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CCons
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_row_get_column(
-    row_raw: CassBorrowedSharedPtr<CassRow, CConst>,
+pub unsafe extern "C" fn cass_row_get_column<'result>(
+    row_raw: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     index: size_t,
-) -> CassBorrowedSharedPtr<CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
     let row: &CassRow = RefFFI::as_ref(row_raw).unwrap();
 
     let index_usize: usize = index.try_into().unwrap();
@@ -314,10 +377,10 @@ pub unsafe extern "C" fn cass_row_get_column(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_row_get_column_by_name(
-    row: CassBorrowedSharedPtr<CassRow, CConst>,
+pub unsafe extern "C" fn cass_row_get_column_by_name<'result>(
+    row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
-) -> CassBorrowedSharedPtr<CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
     let name_str = unsafe { ptr_to_cstr(name) }.unwrap();
     let name_length = name_str.len();
 
@@ -325,11 +388,11 @@ pub unsafe extern "C" fn cass_row_get_column_by_name(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_row_get_column_by_name_n(
-    row: CassBorrowedSharedPtr<CassRow, CConst>,
+pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
+    row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
     name_length: size_t,
-) -> CassBorrowedSharedPtr<CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
     let row_from_raw = RefFFI::as_ref(row).unwrap();
     let mut name_str = unsafe { ptr_to_cstr_n(name, name_length).unwrap() };
     let mut is_case_sensitive = false;
@@ -799,11 +862,11 @@ pub unsafe extern "C" fn cass_result_row_count(
 ) -> size_t {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { raw_rows, .. }) = &result.kind else {
         return 0;
     };
 
-    rows.len() as size_t
+    raw_rows.rows_count() as size_t
 }
 
 #[no_mangle]
@@ -825,11 +888,15 @@ pub unsafe extern "C" fn cass_result_first_row(
 ) -> CassBorrowedSharedPtr<CassRow, CConst> {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { rows, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { first_row, .. }) = &result.kind else {
         return RefFFI::null();
     };
 
-    rows.first().map(RefFFI::as_ptr).unwrap_or(RefFFI::null())
+    first_row
+        .as_ref()
+        .map(RowWithSelfBorrowedMetadata::row)
+        .map(RefFFI::as_ptr)
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
@@ -867,7 +934,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 #[cfg(test)]
 mod tests {
     use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType};
-    use scylla::frame::response::result::{ColumnSpec, TableSpec};
+    use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows, TableSpec};
     use scylla::response::query_result::ColumnSpecs;
     use scylla::response::PagingStateResponse;
     use scylla::value::{CqlValue, Row};
@@ -884,9 +951,10 @@ mod tests {
     };
     use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
 
+    use super::row_with_self_borrowed_metadata::RowWithSelfBorrowedMetadata;
     use super::{
-        cass_result_column_count, cass_result_column_type, create_cass_rows_from_rows,
-        CassBorrowedSharedPtr, CassResult, CassResultKind, CassResultMetadata, CassRowsResult,
+        cass_result_column_count, cass_result_column_type, CassBorrowedSharedPtr, CassResult,
+        CassResultKind, CassResultMetadata, CassRowsResult,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
@@ -909,8 +977,8 @@ mod tests {
             ),
         ])));
 
-        let rows = create_cass_rows_from_rows(
-            vec![Row {
+        let first_row = Some(RowWithSelfBorrowedMetadata::new_from_row_and_metadata(
+            Row {
                 columns: vec![
                     Some(CqlValue::BigInt(42)),
                     None,
@@ -920,14 +988,18 @@ mod tests {
                         CqlValue::Float(9999.9999),
                     ])),
                 ],
-            }],
-            &metadata,
-        );
+            },
+            Arc::clone(&metadata),
+        ));
 
         CassResult {
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
-            kind: CassResultKind::Rows(CassRowsResult { rows, metadata }),
+            kind: CassResultKind::Rows(CassRowsResult {
+                raw_rows: DeserializedMetadataAndRawRows::mock_empty(),
+                first_row,
+                metadata,
+            }),
         }
     }
 

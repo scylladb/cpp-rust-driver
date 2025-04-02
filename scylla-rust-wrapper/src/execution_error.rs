@@ -12,10 +12,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum CassErrorResult {
     #[error(transparent)]
-    Query(#[from] ExecutionError),
+    Execution(#[from] ExecutionError),
     #[error(transparent)]
     ResultMetadataLazyDeserialization(#[from] ResultMetadataAndRowsCountParseError),
-    #[error("Failed to deserialize rows: {0}")]
+    #[error("Failed to deserialize first row: {0}")]
     Deserialization(#[from] DeserializationError),
 }
 
@@ -78,7 +78,7 @@ pub unsafe extern "C" fn cass_error_result_consistency(
 ) -> CassConsistency {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::Unavailable { consistency, .. }, _)
             | RequestAttemptError::DbError(DbError::ReadTimeout { consistency, .. }, _)
             | RequestAttemptError::DbError(DbError::WriteTimeout { consistency, .. }, _)
@@ -95,7 +95,7 @@ pub unsafe extern "C" fn cass_error_result_responses_received(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(attempt_error)) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(attempt_error)) => {
             match attempt_error {
                 RequestAttemptError::DbError(DbError::Unavailable { alive, .. }, _) => *alive,
                 RequestAttemptError::DbError(DbError::ReadTimeout { received, .. }, _) => *received,
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn cass_error_result_responses_required(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(attempt_error)) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(attempt_error)) => {
             match attempt_error {
                 RequestAttemptError::DbError(DbError::Unavailable { required, .. }, _) => *required,
                 RequestAttemptError::DbError(DbError::ReadTimeout { required, .. }, _) => *required,
@@ -143,14 +143,12 @@ pub unsafe extern "C" fn cass_error_result_num_failures(
 ) -> cass_int32_t {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::ReadFailure { numfailures, .. },
-            _,
-        ))) => *numfailures,
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::WriteFailure { numfailures, .. },
-            _,
-        ))) => *numfailures,
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::ReadFailure { numfailures, .. }, _),
+        )) => *numfailures,
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::WriteFailure { numfailures, .. }, _),
+        )) => *numfailures,
         _ => -1,
     }
 }
@@ -161,20 +159,18 @@ pub unsafe extern "C" fn cass_error_result_data_present(
 ) -> cass_bool_t {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::ReadTimeout { data_present, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::ReadTimeout { data_present, .. }, _),
+        )) => {
             if *data_present {
                 cass_true
             } else {
                 cass_false
             }
         }
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::ReadFailure { data_present, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::ReadFailure { data_present, .. }, _),
+        )) => {
             if *data_present {
                 cass_true
             } else {
@@ -191,14 +187,12 @@ pub unsafe extern "C" fn cass_error_result_write_type(
 ) -> CassWriteType {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::WriteTimeout { write_type, .. },
-            _,
-        ))) => CassWriteType::from(write_type),
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::WriteFailure { write_type, .. },
-            _,
-        ))) => CassWriteType::from(write_type),
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::WriteTimeout { write_type, .. }, _),
+        )) => CassWriteType::from(write_type),
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::WriteFailure { write_type, .. }, _),
+        )) => CassWriteType::from(write_type),
         _ => CassWriteType::CASS_WRITE_TYPE_UNKNOWN,
     }
 }
@@ -211,17 +205,15 @@ pub unsafe extern "C" fn cass_error_result_keyspace(
 ) -> CassError {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::AlreadyExists { keyspace, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::AlreadyExists { keyspace, .. }, _),
+        )) => {
             unsafe { write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len) };
             CassError::CASS_OK
         }
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::FunctionFailure { keyspace, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::FunctionFailure { keyspace, .. }, _),
+        )) => {
             unsafe { write_str_to_c(keyspace.as_str(), c_keyspace, c_keyspace_len) };
             CassError::CASS_OK
         }
@@ -237,10 +229,9 @@ pub unsafe extern "C" fn cass_error_result_table(
 ) -> CassError {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::AlreadyExists { table, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::AlreadyExists { table, .. }, _),
+        )) => {
             unsafe { write_str_to_c(table.as_str(), c_table, c_table_len) };
             CassError::CASS_OK
         }
@@ -256,10 +247,9 @@ pub unsafe extern "C" fn cass_error_result_function(
 ) -> CassError {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::FunctionFailure { function, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::FunctionFailure { function, .. }, _),
+        )) => {
             unsafe { write_str_to_c(function.as_str(), c_function, c_function_len) };
             CassError::CASS_OK
         }
@@ -273,10 +263,9 @@ pub unsafe extern "C" fn cass_error_num_arg_types(
 ) -> size_t {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::FunctionFailure { arg_types, .. },
-            _,
-        ))) => arg_types.len() as size_t,
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::FunctionFailure { arg_types, .. }, _),
+        )) => arg_types.len() as size_t,
         _ => 0,
     }
 }
@@ -290,10 +279,9 @@ pub unsafe extern "C" fn cass_error_result_arg_type(
 ) -> CassError {
     let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
     match error_result {
-        CassErrorResult::Query(ExecutionError::LastAttemptError(RequestAttemptError::DbError(
-            DbError::FunctionFailure { arg_types, .. },
-            _,
-        ))) => {
+        CassErrorResult::Execution(ExecutionError::LastAttemptError(
+            RequestAttemptError::DbError(DbError::FunctionFailure { arg_types, .. }, _),
+        )) => {
             if index >= arg_types.len() as size_t {
                 return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
             }
