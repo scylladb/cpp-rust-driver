@@ -416,6 +416,7 @@ pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
 pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
+    #[allow(clippy::needless_lifetimes)]
     fn as_ptr<'a, CM: CMutability>(self: &'a Arc<Self>) -> CassPtr<'a, Self, (Shared, CM)> {
         #[allow(clippy::disallowed_methods)]
         let ptr = Arc::as_ptr(self);
