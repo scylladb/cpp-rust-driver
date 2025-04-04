@@ -24,12 +24,12 @@
 //!
 //! * `$this:ty` - type to which we are going to bind (e.g. `CassTuple`)
 //! * `$consume_v:expr` - function that accepts structure reference (`&mut $this`),
-//!     then optionally some flavour-specific arguments (described futher down),
-//!     value (`Option<CqlValue>`), and binds value to the structure.
+//!   then optionally some flavour-specific arguments (described futher down),
+//!   value (`Option<CqlValue>`), and binds value to the structure.
 //! * `$fn_by_*` - name of the generated function.
 //! * `$e:expr` - takes remaining function arguments and produces `Result<Option<CqlValue>, CassError>`
 //! * `[$($arg:ident @ $t:ty), *]` - list of remaining function arguments and their types.
-//!     Example: `[v @ *const cass_byte_t, v_size @ size_t]`
+//!   Example: `[v @ *const cass_byte_t, v_size @ size_t]`
 //!
 //! ## Differences between make_*_binder variants
 //!
@@ -40,13 +40,13 @@
 //! rest of the arguments, dictated by `[$($arg:ident @ $t:ty), *]`, that are later
 //! passed to `$e`.
 //!  * Function from make_index_binder takes size_t, which is and index of field
-//!     where value should be bound (index of parameter in CassStatement, index of
-//!     field in CassUserType, index of element in CassTuple).
+//!    where value should be bound (index of parameter in CassStatement, index of
+//!    field in CassUserType, index of element in CassTuple).
 //!  * Functions from make_name_binder and make_name_n_binder take a string, either
-//!     as a `*const c_char` (_name version), or `*const c_char` and `size_t` (_name_n version).
-//!     It can be used for binding named parameter in CassStatement or field by name in CassUserType.
+//!    as a `*const c_char` (_name version), or `*const c_char` and `size_t` (_name_n version).
+//!    It can be used for binding named parameter in CassStatement or field by name in CassUserType.
 //!  * Functions from make_appender don't take any extra argument, as they are for use by CassCollection
-//!     functions - values are appended to collection.
+//!    functions - values are appended to collection.
 
 macro_rules! make_index_binder {
     ($this:ty, $consume_v:expr, $fn_by_idx:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
@@ -359,19 +359,19 @@ macro_rules! invoke_binder_maker_macro_with_type {
 ///  * Name of the type
 ///  * `$consume_v_idx:expr` - function that binds value by index - just like the one in `@only_index`
 ///  * `$consume_v_name:expr` - function that binds value by name.
-///         Accepts mut ref to the structure, name (`str`) and value (`Option<CqlValue>`)
+///    Accepts mut ref to the structure, name (`str`) and value (`Option<CqlValue>`)
 ///
 /// After that, you can again start generating functions using make_binders macro, but here it has 5 variants.
 /// 3 variants are the basic ones, resembling the one from `@only_index`:
 ///  * `@index` - works the same as `make_binders` in `@only_index` variant - takes type and function name,
-///         declares this function using `make_index_binder` macro.
-///         In the function, value will be consumed using `$consume_v_idx`.
+///    declares this function using `make_index_binder` macro.
+///    In the function, value will be consumed using `$consume_v_idx`.
 ///  * `@name` - accepts type and function name, declares this function using `make_name_binder` macro.
-///         In the function, value will be consumed using `$consume_v_name`.
+///    In the function, value will be consumed using `$consume_v_name`.
 ///  * `@name_n` - accepts type and function name, declares this function using `make_name_n_binder` macro.
-///         In the function, value will be consumed using `$consume_v_name`.
-///         There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
-///         binding the same type by index, name and name_n):
+///    In the function, value will be consumed using `$consume_v_name`.
+///    There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
+///    binding the same type by index, name and name_n):
 ///  * `make_binders!(type, fn_idx, fn_name, fn_name_n)` - is equivalent to:
 ///     ```rust,ignore
 ///     make_binders!(@index type, fn_idx);
