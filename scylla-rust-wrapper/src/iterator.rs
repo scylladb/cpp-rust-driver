@@ -1,4 +1,5 @@
 use scylla::deserialize::result::TypedRowIterator;
+use scylla::deserialize::value::ListlikeIterator;
 use scylla::value::Row;
 
 use crate::argconv::{
@@ -6,19 +7,22 @@ use crate::argconv::{
     CassOwnedExclusivePtr, FromBox, RefFFI, FFI,
 };
 use crate::cass_error::CassError;
-use crate::cass_types::{CassDataType, CassValueType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, CassValueType};
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
+use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
     cass_value_is_collection, cass_value_item_count, cass_value_type, CassResult, CassResultKind,
-    CassResultMetadata, CassRow, Collection, LegacyCassValue, Value,
+    CassResultMetadata, CassRow, CassValue, Collection, LegacyCassValue,
+    NonNullDeserializationError, Value,
 };
 use crate::types::{cass_bool_t, size_t};
 
 pub use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 pub struct CassRowsResultIterator<'result> {
     iterator: TypedRowIterator<'result, 'result, Row>,
@@ -69,6 +73,57 @@ impl CassRowIterator<'_> {
         self.position = Some(new_pos);
 
         new_pos < self.row.columns.len()
+    }
+}
+
+/// An iterator created from [`cass_iterator_from_collection()`] with list or set provided as a value.
+pub struct CassListlikeIterator<'result> {
+    iterator: ListlikeIterator<'result, 'result, CassRawValue<'result, 'result>>,
+    value_data_type: &'result Arc<CassDataType>,
+    current_value: Option<CassValue<'result>>,
+}
+
+impl<'result> CassListlikeIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let listlike_iterator = value.get_non_null::<ListlikeIterator<CassRawValue>>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let item_type = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
+                // Expect: `typ` is an `Option<Arc<CassDataType>>`. It is None, for untyped set or list.
+                // There is no such thing as untyped list/set in CQL protocol, thus we do not expect it in result metadata.
+                typ.as_ref()
+                    .expect("List or set type provided from result metadata should be fully typed!")
+            }
+            _ => {
+                panic!("Expected list or set type. Typecheck should have prevented such scenario!")
+            }
+        };
+
+        Ok(Self {
+            iterator: listlike_iterator,
+            value_data_type: item_type,
+            current_value: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let next_value = self.iterator.next().and_then(|res| match res {
+            Ok(value) => Some(CassValue {
+                value,
+                value_type: self.value_data_type,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to deserialize next listlike entry: {e}");
+                None
+            }
+        });
+
+        self.current_value = next_value;
+
+        self.current_value.is_some()
     }
 }
 
