@@ -175,6 +175,23 @@ impl<'result> CassMapCollectionIterator<'result> {
     }
 }
 
+/// Iterator created from [`cass_iterator_from_collection()`] with list, set or map provided as a collection.
+pub enum CassCollectionIterator<'result> {
+    /// Listlike iterator for list or set.
+    Listlike(CassListlikeIterator<'result>),
+    /// Map iterator.
+    Map(CassMapCollectionIterator<'result>),
+}
+
+impl CassCollectionIterator<'_> {
+    fn next(&mut self) -> bool {
+        match self {
+            CassCollectionIterator::Listlike(listlike_iterator) => listlike_iterator.next(),
+            CassCollectionIterator::Map(map_collection_iterator) => map_collection_iterator.next(),
+        }
+    }
+}
+
 /// Iterator created from [`cass_iterator_from_map()`].
 /// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next entry (key-value pair).
 pub struct CassMapIterator<'result> {
