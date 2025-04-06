@@ -215,11 +215,11 @@ pub enum CassIterator<'result_or_schema> {
     Map(CassMapIterator<'result_or_schema>),
     /// Iterator over values in a tuple.
     Tuple(CassCollectionIterator<'result_or_schema>),
+    /// Iterator over fields (values) in UDT.
+    Udt(CassUdtIterator<'result_or_schema>),
 
     // Iterators derived from CassSchemaMeta.
     // Naming convention of the variants: name of item in the collection (plural).
-    /// Iterator over fields in UDT.
-    UdtFields(CassUdtIterator<'result_or_schema>),
     /// Iterator over keyspaces in schema metadata.
     KeyspacesMeta(CassSchemaMetaIterator<'result_or_schema>),
     /// Iterator over tables in keyspace metadata.
@@ -253,7 +253,7 @@ pub unsafe extern "C" fn cass_iterator_type(
         CassIterator::Collection(_) => CassIteratorType::CASS_ITERATOR_TYPE_COLLECTION,
         CassIterator::Map(_) => CassIteratorType::CASS_ITERATOR_TYPE_MAP,
         CassIterator::Tuple(_) => CassIteratorType::CASS_ITERATOR_TYPE_TUPLE,
-        CassIterator::UdtFields(_) => CassIteratorType::CASS_ITERATOR_TYPE_USER_TYPE_FIELD,
+        CassIterator::Udt(_) => CassIteratorType::CASS_ITERATOR_TYPE_USER_TYPE_FIELD,
         CassIterator::KeyspacesMeta(_) => CassIteratorType::CASS_ITERATOR_TYPE_KEYSPACE_META,
         CassIterator::TablesMeta(_) => CassIteratorType::CASS_ITERATOR_TYPE_TABLE_META,
         CassIterator::UserTypes(_) => CassIteratorType::CASS_ITERATOR_TYPE_TYPE_META,
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn cass_iterator_next(
         CassIterator::Collection(collection_iterator)
         | CassIterator::Tuple(collection_iterator) => collection_iterator.next(),
         CassIterator::Map(map_iterator) => map_iterator.next(),
-        CassIterator::UdtFields(udt_iterator) => udt_iterator.next(),
+        CassIterator::Udt(udt_iterator) => udt_iterator.next(),
         CassIterator::KeyspacesMeta(schema_meta_iterator) => schema_meta_iterator.next(),
         CassIterator::TablesMeta(keyspace_meta_iterator)
         | CassIterator::UserTypes(keyspace_meta_iterator)
@@ -441,7 +441,7 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 ) -> CassError {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::UdtFields(udt_iterator) = iter {
+    if let CassIterator::Udt(udt_iterator) = iter {
         let iter_position = match udt_iterator.position {
             Some(pos) => pos,
             None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -469,12 +469,12 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'schema>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
-) -> CassBorrowedSharedPtr<'schema, CassValue, CConst> {
+pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
+    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::UdtFields(udt_iterator) = iter {
+    if let CassIterator::Udt(udt_iterator) = iter {
         let iter_position = match udt_iterator.position {
             Some(pos) => pos,
             None => return RefFFI::null(),
@@ -788,7 +788,7 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
             position: None,
         };
 
-        return BoxFFI::into_ptr(Box::new(CassIterator::UdtFields(iterator)));
+        return BoxFFI::into_ptr(Box::new(CassIterator::Udt(iterator)));
     }
 
     BoxFFI::null_mut()
