@@ -127,6 +127,54 @@ impl<'result> CassListlikeIterator<'result> {
     }
 }
 
+/// Iterator created from [`cass_iterator_from_collection()`] with map provided as a collection.
+/// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next value (either key or value).
+pub struct CassMapCollectionIterator<'result> {
+    iterator: CassMapIterator<'result>,
+    state: Option<CassMapCollectionIteratorState>,
+}
+
+/// Tells the [`CassMapCollectionIterator`] at which part of the singular entry it is currently at.
+enum CassMapCollectionIteratorState {
+    Key,
+    Value,
+}
+
+impl<'result> CassMapCollectionIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let iterator = CassMapIterator::new_from_value(value)?;
+
+        Ok(Self {
+            iterator,
+            state: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let (new_state, next_result) = match self.state {
+            // First call to cass_iterator_next(). Move underlying CassMapIterator to the next entry.
+            None => (CassMapCollectionIteratorState::Key, self.iterator.next()),
+            // Move the state to the value.
+            // Do not forward the underlying iterator.
+            Some(CassMapCollectionIteratorState::Key) => {
+                (CassMapCollectionIteratorState::Value, true)
+            }
+            // Moving to the key of the next entry. Forwards the underlying iterator.
+            Some(CassMapCollectionIteratorState::Value) => {
+                (CassMapCollectionIteratorState::Key, self.iterator.next())
+            }
+        };
+
+        if next_result {
+            self.state = Some(new_state);
+        }
+
+        next_result
+    }
+}
+
 /// Iterator created from [`cass_iterator_from_map()`].
 /// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next entry (key-value pair).
 pub struct CassMapIterator<'result> {
