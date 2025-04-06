@@ -1,5 +1,5 @@
 use scylla::deserialize::result::TypedRowIterator;
-use scylla::deserialize::value::ListlikeIterator;
+use scylla::deserialize::value::{ListlikeIterator, MapIterator};
 use scylla::value::Row;
 
 use crate::argconv::{
@@ -7,7 +7,7 @@ use crate::argconv::{
     CassOwnedExclusivePtr, FromBox, RefFFI, FFI,
 };
 use crate::cass_error::CassError;
-use crate::cass_types::{CassDataType, CassDataTypeInner, CassValueType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType};
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
@@ -124,6 +124,73 @@ impl<'result> CassListlikeIterator<'result> {
         self.current_value = next_value;
 
         self.current_value.is_some()
+    }
+}
+
+/// Iterator created from [`cass_iterator_from_map()`].
+/// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next entry (key-value pair).
+pub struct CassMapIterator<'result> {
+    iterator: MapIterator<
+        'result,
+        'result,
+        CassRawValue<'result, 'result>,
+        CassRawValue<'result, 'result>,
+    >,
+    key_value_types: (&'result Arc<CassDataType>, &'result Arc<CassDataType>),
+    current_entry: Option<(CassValue<'result>, CassValue<'result>)>,
+}
+
+impl<'result> CassMapIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let map_iterator = value.get_non_null::<MapIterator<CassRawValue, CassRawValue>>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let key_value_types = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::Map { typ, .. } => match typ {
+                MapDataType::KeyAndValue(key_type, val_type) => {
+                    (key_type, val_type)
+                }
+                _ => panic!("Untyped or half-typed map received in result metadata. Something really bad happened!"),
+            },
+            _ => panic!("Expected map type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: map_iterator,
+            key_value_types,
+            current_entry: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let new_entry = self
+            .iterator
+            .next()
+            .and_then(|res| match res {
+                Ok((key, value)) => Some((key, value)),
+                Err(e) => {
+                    tracing::error!("Failed to deserialize next map entry: {e}");
+                    None
+                }
+            })
+            .map(|(key, value)| {
+                (
+                    CassValue {
+                        value: key,
+                        value_type: self.key_value_types.0,
+                    },
+                    CassValue {
+                        value,
+                        value_type: self.key_value_types.1,
+                    },
+                )
+            });
+
+        self.current_entry = new_entry;
+
+        self.current_entry.is_some()
     }
 }
 
