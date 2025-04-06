@@ -1,5 +1,5 @@
 use crate::argconv::*;
-use crate::cass_error::CassError;
+use crate::cass_error::{CassError, ToCassError};
 use crate::cass_types::{
     cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
     CassValueType, MapDataType,
@@ -23,6 +23,7 @@ use scylla::value::{CqlValue, Row};
 use std::convert::TryInto;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use thiserror::Error;
 use uuid::Uuid;
 
 pub enum CassResultKind {
@@ -417,6 +418,63 @@ pub struct LegacyCassValue {
 
 impl FFI for LegacyCassValue {
     type Origin = FromRef;
+}
+
+pub struct CassValue<'result> {
+    pub(crate) value: CassRawValue<'result, 'result>,
+    pub(crate) value_type: &'result Arc<CassDataType>,
+}
+
+impl FFI for CassValue<'_> {
+    type Origin = FromRef;
+}
+
+impl<'result> CassValue<'result> {
+    pub fn get_non_null<T>(&'result self) -> Result<T, NonNullDeserializationError>
+    where
+        T: DeserializeValue<'result, 'result>,
+    {
+        let (typ, frame_slice) = (self.value.typ(), self.value.slice());
+        if frame_slice.is_none() {
+            return Err(NonNullDeserializationError::IsNull);
+        }
+
+        T::type_check(typ)?;
+        let v = T::deserialize(typ, frame_slice)?;
+        Ok(v)
+    }
+
+    pub fn get_bytes_non_null(&self) -> Result<&'result [u8], NonNullDeserializationError> {
+        let Some(slice) = self.value.slice() else {
+            return Err(NonNullDeserializationError::IsNull);
+        };
+
+        Ok(slice.as_slice())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum NonNullDeserializationError {
+    #[error("Value is null")]
+    IsNull,
+    #[error("Typecheck failed: {0}")]
+    Typecheck(#[from] TypeCheckError),
+    #[error("Deserialization failed: {0}")]
+    Deserialization(#[from] DeserializationError),
+}
+
+impl ToCassError for NonNullDeserializationError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            NonNullDeserializationError::IsNull => CassError::CASS_ERROR_LIB_NULL_VALUE,
+            NonNullDeserializationError::Typecheck(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+            }
+            NonNullDeserializationError::Deserialization(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_DATA
+            }
+        }
+    }
 }
 
 fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<LegacyCassValue> {
