@@ -1,5 +1,5 @@
 use scylla::deserialize::result::TypedRowIterator;
-use scylla::deserialize::value::{ListlikeIterator, MapIterator};
+use scylla::deserialize::value::{DeserializeValue, ListlikeIterator, MapIterator};
 use scylla::value::Row;
 
 use crate::argconv::{
@@ -189,6 +189,213 @@ impl CassCollectionIterator<'_> {
             CassCollectionIterator::Listlike(listlike_iterator) => listlike_iterator.next(),
             CassCollectionIterator::Map(map_collection_iterator) => map_collection_iterator.next(),
         }
+    }
+}
+
+// TODO: consider introducing this to Rust driver.
+mod tuple_iterator {
+    use scylla::cluster::metadata::ColumnType;
+    use scylla::deserialize::value::{self, DeserializeValue};
+    use scylla::deserialize::FrameSlice;
+    use scylla::errors::{DeserializationError, TypeCheckError};
+    use scylla::frame::frame_errors::LowLevelDeserializationError;
+    use thiserror::Error;
+
+    pub(super) struct TupleIterator<'frame, 'metadata> {
+        all_metadata: &'metadata [ColumnType<'metadata>],
+        remaining_metadata: &'metadata [ColumnType<'metadata>],
+        iterator: BytesSequenceIterator<'frame>,
+    }
+
+    impl<'frame, 'metadata> TupleIterator<'frame, 'metadata> {
+        fn new(metadata: &'metadata [ColumnType<'metadata>], slice: FrameSlice<'frame>) -> Self {
+            Self {
+                all_metadata: metadata,
+                remaining_metadata: metadata,
+                iterator: BytesSequenceIterator::new(slice),
+            }
+        }
+    }
+
+    impl<'frame, 'metadata> DeserializeValue<'frame, 'metadata> for TupleIterator<'frame, 'metadata> {
+        fn type_check(typ: &ColumnType) -> Result<(), TypeCheckError> {
+            match typ {
+                ColumnType::Tuple { .. } => Ok(()),
+                _ => Err(TypeCheckError::new(value::BuiltinTypeCheckError {
+                    rust_name: std::any::type_name::<Self>(),
+                    cql_type: typ.clone().into_owned(),
+                    kind: value::BuiltinTypeCheckErrorKind::TupleError(
+                        value::TupleTypeCheckErrorKind::NotTuple,
+                    ),
+                })),
+            }
+        }
+
+        fn deserialize(
+            typ: &'metadata ColumnType<'metadata>,
+            v: Option<FrameSlice<'frame>>,
+        ) -> Result<Self, DeserializationError> {
+            let slice: FrameSlice<'frame> = v.ok_or_else(|| {
+                DeserializationError::new(value::BuiltinDeserializationError {
+                    rust_name: std::any::type_name::<Self>(),
+                    cql_type: typ.clone().into_owned(),
+                    kind: value::BuiltinDeserializationErrorKind::ExpectedNonNull,
+                })
+            })?;
+
+            let metadata = match typ {
+                ColumnType::Tuple(types) => types.as_slice(),
+                _ => {
+                    unreachable!("Typecheck should have prevented this scenario!")
+                }
+            };
+
+            Ok(Self::new(metadata, slice))
+        }
+    }
+
+    impl<'frame, 'metadata> Iterator for TupleIterator<'frame, 'metadata> {
+        type Item = Result<
+            (&'metadata ColumnType<'metadata>, Option<FrameSlice<'frame>>),
+            DeserializationError,
+        >;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let pos = self.all_metadata.len() - self.remaining_metadata.len();
+
+            // We don't fail if there are more serialized fields than declared in the metadata.
+            // This is what we do for static-size tuple deserialization.
+            // For example, (a, b, c) does not fail if slice contains 4 serialized values (in Rust-driver).
+            let (head, metadata) = self.remaining_metadata.split_first()?;
+            self.remaining_metadata = metadata;
+
+            let raw_res = match self.iterator.next() {
+                Some(Ok(raw)) => Ok((head, raw)),
+                Some(Err(e)) => Err(DeserializationError::new(
+                    value::BuiltinDeserializationError {
+                        rust_name: std::any::type_name::<Self>(),
+                        cql_type: ColumnType::Tuple(self.all_metadata.to_owned()).into_owned(),
+                        kind: value::BuiltinDeserializationErrorKind::RawCqlBytesReadError(e),
+                    },
+                )),
+                // Value is missing.
+                None => Err(DeserializationError::new(TupleMissingValue(pos))),
+            };
+
+            Some(raw_res)
+        }
+    }
+
+    // This would be a variant of TupleDeserializationErrorKind in rust-driver.
+    #[derive(Error, Debug)]
+    #[error("Failed to deserialize tuple: serialized value is missing as position {0}")]
+    struct TupleMissingValue(usize);
+
+    // --------------------------
+    // COPIED FROM RUST-DRIVER!!!
+    // --------------------------
+    #[derive(Clone, Copy, Debug)]
+    struct BytesSequenceIterator<'frame> {
+        slice: FrameSlice<'frame>,
+    }
+
+    impl<'frame> BytesSequenceIterator<'frame> {
+        fn new(slice: FrameSlice<'frame>) -> Self {
+            Self { slice }
+        }
+    }
+
+    impl<'frame> From<FrameSlice<'frame>> for BytesSequenceIterator<'frame> {
+        #[inline]
+        fn from(slice: FrameSlice<'frame>) -> Self {
+            Self::new(slice)
+        }
+    }
+
+    impl<'frame> Iterator for BytesSequenceIterator<'frame> {
+        type Item = Result<Option<FrameSlice<'frame>>, LowLevelDeserializationError>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.slice.as_slice().is_empty() {
+                None
+            } else {
+                Some(self.slice.read_cql_bytes())
+            }
+        }
+    }
+}
+
+/// Iterator created from [`cass_iterator_from_tuple()`].
+pub struct CassTupleIterator<'result> {
+    iterator: tuple_iterator::TupleIterator<'result, 'result>,
+    metadata: &'result [Arc<CassDataType>],
+    current_entry: Option<CassTupleIteratorEntry<'result>>,
+}
+
+pub struct CassTupleIteratorEntry<'result> {
+    field_value: CassValue<'result>,
+    metadata_types_index: usize,
+}
+
+impl<'result> CassTupleIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let tuple_iterator = value.get_non_null::<tuple_iterator::TupleIterator>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let metadata = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::Tuple(typ) => typ.as_slice(),
+            _ => panic!("Expected tuple type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: tuple_iterator,
+            metadata,
+            current_entry: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        // Handle scenario where underlying iterator is exhausted.
+        let Some(deser_result) = self.iterator.next() else {
+            return false;
+        };
+
+        // Handle the deserialization error from underlying iterator.
+        let Ok((column_type, slice)) = deser_result else {
+            tracing::error!("Failed to deserialize next tuple value: {deser_result:?}");
+            return false;
+        };
+
+        // Deserialize to CassRawValue.
+        let raw_value: CassRawValue = match <_ as DeserializeValue>::deserialize(column_type, slice)
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("Failed to deserialize next tuple value: {e}");
+                return false;
+            }
+        };
+
+        // Update the current entry.
+        let new_metadata_types_index = self
+            .current_entry
+            .as_ref()
+            .map(|entry| entry.metadata_types_index + 1)
+            .unwrap_or(0);
+
+        let new_value = CassValue {
+            value: raw_value,
+            value_type: &self.metadata[new_metadata_types_index],
+        };
+
+        self.current_entry = Some(CassTupleIteratorEntry {
+            field_value: new_value,
+            metadata_types_index: new_metadata_types_index,
+        });
+
+        true
     }
 }
 
