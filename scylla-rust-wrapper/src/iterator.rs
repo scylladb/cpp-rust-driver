@@ -72,13 +72,13 @@ impl CassRowIterator<'_> {
     }
 }
 
-pub struct CassCollectionIterator<'result> {
+pub struct LegacyCassCollectionIterator<'result> {
     value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-impl CassCollectionIterator<'_> {
+impl LegacyCassCollectionIterator<'_> {
     fn next(&mut self) -> bool {
         let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
 
@@ -88,13 +88,13 @@ impl CassCollectionIterator<'_> {
     }
 }
 
-pub struct CassMapIterator<'result> {
+pub struct LegacyCassMapIterator<'result> {
     value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-impl CassMapIterator<'_> {
+impl LegacyCassMapIterator<'_> {
     fn next(&mut self) -> bool {
         let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
 
@@ -104,13 +104,13 @@ impl CassMapIterator<'_> {
     }
 }
 
-pub struct CassUdtIterator<'result> {
+pub struct LegacyCassUdtIterator<'result> {
     value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-impl CassUdtIterator<'_> {
+impl LegacyCassUdtIterator<'_> {
     fn next(&mut self) -> bool {
         let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
 
@@ -210,13 +210,13 @@ pub enum CassIterator<'result_or_schema> {
     /// Iterator over columns (values) in a row.
     Row(CassRowIterator<'result_or_schema>),
     /// Iterator over values in a collection.
-    Collection(CassCollectionIterator<'result_or_schema>),
+    Collection(LegacyCassCollectionIterator<'result_or_schema>),
     /// Iterator over key-value pairs in a map.
-    Map(CassMapIterator<'result_or_schema>),
+    Map(LegacyCassMapIterator<'result_or_schema>),
     /// Iterator over values in a tuple.
-    Tuple(CassCollectionIterator<'result_or_schema>),
+    Tuple(LegacyCassCollectionIterator<'result_or_schema>),
     /// Iterator over fields (values) in UDT.
-    Udt(CassUdtIterator<'result_or_schema>),
+    Udt(LegacyCassUdtIterator<'result_or_schema>),
 
     // Iterators derived from CassSchemaMeta.
     // Naming convention of the variants: name of item in the collection (plural).
@@ -726,7 +726,7 @@ pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
     };
     let val = RefFFI::as_ref(value).unwrap();
 
-    let iterator = CassCollectionIterator {
+    let iterator = LegacyCassCollectionIterator {
         value: val,
         count: item_count,
         position: None,
@@ -744,7 +744,7 @@ pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
 
     if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
         let item_count = val.len();
-        let iterator = CassCollectionIterator {
+        let iterator = LegacyCassCollectionIterator {
             value: tuple,
             count: item_count as u64,
             position: None,
@@ -765,7 +765,7 @@ pub unsafe extern "C" fn cass_iterator_from_map<'result>(
 
     if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
         let item_count = val.len();
-        let iterator = CassMapIterator {
+        let iterator = LegacyCassMapIterator {
             value: map,
             count: item_count as u64,
             position: None,
@@ -786,7 +786,7 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
 
     if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
         let item_count = fields.len();
-        let iterator = CassUdtIterator {
+        let iterator = LegacyCassUdtIterator {
             value: udt,
             count: item_count as u64,
             position: None,
