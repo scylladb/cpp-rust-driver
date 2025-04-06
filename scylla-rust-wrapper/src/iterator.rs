@@ -679,8 +679,12 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
         CassResultKind::Rows(cass_rows_result) => {
             CassResultIterator::Rows(CassRowsResultIterator {
                 // unwrap: Row always passes the typecheck.
-                iterator: cass_rows_result.raw_rows.rows_iter::<Row>().unwrap(),
-                result_metadata: &cass_rows_result.metadata,
+                iterator: cass_rows_result
+                    .shared_data
+                    .raw_rows
+                    .rows_iter::<Row>()
+                    .unwrap(),
+                result_metadata: &cass_rows_result.shared_data.metadata,
                 current_row: None,
             })
         }
