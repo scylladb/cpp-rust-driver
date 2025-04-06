@@ -1,5 +1,5 @@
 use scylla::deserialize::result::TypedRowIterator;
-use scylla::deserialize::value::{DeserializeValue, ListlikeIterator, MapIterator};
+use scylla::deserialize::value::{DeserializeValue, ListlikeIterator, MapIterator, UdtIterator};
 use scylla::value::Row;
 
 use crate::argconv::{
@@ -463,6 +463,85 @@ impl<'result> CassMapIterator<'result> {
         self.current_entry = new_entry;
 
         self.current_entry.is_some()
+    }
+}
+
+pub struct CassUdtIterator<'result> {
+    iterator: UdtIterator<'result, 'result>,
+    metadata: &'result [(String, Arc<CassDataType>)],
+    current_entry: Option<CassUdtIteratorEntry<'result>>,
+}
+
+struct CassUdtIteratorEntry<'result> {
+    field_value: CassValue<'result>,
+    metadata_types_index: usize,
+}
+
+impl<'result> CassUdtIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let udt_iterator = value.get_non_null::<UdtIterator>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let metadata = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::UDT(udt) => udt.field_types.as_slice(),
+            _ => panic!("Expected UDT type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: udt_iterator,
+            metadata,
+            current_entry: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        // Handle scenario where underlying iterator is exhausted.
+        let Some(((_field_name, field_type), deser_result)) = self.iterator.next() else {
+            return false;
+        };
+
+        // Handle the deserialization error from underlying iterator.
+        let Ok(field_value) = deser_result else {
+            tracing::error!("Failed to deserialize next UDT field: {deser_result:?}");
+            return false;
+        };
+        // Flatten: Treat missing UDT field as null.
+        // This is a bit different from what cpp-driver does.
+        // cpp-driver fails in case when field metadata is provided, but the serialized value is missing.
+        // After the discussion, we concluded that this is not the correct behaviour. CQL protocol
+        // clearly states that this is a valid scenario: https://github.com/apache/cassandra/blob/4a80daf32eb4226d9870b914779a1fc007479da6/doc/native_protocol_v4.spec#L1003.
+        let field_slice = field_value.flatten();
+
+        // Deserialize to CassRawValue.
+        let raw_value: CassRawValue =
+            match <_ as DeserializeValue>::deserialize(field_type, field_slice) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("Failed to deserialize UDT field value: {e}");
+                    return false;
+                }
+            };
+
+        // Update the current entry.
+        let new_metadata_types_index = self
+            .current_entry
+            .as_ref()
+            .map(|entry| entry.metadata_types_index + 1)
+            .unwrap_or(0);
+
+        let new_value = CassValue {
+            value: raw_value,
+            value_type: &self.metadata[new_metadata_types_index].1,
+        };
+
+        self.current_entry = Some(CassUdtIteratorEntry {
+            field_value: new_value,
+            metadata_types_index: new_metadata_types_index,
+        });
+
+        true
     }
 }
 
