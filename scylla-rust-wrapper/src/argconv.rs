@@ -244,7 +244,7 @@ impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
         }
     }
 
-    fn is_null(&self) -> bool {
+    pub(crate) fn is_null(&self) -> bool {
         self.ptr.is_none()
     }
 
