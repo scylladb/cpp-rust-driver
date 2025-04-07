@@ -34,6 +34,7 @@ chrono = "0.4.20"
 
 [dev-dependencies]
 scylla-proxy = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v1.1.0" }
+bytes = "1.10.0"
 
 assert_matches = "1.5.0"
 ntest = "0.9.3"
