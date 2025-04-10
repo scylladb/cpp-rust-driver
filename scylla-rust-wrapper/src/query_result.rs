@@ -162,7 +162,7 @@ impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame,
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow<'result> {
-    pub columns: Vec<CassValue>,
+    pub columns: Vec<LegacyCassValue>,
     pub result_metadata: &'result CassResultMetadata,
 }
 
@@ -399,33 +399,33 @@ pub enum Value {
 }
 
 pub enum Collection {
-    List(Vec<CassValue>),
-    Map(Vec<(CassValue, CassValue)>),
-    Set(Vec<CassValue>),
+    List(Vec<LegacyCassValue>),
+    Map(Vec<(LegacyCassValue, LegacyCassValue)>),
+    Set(Vec<LegacyCassValue>),
     UserDefinedType {
         keyspace: String,
         type_name: String,
-        fields: Vec<(String, Option<CassValue>)>,
+        fields: Vec<(String, Option<LegacyCassValue>)>,
     },
-    Tuple(Vec<Option<CassValue>>),
+    Tuple(Vec<Option<LegacyCassValue>>),
 }
 
-pub struct CassValue {
+pub struct LegacyCassValue {
     pub value: Option<Value>,
     pub value_type: Arc<CassDataType>,
 }
 
-impl FFI for CassValue {
+impl FFI for LegacyCassValue {
     type Origin = FromRef;
 }
 
-fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<CassValue> {
+fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<LegacyCassValue> {
     row.columns
         .into_iter()
         .zip(metadata.col_specs.iter())
         .map(|(val, col_spec)| {
             let column_type = Arc::clone(&col_spec.data_type);
-            CassValue {
+            LegacyCassValue {
                 value: val.map(|col_val| get_column_value(col_val, &column_type)),
                 value_type: column_type,
             }
@@ -443,7 +443,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
             },
         ) => CollectionValue(Collection::List(
             list.into_iter()
-                .map(|val| CassValue {
+                .map(|val| LegacyCassValue {
                     value_type: list_type.clone(),
                     value: Some(get_column_value(val, list_type)),
                 })
@@ -459,11 +459,11 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
             map.into_iter()
                 .map(|(key, val)| {
                     (
-                        CassValue {
+                        LegacyCassValue {
                             value_type: key_type.clone(),
                             value: Some(get_column_value(key, key_type)),
                         },
-                        CassValue {
+                        LegacyCassValue {
                             value_type: value_type.clone(),
                             value: Some(get_column_value(val, value_type)),
                         },
@@ -479,7 +479,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
             },
         ) => CollectionValue(Collection::Set(
             set.into_iter()
-                .map(|val| CassValue {
+                .map(|val| LegacyCassValue {
                     value_type: set_type.clone(),
                     value: Some(get_column_value(val, set_type)),
                 })
@@ -503,7 +503,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                     if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
                         return (
                             name,
-                            Some(CassValue {
+                            Some(LegacyCassValue {
                                 value_type: udt_field_type.clone(),
                                 value: Some(get_column_value(val, udt_field_type)),
                             }),
@@ -521,7 +521,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
                     .map(|(index, val_opt)| {
                         val_opt
                             .zip(tuple_types.get(index))
-                            .map(|(val, tuple_field_type)| CassValue {
+                            .map(|(val, tuple_field_type)| LegacyCassValue {
                                 value_type: tuple_field_type.clone(),
                                 value: Some(get_column_value(val, tuple_field_type)),
                             })
@@ -554,7 +554,7 @@ unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CCons
 pub unsafe extern "C" fn cass_row_get_column<'result>(
     row_raw: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     index: size_t,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let row: &CassRow = RefFFI::as_ref(row_raw).unwrap();
 
     let index_usize: usize = index.try_into().unwrap();
@@ -570,7 +570,7 @@ pub unsafe extern "C" fn cass_row_get_column<'result>(
 pub unsafe extern "C" fn cass_row_get_column_by_name<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let name_str = unsafe { ptr_to_cstr(name) }.unwrap();
     let name_length = name_str.len();
 
@@ -582,7 +582,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
     name_length: size_t,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let row_from_raw = RefFFI::as_ref(row).unwrap();
     let mut name_str = unsafe { ptr_to_cstr_n(name, name_length).unwrap() };
     let mut is_case_sensitive = false;
@@ -675,7 +675,7 @@ pub unsafe extern "C" fn cass_result_column_data_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_type(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> CassValueType {
     let value_from_raw = RefFFI::as_ref(value).unwrap();
     unsafe { cass_data_type_type(ArcFFI::as_ptr(&value_from_raw.value_type)) }
@@ -683,7 +683,7 @@ pub unsafe extern "C" fn cass_value_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_data_type(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let value_from_raw = RefFFI::as_ref(value).unwrap();
 
@@ -702,10 +702,10 @@ macro_rules! val_ptr_to_ref_ensure_non_null {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_float(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_float_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Float(f))) => unsafe { std::ptr::write(output, f) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -717,10 +717,10 @@ pub unsafe extern "C" fn cass_value_get_float(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_double(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_double_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Double(d))) => unsafe { std::ptr::write(output, d) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -732,10 +732,10 @@ pub unsafe extern "C" fn cass_value_get_double(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bool(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_bool_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Boolean(b))) => unsafe {
             std::ptr::write(output, b as cass_bool_t)
@@ -749,10 +749,10 @@ pub unsafe extern "C" fn cass_value_get_bool(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int8(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_int8_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::TinyInt(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -764,10 +764,10 @@ pub unsafe extern "C" fn cass_value_get_int8(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int16(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_int16_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::SmallInt(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -779,10 +779,10 @@ pub unsafe extern "C" fn cass_value_get_int16(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_uint32(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_uint32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Date(u))) => unsafe { std::ptr::write(output, u.0) }, // FIXME: hack
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -794,10 +794,10 @@ pub unsafe extern "C" fn cass_value_get_uint32(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int32(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Int(i))) => unsafe { std::ptr::write(output, i) },
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -809,10 +809,10 @@ pub unsafe extern "C" fn cass_value_get_int32(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_int64(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut cass_int64_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::BigInt(i))) => unsafe { std::ptr::write(output, i) },
         Some(Value::RegularValue(CqlValue::Counter(i))) => unsafe {
@@ -831,10 +831,10 @@ pub unsafe extern "C" fn cass_value_get_int64(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_uuid(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut CassUuid,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Uuid(uuid))) => unsafe {
             std::ptr::write(output, uuid.into())
@@ -851,10 +851,10 @@ pub unsafe extern "C" fn cass_value_get_uuid(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_inet(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut CassInet,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match val.value {
         Some(Value::RegularValue(CqlValue::Inet(inet))) => unsafe {
             std::ptr::write(output, inet.into())
@@ -868,12 +868,12 @@ pub unsafe extern "C" fn cass_value_get_inet(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_decimal(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     varint: *mut *const cass_byte_t,
     varint_size: *mut size_t,
     scale: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     let decimal = match &val.value {
         Some(Value::RegularValue(CqlValue::Decimal(decimal))) => decimal,
         Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
@@ -892,11 +892,11 @@ pub unsafe extern "C" fn cass_value_get_decimal(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_string(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut *const c_char,
     output_size: *mut size_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
     match &val.value {
         // It seems that cpp driver doesn't check the type - you can call _get_string
         // on any type and get internal represenation. I don't see how to do it easily in
@@ -917,12 +917,12 @@ pub unsafe extern "C" fn cass_value_get_string(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_duration(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     months: *mut cass_int32_t,
     days: *mut cass_int32_t,
     nanos: *mut cass_int64_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
 
     match &val.value {
         Some(Value::RegularValue(CqlValue::Duration(duration))) => unsafe {
@@ -939,11 +939,11 @@ pub unsafe extern "C" fn cass_value_get_duration(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_get_bytes(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
 ) -> CassError {
-    let value_from_raw: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let value_from_raw: &LegacyCassValue = val_ptr_to_ref_ensure_non_null!(value);
 
     // FIXME: This should be implemented for all CQL types
     // Note: currently rust driver does not allow to get raw bytes of the CQL value.
@@ -968,15 +968,15 @@ pub unsafe extern "C" fn cass_value_get_bytes(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_null(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> cass_bool_t {
-    let val: &CassValue = RefFFI::as_ref(value).unwrap();
+    let val: &LegacyCassValue = RefFFI::as_ref(value).unwrap();
     val.value.is_none() as cass_bool_t
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_collection(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> cass_bool_t {
     let val = RefFFI::as_ref(value).unwrap();
 
@@ -990,7 +990,7 @@ pub unsafe extern "C" fn cass_value_is_collection(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_is_duration(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
+    value: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> cass_bool_t {
     let val = RefFFI::as_ref(value).unwrap();
 
@@ -1000,7 +1000,7 @@ pub unsafe extern "C" fn cass_value_is_duration(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_item_count(
-    collection: CassBorrowedSharedPtr<CassValue, CConst>,
+    collection: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> size_t {
     let val = RefFFI::as_ref(collection).unwrap();
 
@@ -1018,7 +1018,7 @@ pub unsafe extern "C" fn cass_value_item_count(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_primary_sub_type(
-    collection: CassBorrowedSharedPtr<CassValue, CConst>,
+    collection: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> CassValueType {
     let val = RefFFI::as_ref(collection).unwrap();
 
@@ -1039,7 +1039,7 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_value_secondary_sub_type(
-    collection: CassBorrowedSharedPtr<CassValue, CConst>,
+    collection: CassBorrowedSharedPtr<LegacyCassValue, CConst>,
 ) -> CassValueType {
     let val = RefFFI::as_ref(collection).unwrap();
 

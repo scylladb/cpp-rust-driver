@@ -12,7 +12,7 @@ use crate::metadata::{
 };
 use crate::query_result::{
     cass_value_is_collection, cass_value_item_count, cass_value_type, CassResult, CassResultKind,
-    CassResultMetadata, CassRow, CassValue, Collection, Value,
+    CassResultMetadata, CassRow, Collection, LegacyCassValue, Value,
 };
 use crate::types::{cass_bool_t, size_t};
 
@@ -73,7 +73,7 @@ impl CassRowIterator<'_> {
 }
 
 pub struct LegacyCassCollectionIterator<'result> {
-    value: &'result CassValue,
+    value: &'result LegacyCassValue,
     count: u64,
     position: Option<usize>,
 }
@@ -89,7 +89,7 @@ impl LegacyCassCollectionIterator<'_> {
 }
 
 pub struct LegacyCassMapIterator<'result> {
-    value: &'result CassValue,
+    value: &'result LegacyCassValue,
     count: u64,
     position: Option<usize>,
 }
@@ -105,7 +105,7 @@ impl LegacyCassMapIterator<'_> {
 }
 
 pub struct LegacyCassUdtIterator<'result> {
-    value: &'result CassValue,
+    value: &'result LegacyCassValue,
     count: u64,
     position: Option<usize>,
 }
@@ -319,7 +319,7 @@ pub unsafe extern "C" fn cass_iterator_get_row<'result>(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_column<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for row iterator, for other types should return null
@@ -343,7 +343,7 @@ pub unsafe extern "C" fn cass_iterator_get_column<'result>(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_value<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
@@ -382,7 +382,7 @@ pub unsafe extern "C" fn cass_iterator_get_value<'result>(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::Map(map_iterator) = iter {
@@ -409,7 +409,7 @@ pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_map_value<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::Map(map_iterator) = iter {
@@ -471,7 +471,7 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, LegacyCassValue, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     if let CassIterator::Udt(udt_iterator) = iter {
@@ -711,7 +711,7 @@ pub unsafe extern "C" fn cass_iterator_from_row<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, LegacyCassValue, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let is_collection = unsafe { cass_value_is_collection(value.borrow()) } != 0;
 
@@ -738,7 +738,7 @@ pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, LegacyCassValue, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let tuple = RefFFI::as_ref(value).unwrap();
 
@@ -759,7 +759,7 @@ pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_map<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, LegacyCassValue, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let map = RefFFI::as_ref(value).unwrap();
 
@@ -780,7 +780,7 @@ pub unsafe extern "C" fn cass_iterator_from_map<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, LegacyCassValue, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let udt = RefFFI::as_ref(value).unwrap();
 
