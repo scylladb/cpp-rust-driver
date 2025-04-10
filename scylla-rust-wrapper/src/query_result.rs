@@ -20,7 +20,7 @@ use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
 use scylla::value::{
-    Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid, CqlValue,
+    Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid,
 };
 use std::convert::TryInto;
 use std::net::IpAddr;
@@ -401,32 +401,6 @@ pub(crate) mod cass_raw_value {
     }
 }
 
-pub enum Value {
-    RegularValue(CqlValue),
-    CollectionValue(Collection),
-}
-
-pub enum Collection {
-    List(Vec<LegacyCassValue>),
-    Map(Vec<(LegacyCassValue, LegacyCassValue)>),
-    Set(Vec<LegacyCassValue>),
-    UserDefinedType {
-        keyspace: String,
-        type_name: String,
-        fields: Vec<(String, Option<LegacyCassValue>)>,
-    },
-    Tuple(Vec<Option<LegacyCassValue>>),
-}
-
-pub struct LegacyCassValue {
-    pub value: Option<Value>,
-    pub value_type: Arc<CassDataType>,
-}
-
-impl FFI for LegacyCassValue {
-    type Origin = FromRef;
-}
-
 pub struct CassValue<'result> {
     pub(crate) value: CassRawValue<'result, 'result>,
     pub(crate) value_type: &'result Arc<CassDataType>,
@@ -495,107 +469,6 @@ fn create_cass_row_columns<'result>(
             CassValue { value, value_type }
         })
         .collect()
-}
-
-fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
-    use Value::*;
-    match (column, unsafe { column_type.get_unchecked() }) {
-        (
-            CqlValue::List(list),
-            CassDataTypeInner::List {
-                typ: Some(list_type),
-                ..
-            },
-        ) => CollectionValue(Collection::List(
-            list.into_iter()
-                .map(|val| LegacyCassValue {
-                    value_type: list_type.clone(),
-                    value: Some(get_column_value(val, list_type)),
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::Map(map),
-            CassDataTypeInner::Map {
-                typ: MapDataType::KeyAndValue(key_type, value_type),
-                ..
-            },
-        ) => CollectionValue(Collection::Map(
-            map.into_iter()
-                .map(|(key, val)| {
-                    (
-                        LegacyCassValue {
-                            value_type: key_type.clone(),
-                            value: Some(get_column_value(key, key_type)),
-                        },
-                        LegacyCassValue {
-                            value_type: value_type.clone(),
-                            value: Some(get_column_value(val, value_type)),
-                        },
-                    )
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::Set(set),
-            CassDataTypeInner::Set {
-                typ: Some(set_type),
-                ..
-            },
-        ) => CollectionValue(Collection::Set(
-            set.into_iter()
-                .map(|val| LegacyCassValue {
-                    value_type: set_type.clone(),
-                    value: Some(get_column_value(val, set_type)),
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::UserDefinedType {
-                keyspace,
-                name,
-                fields,
-            },
-            CassDataTypeInner::UDT(udt_type),
-        ) => CollectionValue(Collection::UserDefinedType {
-            keyspace,
-            type_name: name,
-            fields: fields
-                .into_iter()
-                .enumerate()
-                .map(|(index, (name, val_opt))| {
-                    let udt_field_type_opt = udt_type.get_field_by_index(index);
-                    if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
-                        return (
-                            name,
-                            Some(LegacyCassValue {
-                                value_type: udt_field_type.clone(),
-                                value: Some(get_column_value(val, udt_field_type)),
-                            }),
-                        );
-                    }
-                    (name, None)
-                })
-                .collect(),
-        }),
-        (CqlValue::Tuple(tuple), CassDataTypeInner::Tuple(tuple_types)) => {
-            CollectionValue(Collection::Tuple(
-                tuple
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, val_opt)| {
-                        val_opt
-                            .zip(tuple_types.get(index))
-                            .map(|(val, tuple_field_type)| LegacyCassValue {
-                                value_type: tuple_field_type.clone(),
-                                value: Some(get_column_value(val, tuple_field_type)),
-                            })
-                    })
-                    .collect(),
-            ))
-        }
-        (regular_value, _) => RegularValue(regular_value),
-    }
 }
 
 #[no_mangle]

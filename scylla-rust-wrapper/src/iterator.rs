@@ -13,7 +13,7 @@ use crate::metadata::{
 use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
     cass_value_type, CassRawRow, CassResult, CassResultKind, CassResultMetadata, CassRow,
-    CassValue, LegacyCassValue, NonNullDeserializationError,
+    CassValue, NonNullDeserializationError,
 };
 use crate::types::{cass_bool_t, size_t};
 
@@ -542,54 +542,6 @@ impl<'result> CassUdtIterator<'result> {
         });
 
         true
-    }
-}
-
-pub struct LegacyCassCollectionIterator<'result> {
-    value: &'result LegacyCassValue,
-    count: u64,
-    position: Option<usize>,
-}
-
-impl LegacyCassCollectionIterator<'_> {
-    fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
-
-        self.position = Some(new_pos);
-
-        new_pos < self.count.try_into().unwrap()
-    }
-}
-
-pub struct LegacyCassMapIterator<'result> {
-    value: &'result LegacyCassValue,
-    count: u64,
-    position: Option<usize>,
-}
-
-impl LegacyCassMapIterator<'_> {
-    fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
-
-        self.position = Some(new_pos);
-
-        new_pos < self.count.try_into().unwrap()
-    }
-}
-
-pub struct LegacyCassUdtIterator<'result> {
-    value: &'result LegacyCassValue,
-    count: u64,
-    position: Option<usize>,
-}
-
-impl LegacyCassUdtIterator<'_> {
-    fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
-
-        self.position = Some(new_pos);
-
-        new_pos < self.count.try_into().unwrap()
     }
 }
 
