@@ -39,21 +39,25 @@ impl CassResultIterator<'_> {
             return false;
         };
 
-        let new_row = rows_result_iterator
-            .iterator
-            .next()
-            .and_then(|res| match res {
-                Ok(row) => Some(row),
-                Err(e) => {
-                    // We have no way to propagate the error (return type is bool).
-                    // Let's at least log the deserialization error.
-                    tracing::error!("Failed to deserialize next row: {e}");
-                    None
-                }
-            })
-            .map(|row: CassRawRow| {
-                CassRow::from_row_and_metadata(row.columns, rows_result_iterator.result_metadata)
-            });
+        let new_row =
+            rows_result_iterator
+                .iterator
+                .next()
+                .and_then(|raw_row_res: Result<CassRawRow, _>| {
+                    raw_row_res
+                        .and_then(|raw_row| {
+                            CassRow::from_raw_row_and_metadata(
+                                raw_row,
+                                rows_result_iterator.result_metadata,
+                            )
+                        })
+                        .inspect_err(|e| {
+                            // We have no way to propagate the error (return type is bool).
+                            // Let's at least log the deserialization error.
+                            tracing::error!("Failed to deserialize next row: {e}");
+                        })
+                        .ok()
+                });
 
         rows_result_iterator.current_row = new_row;
 

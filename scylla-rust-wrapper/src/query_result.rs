@@ -132,7 +132,7 @@ impl CassResultMetadata {
 }
 
 pub(crate) struct CassRawRow<'frame, 'metadata> {
-    pub(crate) columns: Vec<CassRawValue<'frame, 'metadata>>,
+    pub(crate) columns: ColumnIterator<'frame, 'metadata>,
 }
 
 impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame, 'metadata> {
@@ -140,26 +140,8 @@ impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame,
         Ok(())
     }
 
-    fn deserialize(
-        mut row: ColumnIterator<'frame, 'metadata>,
-    ) -> Result<Self, DeserializationError> {
-        let mut columns = Vec::with_capacity(row.size_hint().0);
-        while let Some(column) = row.next().transpose()? {
-            columns.push(
-                <CassRawValue as DeserializeValue>::deserialize(column.spec.typ(), column.slice)
-                    .map_err(|err| {
-                        DeserializationError::new(BuiltinDeserializationError {
-                            rust_name: std::any::type_name::<CassRawValue>(),
-                            kind: BuiltinDeserializationErrorKind::ColumnDeserializationFailed {
-                                column_index: column.index,
-                                column_name: column.spec.name().to_owned(),
-                                err,
-                            },
-                        })
-                    })?,
-            );
-        }
-        Ok(Self { columns })
+    fn deserialize(row: ColumnIterator<'frame, 'metadata>) -> Result<Self, DeserializationError> {
+        Ok(Self { columns: row })
     }
 }
 
@@ -175,14 +157,49 @@ impl FFI for CassRow<'_> {
 }
 
 impl<'result> CassRow<'result> {
-    pub(crate) fn from_row_and_metadata(
-        row: Vec<CassRawValue<'result, 'result>>,
+    pub(crate) fn from_raw_row_and_metadata(
+        row: CassRawRow<'result, 'result>,
         result_metadata: &'result CassResultMetadata,
-    ) -> Self {
-        Self {
-            columns: create_cass_row_columns(row, result_metadata),
-            result_metadata,
+    ) -> Result<Self, DeserializationError> {
+        let mut columns = Vec::with_capacity(row.columns.columns_remaining());
+
+        let mut raw_columns_with_cass_metadata = row
+            .columns
+            .zip(result_metadata.col_specs.iter())
+            .map(|(raw_column_res, cass_metadata)| {
+                raw_column_res.map(|raw_column| (raw_column, cass_metadata))
+            });
+
+        while let Some((raw_column, cass_col_spec)) =
+            raw_columns_with_cass_metadata.next().transpose()?
+        {
+            let raw_value = <CassRawValue as DeserializeValue>::deserialize(
+                raw_column.spec.typ(),
+                raw_column.slice,
+            )
+            .map_err(|err| {
+                DeserializationError::new(BuiltinDeserializationError {
+                    rust_name: std::any::type_name::<CassRawValue>(),
+                    kind: BuiltinDeserializationErrorKind::ColumnDeserializationFailed {
+                        column_index: raw_column.index,
+                        column_name: raw_column.spec.name().to_owned(),
+                        err,
+                    },
+                })
+            })?;
+
+            let value_type = &cass_col_spec.data_type;
+            let value = CassValue {
+                value: raw_value,
+                value_type,
+            };
+            columns.push(value);
         }
+
+        Ok(Self {
+            columns,
+            result_metadata,
+        })
     }
 }
 
@@ -191,6 +208,7 @@ impl<'result> CassRow<'result> {
 mod row_with_self_borrowed_result_data {
     use std::sync::Arc;
 
+    use scylla::errors::DeserializationError;
     use yoke::{Yoke, Yokeable};
 
     use crate::execution_error::CassErrorResult;
@@ -237,24 +255,21 @@ mod row_with_self_borrowed_result_data {
                 |raw_rows_and_metadata_ref| -> Result<_, AttachError> {
                     let CassRowsResultSharedData { raw_rows, metadata } = raw_rows_and_metadata_ref;
 
-                    let row_result = match raw_rows
+                    let raw_row_result = raw_rows
                         .rows_iter::<CassRawRow>()
                         // unwrap: CassRawRow always passes the typecheck.
                         .unwrap()
                         .next()
-                    {
-                        Some(Ok(row)) => Ok(row),
-                        Some(Err(deser_error)) => {
-                            Err(AttachError::CassErrorResult(deser_error.into()))
-                        }
-                        None => Err(AttachError::NoRows),
-                    };
-                    let row = row_result?;
+                        .ok_or(AttachError::NoRows)?;
 
-                    Ok(CassRowWrapper(CassRow::from_row_and_metadata(
-                        row.columns,
-                        metadata,
-                    )))
+                    let row_result = raw_row_result
+                        .and_then(|raw_row| CassRow::from_raw_row_and_metadata(raw_row, metadata));
+
+                    let row = row_result
+                        .map_err(DeserializationError::into)
+                        .map_err(AttachError::CassErrorResult)?;
+
+                    Ok(CassRowWrapper(row))
                 },
             );
 
@@ -456,19 +471,6 @@ impl ToCassError for NonNullDeserializationError {
             }
         }
     }
-}
-
-fn create_cass_row_columns<'result>(
-    row: Vec<CassRawValue<'result, 'result>>,
-    metadata: &'result CassResultMetadata,
-) -> Vec<CassValue<'result>> {
-    row.into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(value, col_spec)| {
-            let value_type = &col_spec.data_type;
-            CassValue { value, value_type }
-        })
-        .collect()
 }
 
 #[no_mangle]
