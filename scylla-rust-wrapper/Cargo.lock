@@ -1130,6 +1130,7 @@ version = "0.3.0"
 dependencies = [
  "assert_matches",
  "bindgen",
+ "bytes",
  "chrono",
  "futures",
  "libc",

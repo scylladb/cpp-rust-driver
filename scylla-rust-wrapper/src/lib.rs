@@ -29,6 +29,8 @@ pub mod misc;
 pub mod prepared;
 pub mod query_result;
 pub mod retry_policy;
+#[cfg(test)]
+mod ser_de_tests;
 pub mod session;
 pub mod ssl;
 pub mod statement;

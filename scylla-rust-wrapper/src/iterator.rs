@@ -1,27 +1,29 @@
 use scylla::deserialize::result::TypedRowIterator;
-use scylla::value::Row;
+use scylla::deserialize::value::{DeserializeValue, ListlikeIterator, MapIterator, UdtIterator};
 
 use crate::argconv::{
     write_str_to_c, ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
     CassOwnedExclusivePtr, FromBox, RefFFI, FFI,
 };
 use crate::cass_error::CassError;
-use crate::cass_types::{CassDataType, CassValueType};
+use crate::cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType};
 use crate::metadata::{
     CassColumnMeta, CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta, CassTableMeta,
 };
+use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
-    cass_value_is_collection, cass_value_item_count, cass_value_type, CassResult, CassResultKind,
-    CassResultMetadata, CassRow, CassValue, Collection, Value,
+    cass_value_type, CassRawRow, CassResult, CassResultKind, CassResultMetadata, CassRow,
+    CassValue, NonNullDeserializationError,
 };
 use crate::types::{cass_bool_t, size_t};
 
 pub use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 pub struct CassRowsResultIterator<'result> {
-    iterator: TypedRowIterator<'result, 'result, Row>,
+    iterator: TypedRowIterator<'result, 'result, CassRawRow<'result, 'result>>,
     result_metadata: &'result CassResultMetadata,
     current_row: Option<CassRow<'result>>,
 }
@@ -37,19 +39,25 @@ impl CassResultIterator<'_> {
             return false;
         };
 
-        let new_row = rows_result_iterator
-            .iterator
-            .next()
-            .and_then(|res| match res {
-                Ok(row) => Some(row),
-                Err(e) => {
-                    // We have no way to propagate the error (return type is bool).
-                    // Let's at least log the deserialization error.
-                    tracing::error!("Failed to deserialize next row: {e}");
-                    None
-                }
-            })
-            .map(|row| CassRow::from_row_and_metadata(row, rows_result_iterator.result_metadata));
+        let new_row =
+            rows_result_iterator
+                .iterator
+                .next()
+                .and_then(|raw_row_res: Result<CassRawRow, _>| {
+                    raw_row_res
+                        .and_then(|raw_row| {
+                            CassRow::from_raw_row_and_metadata(
+                                raw_row,
+                                rows_result_iterator.result_metadata,
+                            )
+                        })
+                        .inspect_err(|e| {
+                            // We have no way to propagate the error (return type is bool).
+                            // Let's at least log the deserialization error.
+                            tracing::error!("Failed to deserialize next row: {e}");
+                        })
+                        .ok()
+                });
 
         rows_result_iterator.current_row = new_row;
 
@@ -72,51 +80,472 @@ impl CassRowIterator<'_> {
     }
 }
 
-pub struct CassCollectionIterator<'result> {
-    value: &'result CassValue,
-    count: u64,
-    position: Option<usize>,
+/// An iterator created from [`cass_iterator_from_collection()`] with list or set provided as a value.
+pub struct CassListlikeIterator<'result> {
+    iterator: ListlikeIterator<'result, 'result, CassRawValue<'result, 'result>>,
+    value_data_type: &'result Arc<CassDataType>,
+    current_value: Option<CassValue<'result>>,
+}
+
+impl<'result> CassListlikeIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let listlike_iterator = value.get_non_null::<ListlikeIterator<CassRawValue>>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let item_type = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
+                // Expect: `typ` is an `Option<Arc<CassDataType>>`. It is None, for untyped set or list.
+                // There is no such thing as untyped list/set in CQL protocol, thus we do not expect it in result metadata.
+                typ.as_ref()
+                    .expect("List or set type provided from result metadata should be fully typed!")
+            }
+            _ => {
+                panic!("Expected list or set type. Typecheck should have prevented such scenario!")
+            }
+        };
+
+        Ok(Self {
+            iterator: listlike_iterator,
+            value_data_type: item_type,
+            current_value: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let next_value = self.iterator.next().and_then(|res| match res {
+            Ok(value) => Some(CassValue {
+                value,
+                value_type: self.value_data_type,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to deserialize next listlike entry: {e}");
+                None
+            }
+        });
+
+        self.current_value = next_value;
+
+        self.current_value.is_some()
+    }
+}
+
+/// Iterator created from [`cass_iterator_from_collection()`] with map provided as a collection.
+/// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next value (either key or value).
+pub struct CassMapCollectionIterator<'result> {
+    iterator: CassMapIterator<'result>,
+    state: Option<CassMapCollectionIteratorState>,
+}
+
+/// Tells the [`CassMapCollectionIterator`] at which part of the singular entry it is currently at.
+enum CassMapCollectionIteratorState {
+    Key,
+    Value,
+}
+
+impl<'result> CassMapCollectionIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let iterator = CassMapIterator::new_from_value(value)?;
+
+        Ok(Self {
+            iterator,
+            state: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let (new_state, next_result) = match self.state {
+            // First call to cass_iterator_next(). Move underlying CassMapIterator to the next entry.
+            None => (CassMapCollectionIteratorState::Key, self.iterator.next()),
+            // Move the state to the value.
+            // Do not forward the underlying iterator.
+            Some(CassMapCollectionIteratorState::Key) => {
+                (CassMapCollectionIteratorState::Value, true)
+            }
+            // Moving to the key of the next entry. Forwards the underlying iterator.
+            Some(CassMapCollectionIteratorState::Value) => {
+                (CassMapCollectionIteratorState::Key, self.iterator.next())
+            }
+        };
+
+        if next_result {
+            self.state = Some(new_state);
+        }
+
+        next_result
+    }
+}
+
+/// Iterator created from [`cass_iterator_from_collection()`] with list, set or map provided as a collection.
+pub enum CassCollectionIterator<'result> {
+    /// Listlike iterator for list or set.
+    Listlike(CassListlikeIterator<'result>),
+    /// Map iterator.
+    Map(CassMapCollectionIterator<'result>),
 }
 
 impl CassCollectionIterator<'_> {
     fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
-
-        self.position = Some(new_pos);
-
-        new_pos < self.count.try_into().unwrap()
+        match self {
+            CassCollectionIterator::Listlike(listlike_iterator) => listlike_iterator.next(),
+            CassCollectionIterator::Map(map_collection_iterator) => map_collection_iterator.next(),
+        }
     }
 }
 
-pub struct CassMapIterator<'result> {
-    value: &'result CassValue,
-    count: u64,
-    position: Option<usize>,
+// TODO: consider introducing this to Rust driver.
+mod tuple_iterator {
+    use scylla::cluster::metadata::ColumnType;
+    use scylla::deserialize::value::{self, DeserializeValue};
+    use scylla::deserialize::FrameSlice;
+    use scylla::errors::{DeserializationError, TypeCheckError};
+    use scylla::frame::frame_errors::LowLevelDeserializationError;
+    use thiserror::Error;
+
+    pub(super) struct TupleIterator<'frame, 'metadata> {
+        all_metadata: &'metadata [ColumnType<'metadata>],
+        remaining_metadata: &'metadata [ColumnType<'metadata>],
+        iterator: BytesSequenceIterator<'frame>,
+    }
+
+    impl<'frame, 'metadata> TupleIterator<'frame, 'metadata> {
+        fn new(metadata: &'metadata [ColumnType<'metadata>], slice: FrameSlice<'frame>) -> Self {
+            Self {
+                all_metadata: metadata,
+                remaining_metadata: metadata,
+                iterator: BytesSequenceIterator::new(slice),
+            }
+        }
+    }
+
+    impl<'frame, 'metadata> DeserializeValue<'frame, 'metadata> for TupleIterator<'frame, 'metadata> {
+        fn type_check(typ: &ColumnType) -> Result<(), TypeCheckError> {
+            match typ {
+                ColumnType::Tuple { .. } => Ok(()),
+                _ => Err(TypeCheckError::new(value::BuiltinTypeCheckError {
+                    rust_name: std::any::type_name::<Self>(),
+                    cql_type: typ.clone().into_owned(),
+                    kind: value::BuiltinTypeCheckErrorKind::TupleError(
+                        value::TupleTypeCheckErrorKind::NotTuple,
+                    ),
+                })),
+            }
+        }
+
+        fn deserialize(
+            typ: &'metadata ColumnType<'metadata>,
+            v: Option<FrameSlice<'frame>>,
+        ) -> Result<Self, DeserializationError> {
+            let slice: FrameSlice<'frame> = v.ok_or_else(|| {
+                DeserializationError::new(value::BuiltinDeserializationError {
+                    rust_name: std::any::type_name::<Self>(),
+                    cql_type: typ.clone().into_owned(),
+                    kind: value::BuiltinDeserializationErrorKind::ExpectedNonNull,
+                })
+            })?;
+
+            let metadata = match typ {
+                ColumnType::Tuple(types) => types.as_slice(),
+                _ => {
+                    unreachable!("Typecheck should have prevented this scenario!")
+                }
+            };
+
+            Ok(Self::new(metadata, slice))
+        }
+    }
+
+    impl<'frame, 'metadata> Iterator for TupleIterator<'frame, 'metadata> {
+        type Item = Result<
+            (&'metadata ColumnType<'metadata>, Option<FrameSlice<'frame>>),
+            DeserializationError,
+        >;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let pos = self.all_metadata.len() - self.remaining_metadata.len();
+
+            // We don't fail if there are more serialized fields than declared in the metadata.
+            // This is what we do for static-size tuple deserialization.
+            // For example, (a, b, c) does not fail if slice contains 4 serialized values (in Rust-driver).
+            let (head, metadata) = self.remaining_metadata.split_first()?;
+            self.remaining_metadata = metadata;
+
+            let raw_res = match self.iterator.next() {
+                Some(Ok(raw)) => Ok((head, raw)),
+                Some(Err(e)) => Err(DeserializationError::new(
+                    value::BuiltinDeserializationError {
+                        rust_name: std::any::type_name::<Self>(),
+                        cql_type: ColumnType::Tuple(self.all_metadata.to_owned()).into_owned(),
+                        kind: value::BuiltinDeserializationErrorKind::RawCqlBytesReadError(e),
+                    },
+                )),
+                // Value is missing.
+                None => Err(DeserializationError::new(TupleMissingValue(pos))),
+            };
+
+            Some(raw_res)
+        }
+    }
+
+    // This would be a variant of TupleDeserializationErrorKind in rust-driver.
+    #[derive(Error, Debug)]
+    #[error("Failed to deserialize tuple: serialized value is missing as position {0}")]
+    struct TupleMissingValue(usize);
+
+    // --------------------------
+    // COPIED FROM RUST-DRIVER!!!
+    // --------------------------
+    #[derive(Clone, Copy, Debug)]
+    struct BytesSequenceIterator<'frame> {
+        slice: FrameSlice<'frame>,
+    }
+
+    impl<'frame> BytesSequenceIterator<'frame> {
+        fn new(slice: FrameSlice<'frame>) -> Self {
+            Self { slice }
+        }
+    }
+
+    impl<'frame> From<FrameSlice<'frame>> for BytesSequenceIterator<'frame> {
+        #[inline]
+        fn from(slice: FrameSlice<'frame>) -> Self {
+            Self::new(slice)
+        }
+    }
+
+    impl<'frame> Iterator for BytesSequenceIterator<'frame> {
+        type Item = Result<Option<FrameSlice<'frame>>, LowLevelDeserializationError>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.slice.as_slice().is_empty() {
+                None
+            } else {
+                Some(self.slice.read_cql_bytes())
+            }
+        }
+    }
 }
 
-impl CassMapIterator<'_> {
+/// Iterator created from [`cass_iterator_from_tuple()`].
+pub struct CassTupleIterator<'result> {
+    iterator: tuple_iterator::TupleIterator<'result, 'result>,
+    metadata: &'result [Arc<CassDataType>],
+    current_entry: Option<CassTupleIteratorEntry<'result>>,
+}
+
+pub struct CassTupleIteratorEntry<'result> {
+    field_value: CassValue<'result>,
+    metadata_types_index: usize,
+}
+
+impl<'result> CassTupleIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let tuple_iterator = value.get_non_null::<tuple_iterator::TupleIterator>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let metadata = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::Tuple(typ) => typ.as_slice(),
+            _ => panic!("Expected tuple type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: tuple_iterator,
+            metadata,
+            current_entry: None,
+        })
+    }
+
     fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+        // Handle scenario where underlying iterator is exhausted.
+        let Some(deser_result) = self.iterator.next() else {
+            return false;
+        };
 
-        self.position = Some(new_pos);
+        // Handle the deserialization error from underlying iterator.
+        let Ok((column_type, slice)) = deser_result else {
+            tracing::error!("Failed to deserialize next tuple value: {deser_result:?}");
+            return false;
+        };
 
-        new_pos < self.count.try_into().unwrap()
+        // Deserialize to CassRawValue.
+        let raw_value: CassRawValue = match <_ as DeserializeValue>::deserialize(column_type, slice)
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("Failed to deserialize next tuple value: {e}");
+                return false;
+            }
+        };
+
+        // Update the current entry.
+        let new_metadata_types_index = self
+            .current_entry
+            .as_ref()
+            .map(|entry| entry.metadata_types_index + 1)
+            .unwrap_or(0);
+
+        let new_value = CassValue {
+            value: raw_value,
+            value_type: &self.metadata[new_metadata_types_index],
+        };
+
+        self.current_entry = Some(CassTupleIteratorEntry {
+            field_value: new_value,
+            metadata_types_index: new_metadata_types_index,
+        });
+
+        true
+    }
+}
+
+/// Iterator created from [`cass_iterator_from_map()`].
+/// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next entry (key-value pair).
+pub struct CassMapIterator<'result> {
+    iterator: MapIterator<
+        'result,
+        'result,
+        CassRawValue<'result, 'result>,
+        CassRawValue<'result, 'result>,
+    >,
+    key_value_types: (&'result Arc<CassDataType>, &'result Arc<CassDataType>),
+    current_entry: Option<(CassValue<'result>, CassValue<'result>)>,
+}
+
+impl<'result> CassMapIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let map_iterator = value.get_non_null::<MapIterator<CassRawValue, CassRawValue>>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let key_value_types = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::Map { typ, .. } => match typ {
+                MapDataType::KeyAndValue(key_type, val_type) => {
+                    (key_type, val_type)
+                }
+                _ => panic!("Untyped or half-typed map received in result metadata. Something really bad happened!"),
+            },
+            _ => panic!("Expected map type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: map_iterator,
+            key_value_types,
+            current_entry: None,
+        })
+    }
+
+    fn next(&mut self) -> bool {
+        let new_entry = self
+            .iterator
+            .next()
+            .and_then(|res| match res {
+                Ok((key, value)) => Some((key, value)),
+                Err(e) => {
+                    tracing::error!("Failed to deserialize next map entry: {e}");
+                    None
+                }
+            })
+            .map(|(key, value)| {
+                (
+                    CassValue {
+                        value: key,
+                        value_type: self.key_value_types.0,
+                    },
+                    CassValue {
+                        value,
+                        value_type: self.key_value_types.1,
+                    },
+                )
+            });
+
+        self.current_entry = new_entry;
+
+        self.current_entry.is_some()
     }
 }
 
 pub struct CassUdtIterator<'result> {
-    value: &'result CassValue,
-    count: u64,
-    position: Option<usize>,
+    iterator: UdtIterator<'result, 'result>,
+    metadata: &'result [(String, Arc<CassDataType>)],
+    current_entry: Option<CassUdtIteratorEntry<'result>>,
 }
 
-impl CassUdtIterator<'_> {
+struct CassUdtIteratorEntry<'result> {
+    field_value: CassValue<'result>,
+    metadata_types_index: usize,
+}
+
+impl<'result> CassUdtIterator<'result> {
+    fn new_from_value(
+        value: &'result CassValue<'result>,
+    ) -> Result<Self, NonNullDeserializationError> {
+        let udt_iterator = value.get_non_null::<UdtIterator>()?;
+
+        // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
+        let metadata = match unsafe { value.value_type.get_unchecked() } {
+            CassDataTypeInner::UDT(udt) => udt.field_types.as_slice(),
+            _ => panic!("Expected UDT type. Typecheck should have prevented such scenario!"),
+        };
+
+        Ok(Self {
+            iterator: udt_iterator,
+            metadata,
+            current_entry: None,
+        })
+    }
+
     fn next(&mut self) -> bool {
-        let new_pos: usize = self.position.map_or(0, |prev_pos| prev_pos + 1);
+        // Handle scenario where underlying iterator is exhausted.
+        let Some(((_field_name, field_type), deser_result)) = self.iterator.next() else {
+            return false;
+        };
 
-        self.position = Some(new_pos);
+        // Handle the deserialization error from underlying iterator.
+        let Ok(field_value) = deser_result else {
+            tracing::error!("Failed to deserialize next UDT field: {deser_result:?}");
+            return false;
+        };
+        // Flatten: Treat missing UDT field as null.
+        // This is a bit different from what cpp-driver does.
+        // cpp-driver fails in case when field metadata is provided, but the serialized value is missing.
+        // After the discussion, we concluded that this is not the correct behaviour. CQL protocol
+        // clearly states that this is a valid scenario: https://github.com/apache/cassandra/blob/4a80daf32eb4226d9870b914779a1fc007479da6/doc/native_protocol_v4.spec#L1003.
+        let field_slice = field_value.flatten();
 
-        new_pos < self.count.try_into().unwrap()
+        // Deserialize to CassRawValue.
+        let raw_value: CassRawValue =
+            match <_ as DeserializeValue>::deserialize(field_type, field_slice) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("Failed to deserialize UDT field value: {e}");
+                    return false;
+                }
+            };
+
+        // Update the current entry.
+        let new_metadata_types_index = self
+            .current_entry
+            .as_ref()
+            .map(|entry| entry.metadata_types_index + 1)
+            .unwrap_or(0);
+
+        let new_value = CassValue {
+            value: raw_value,
+            value_type: &self.metadata[new_metadata_types_index].1,
+        };
+
+        self.current_entry = Some(CassUdtIteratorEntry {
+            field_value: new_value,
+            metadata_types_index: new_metadata_types_index,
+        });
+
+        true
     }
 }
 
@@ -214,7 +643,7 @@ pub enum CassIterator<'result_or_schema> {
     /// Iterator over key-value pairs in a map.
     Map(CassMapIterator<'result_or_schema>),
     /// Iterator over values in a tuple.
-    Tuple(CassCollectionIterator<'result_or_schema>),
+    Tuple(CassTupleIterator<'result_or_schema>),
     /// Iterator over fields (values) in UDT.
     Udt(CassUdtIterator<'result_or_schema>),
 
@@ -274,8 +703,8 @@ pub unsafe extern "C" fn cass_iterator_next(
     let result = match &mut iter {
         CassIterator::Result(result_iterator) => result_iterator.next(),
         CassIterator::Row(row_iterator) => row_iterator.next(),
-        CassIterator::Collection(collection_iterator)
-        | CassIterator::Tuple(collection_iterator) => collection_iterator.next(),
+        CassIterator::Collection(collection_iterator) => collection_iterator.next(),
+        CassIterator::Tuple(tuple_iterator) => tuple_iterator.next(),
         CassIterator::Map(map_iterator) => map_iterator.next(),
         CassIterator::Udt(udt_iterator) => udt_iterator.next(),
         CassIterator::KeyspacesMeta(schema_meta_iterator) => schema_meta_iterator.next(),
@@ -319,7 +748,7 @@ pub unsafe extern "C" fn cass_iterator_get_row<'result>(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_column<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for row iterator, for other types should return null
@@ -342,95 +771,77 @@ pub unsafe extern "C" fn cass_iterator_get_column<'result>(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_value<'result>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+    iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
     // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
-    if let CassIterator::Collection(collection_iterator)
-    | CassIterator::Tuple(collection_iterator) = iter
-    {
-        let iter_position = match collection_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
-
-        let value = match &collection_iterator.value.value {
-            Some(Value::CollectionValue(Collection::List(list))) => list.get(iter_position),
-            Some(Value::CollectionValue(Collection::Set(set))) => set.get(iter_position),
-            Some(Value::CollectionValue(Collection::Tuple(tuple))) => {
-                tuple.get(iter_position).and_then(|x| x.as_ref())
-            }
-            Some(Value::CollectionValue(Collection::Map(map))) => {
-                let map_entry_index = iter_position / 2;
-                map.get(map_entry_index)
-                    .map(|(key, value)| if iter_position % 2 == 0 { key } else { value })
-            }
-            _ => return RefFFI::null(),
-        };
-
-        if value.is_none() {
-            return RefFFI::null();
+    match iter {
+        CassIterator::Collection(CassCollectionIterator::Listlike(listlike_iterator)) => {
+            listlike_iterator
+                .current_value
+                .as_ref()
+                .map(RefFFI::as_ptr)
+                .unwrap_or(RefFFI::null())
         }
+        CassIterator::Collection(CassCollectionIterator::Map(map_collection_iterator)) => {
+            map_collection_iterator
+                .state
+                .as_ref()
+                .and_then(|state| {
+                    let current_entry = map_collection_iterator.iterator.current_entry.as_ref();
+                    let v = match state {
+                        CassMapCollectionIteratorState::Key => current_entry.map(|entry| &entry.0),
+                        CassMapCollectionIteratorState::Value => {
+                            current_entry.map(|entry| &entry.1)
+                        }
+                    };
 
-        return RefFFI::as_ptr(value.unwrap());
+                    v.map(RefFFI::as_ptr)
+                })
+                .unwrap_or(RefFFI::null())
+        }
+        CassIterator::Tuple(tuple_iterator) => tuple_iterator
+            .current_entry
+            .as_ref()
+            .map(|entry| RefFFI::as_ptr(&entry.field_value))
+            .unwrap_or(RefFFI::null()),
+        _ => RefFFI::null(),
     }
-
-    RefFFI::null()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+    iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::Map(map_iterator) = iter {
-        let iter_position = match map_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIterator::Map(map_iterator) = iter else {
+        return RefFFI::null();
+    };
 
-        let entry = match &map_iterator.value.value {
-            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return RefFFI::null(),
-        };
-
-        if entry.is_none() {
-            return RefFFI::null();
-        }
-
-        return RefFFI::as_ptr(&entry.unwrap().0);
-    }
-
-    RefFFI::null()
+    map_iterator
+        .current_entry
+        .as_ref()
+        .map(|entry| RefFFI::as_ptr(&entry.0))
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_map_value<'result>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+    iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::Map(map_iterator) = iter {
-        let iter_position = match map_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIterator::Map(map_iterator) = iter else {
+        return RefFFI::null();
+    };
 
-        let entry = match &map_iterator.value.value {
-            Some(Value::CollectionValue(Collection::Map(map))) => map.get(iter_position),
-            _ => return RefFFI::null(),
-        };
-
-        if entry.is_none() {
-            return RefFFI::null();
-        }
-
-        return RefFFI::as_ptr(&entry.unwrap().1);
-    }
-
-    RefFFI::null()
+    map_iterator
+        .current_entry
+        .as_ref()
+        .map(|entry| RefFFI::as_ptr(&entry.1))
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
@@ -441,62 +852,37 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 ) -> CassError {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::Udt(udt_iterator) = iter {
-        let iter_position = match udt_iterator.position {
-            Some(pos) => pos,
-            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
-        };
+    let CassIterator::Udt(udt_iterator) = iter else {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
-        let udt_entry_opt = match &udt_iterator.value.value {
-            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-                fields.get(iter_position)
-            }
-            _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
-        };
+    match &udt_iterator.current_entry {
+        Some(entry) => {
+            let field_name = &udt_iterator.metadata[entry.metadata_types_index].0;
 
-        match udt_entry_opt {
-            Some(udt_entry) => {
-                let field_name = &udt_entry.0;
-                unsafe { write_str_to_c(field_name.as_str(), name, name_length) };
-            }
-            None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+            unsafe { write_str_to_c(field_name.as_str(), name, name_length) };
+
+            CassError::CASS_OK
         }
-
-        return CassError::CASS_OK;
+        None => CassError::CASS_ERROR_LIB_BAD_PARAMS,
     }
-
-    CassError::CASS_ERROR_LIB_BAD_PARAMS
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
-    iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+    iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let iter = BoxFFI::as_ref(iterator).unwrap();
 
-    if let CassIterator::Udt(udt_iterator) = iter {
-        let iter_position = match udt_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIterator::Udt(udt_iterator) = iter else {
+        return RefFFI::null();
+    };
 
-        let udt_entry_opt = match &udt_iterator.value.value {
-            Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-                fields.get(iter_position)
-            }
-            _ => return RefFFI::null(),
-        };
-
-        return match udt_entry_opt {
-            Some(udt_entry) => match &udt_entry.1 {
-                Some(value) => RefFFI::as_ptr(value),
-                None => RefFFI::null(),
-            },
-            None => RefFFI::null(),
-        };
-    }
-
-    RefFFI::null()
+    udt_iterator
+        .current_entry
+        .as_ref()
+        .map(|entry| RefFFI::as_ptr(&entry.field_value))
+        .unwrap_or(RefFFI::null())
 }
 
 #[no_mangle]
@@ -678,9 +1064,13 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
         CassResultKind::NonRows => CassResultIterator::NonRows,
         CassResultKind::Rows(cass_rows_result) => {
             CassResultIterator::Rows(CassRowsResultIterator {
-                // unwrap: Row always passes the typecheck.
-                iterator: cass_rows_result.raw_rows.rows_iter::<Row>().unwrap(),
-                result_metadata: &cass_rows_result.metadata,
+                // unwrap: CassRawRow always passes the typecheck.
+                iterator: cass_rows_result
+                    .shared_data
+                    .raw_rows
+                    .rows_iter::<CassRawRow>()
+                    .unwrap(),
+                result_metadata: &cass_rows_result.shared_data.metadata,
                 current_row: None,
             })
         }
@@ -707,91 +1097,88 @@ pub unsafe extern "C" fn cass_iterator_from_row<'result>(
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let is_collection = unsafe { cass_value_is_collection(value.borrow()) } != 0;
-
-    if RefFFI::is_null(&value) || !is_collection {
+    if RefFFI::is_null(&value) {
         return BoxFFI::null_mut();
     }
 
-    let item_count = unsafe { cass_value_item_count(value.borrow()) };
-    let item_count = match unsafe { cass_value_type(value.borrow()) } {
-        CassValueType::CASS_VALUE_TYPE_MAP => item_count * 2,
-        _ => item_count,
-    };
+    // SAFETY: We assume that user provided a valid pointer to the value.
+    // The `value.value_type` is a `CassDataType` obtained from `CassResultMetadata`, which is immutable
+    // (thus, underlying `get_unchecked()` is safe).
+    let value_type = unsafe { cass_value_type(value.borrow()) };
+
     let val = RefFFI::as_ref(value).unwrap();
 
-    let iterator = CassCollectionIterator {
-        value: val,
-        count: item_count,
-        position: None,
+    let iterator_result = match value_type {
+        CassValueType::CASS_VALUE_TYPE_SET | CassValueType::CASS_VALUE_TYPE_LIST => {
+            CassListlikeIterator::new_from_value(val).map(CassCollectionIterator::Listlike)
+        }
+        CassValueType::CASS_VALUE_TYPE_MAP => {
+            CassMapCollectionIterator::new_from_value(val).map(CassCollectionIterator::Map)
+        }
+        _ => return BoxFFI::null_mut(),
     };
 
-    BoxFFI::into_ptr(Box::new(CassIterator::Collection(iterator)))
+    match iterator_result {
+        Ok(iterator) => BoxFFI::into_ptr(Box::new(CassIterator::Collection(iterator))),
+        Err(e) => {
+            tracing::error!("Failed to create collection iterator: {e}");
+            BoxFFI::null_mut()
+        }
+    }
 }
 
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let tuple = RefFFI::as_ref(value).unwrap();
 
-    if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
-        let item_count = val.len();
-        let iterator = CassCollectionIterator {
-            value: tuple,
-            count: item_count as u64,
-            position: None,
-        };
-
-        return BoxFFI::into_ptr(Box::new(CassIterator::Tuple(iterator)));
+    let iterator_result = CassTupleIterator::new_from_value(tuple);
+    match iterator_result {
+        Ok(iterator) => BoxFFI::into_ptr(Box::new(CassIterator::Tuple(iterator))),
+        Err(e) => {
+            tracing::error!("Failed to create tuple iterator: {e}");
+            BoxFFI::null_mut()
+        }
     }
-
-    BoxFFI::null_mut()
 }
 
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_from_map<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let map = RefFFI::as_ref(value).unwrap();
 
-    if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
-        let item_count = val.len();
-        let iterator = CassMapIterator {
-            value: map,
-            count: item_count as u64,
-            position: None,
-        };
+    let iterator_result = CassMapIterator::new_from_value(map);
 
-        return BoxFFI::into_ptr(Box::new(CassIterator::Map(iterator)));
+    match iterator_result {
+        Ok(iterator) => BoxFFI::into_ptr(Box::new(CassIterator::Map(iterator))),
+        Err(e) => {
+            tracing::error!("Failed to create map iterator: {e}");
+            BoxFFI::null_mut()
+        }
     }
-
-    BoxFFI::null_mut()
 }
 
 #[no_mangle]
 #[allow(clippy::needless_lifetimes)]
 pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
-    value: CassBorrowedSharedPtr<'result, CassValue, CConst>,
+    value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
     let udt = RefFFI::as_ref(value).unwrap();
 
-    if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
-        let item_count = fields.len();
-        let iterator = CassUdtIterator {
-            value: udt,
-            count: item_count as u64,
-            position: None,
-        };
-
-        return BoxFFI::into_ptr(Box::new(CassIterator::Udt(iterator)));
+    let iterator_result = CassUdtIterator::new_from_value(udt);
+    match iterator_result {
+        Ok(iterator) => BoxFFI::into_ptr(Box::new(CassIterator::Udt(iterator))),
+        Err(e) => {
+            tracing::error!("Failed to create UDT iterator: {e}");
+            BoxFFI::null_mut()
+        }
     }
-
-    BoxFFI::null_mut()
 }
 
 #[no_mangle]
