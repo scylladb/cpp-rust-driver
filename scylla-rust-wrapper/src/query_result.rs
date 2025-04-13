@@ -1,23 +1,32 @@
 use crate::argconv::*;
-use crate::cass_error::CassError;
+use crate::cass_error::{CassError, ToCassError};
 use crate::cass_types::{
     cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
     CassValueType, MapDataType,
 };
 use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
-use crate::query_result::Value::{CollectionValue, RegularValue};
 use crate::types::*;
 use crate::uuid::CassUuid;
-use row_with_self_borrowed_metadata::RowWithSelfBorrowedMetadata;
-use scylla::errors::IntoRowsResultError;
-use scylla::frame::response::result::DeserializedMetadataAndRawRows;
+use cass_raw_value::CassRawValue;
+use row_with_self_borrowed_result_data::RowWithSelfBorrowedResultData;
+use scylla::cluster::metadata::{ColumnType, NativeType};
+use scylla::deserialize::row::{
+    BuiltinDeserializationError, BuiltinDeserializationErrorKind, ColumnIterator, DeserializeRow,
+};
+use scylla::deserialize::value::DeserializeValue;
+use scylla::errors::{DeserializationError, IntoRowsResultError, TypeCheckError};
+use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows};
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
-use scylla::value::{CqlValue, Row};
+use scylla::value::{
+    Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid,
+};
 use std::convert::TryInto;
+use std::net::IpAddr;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use thiserror::Error;
 use uuid::Uuid;
 
 pub enum CassResultKind {
@@ -26,11 +35,15 @@ pub enum CassResultKind {
 }
 
 pub struct CassRowsResult {
-    pub raw_rows: DeserializedMetadataAndRawRows,
-    // 'static, because of self-borrowing.
-    // CassRow borrows `metadata` field.
-    pub first_row: Option<RowWithSelfBorrowedMetadata>,
-    pub metadata: Arc<CassResultMetadata>,
+    // Arc: shared with first_row (yoke).
+    pub(crate) shared_data: Arc<CassRowsResultSharedData>,
+    pub(crate) first_row: Option<RowWithSelfBorrowedResultData>,
+}
+
+pub(crate) struct CassRowsResultSharedData {
+    pub(crate) raw_rows: DeserializedMetadataAndRawRows,
+    // Arc: shared with CassPrepared
+    pub(crate) metadata: Arc<CassResultMetadata>,
 }
 
 pub struct CassResult {
@@ -61,18 +74,17 @@ impl CassResult {
                 });
 
                 let (raw_rows, tracing_id, _) = rows_result.into_inner();
-                let first_row = RowWithSelfBorrowedMetadata::first_from_raw_rows_and_metadata(
-                    &raw_rows,
-                    Arc::clone(&metadata),
+                let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
+                let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
+                    Arc::clone(&shared_data),
                 )?;
 
                 let cass_result = CassResult {
                     tracing_id,
                     paging_state_response,
                     kind: CassResultKind::Rows(CassRowsResult {
-                        raw_rows,
+                        shared_data,
                         first_row,
-                        metadata,
                     }),
                 };
 
@@ -119,10 +131,24 @@ impl CassResultMetadata {
     }
 }
 
+pub(crate) struct CassRawRow<'frame, 'metadata> {
+    pub(crate) columns: ColumnIterator<'frame, 'metadata>,
+}
+
+impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame, 'metadata> {
+    fn type_check(_specs: &[ColumnSpec]) -> Result<(), TypeCheckError> {
+        Ok(())
+    }
+
+    fn deserialize(row: ColumnIterator<'frame, 'metadata>) -> Result<Self, DeserializationError> {
+        Ok(Self { columns: row })
+    }
+}
+
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 pub struct CassRow<'result> {
-    pub columns: Vec<CassValue>,
+    pub columns: Vec<CassValue<'result>>,
     pub result_metadata: &'result CassResultMetadata,
 }
 
@@ -131,26 +157,64 @@ impl FFI for CassRow<'_> {
 }
 
 impl<'result> CassRow<'result> {
-    pub fn from_row_and_metadata(row: Row, result_metadata: &'result CassResultMetadata) -> Self {
-        Self {
-            columns: create_cass_row_columns(row, result_metadata),
-            result_metadata,
+    pub(crate) fn from_raw_row_and_metadata(
+        row: CassRawRow<'result, 'result>,
+        result_metadata: &'result CassResultMetadata,
+    ) -> Result<Self, DeserializationError> {
+        let mut columns = Vec::with_capacity(row.columns.columns_remaining());
+
+        let mut raw_columns_with_cass_metadata = row
+            .columns
+            .zip(result_metadata.col_specs.iter())
+            .map(|(raw_column_res, cass_metadata)| {
+                raw_column_res.map(|raw_column| (raw_column, cass_metadata))
+            });
+
+        while let Some((raw_column, cass_col_spec)) =
+            raw_columns_with_cass_metadata.next().transpose()?
+        {
+            let raw_value = <CassRawValue as DeserializeValue>::deserialize(
+                raw_column.spec.typ(),
+                raw_column.slice,
+            )
+            .map_err(|err| {
+                DeserializationError::new(BuiltinDeserializationError {
+                    rust_name: std::any::type_name::<CassRawValue>(),
+                    kind: BuiltinDeserializationErrorKind::ColumnDeserializationFailed {
+                        column_index: raw_column.index,
+                        column_name: raw_column.spec.name().to_owned(),
+                        err,
+                    },
+                })
+            })?;
+
+            let value_type = &cass_col_spec.data_type;
+            let value = CassValue {
+                value: raw_value,
+                value_type,
+            };
+            columns.push(value);
         }
+
+        Ok(Self {
+            columns,
+            result_metadata,
+        })
     }
 }
 
-/// Module defining [`RowWithSelfBorrowedMetadata`] struct.
+/// Module defining [`RowWithSelfBorrowedResultData`] struct.
 /// The purpose of this module is so the `query_result` module does not directly depend on `yoke`.
-mod row_with_self_borrowed_metadata {
+mod row_with_self_borrowed_result_data {
     use std::sync::Arc;
 
-    use scylla::frame::response::result::DeserializedMetadataAndRawRows;
-    use scylla::value::Row;
+    use scylla::errors::DeserializationError;
     use yoke::{Yoke, Yokeable};
 
     use crate::execution_error::CassErrorResult;
+    use crate::query_result::CassRawRow;
 
-    use super::{CassResultMetadata, CassRow};
+    use super::{CassRow, CassRowsResultSharedData};
 
     /// A simple wrapper over CassRow.
     /// Needed, so we can implement Yokeable for it, instead of implementing it for CassRow.
@@ -161,185 +225,251 @@ mod row_with_self_borrowed_metadata {
     ///
     /// It's needed to safely express the relationship between [`CassRowsResult`][super::CassRowsResult]
     /// and its `first_row` field. The relationship is as follows:
-    /// 1. `CassRowsResult` owns `metadata` field, which is an `Arc<CassResultMetadata>`.
+    /// 1. `CassRowsResult` owns `shared_data` field, which is an `Arc<CassRowsResultSharedData>`.
     /// 2. `CassRowsResult` owns the row (`first_row`)
-    /// 3. `CassRow` borrows `metadata` field (as a reference)
+    /// 3. `CassRow` borrows from `shared_data` (serialized values bytes and metadata).
     ///
-    /// This struct is a shared owner of the metadata, and self-borrows the metadata
+    /// This struct is a shared owner of the row bytes and metadata, and self-borrows this data
     /// to the `CassRow` it contains.
-    pub struct RowWithSelfBorrowedMetadata(Yoke<CassRowWrapper<'static>, Arc<CassResultMetadata>>);
+    pub struct RowWithSelfBorrowedResultData(
+        Yoke<CassRowWrapper<'static>, Arc<CassRowsResultSharedData>>,
+    );
 
-    impl RowWithSelfBorrowedMetadata {
-        /// Constructs [`RowWithSelfBorrowedMetadata`] based on the first row from `raw_rows`.
+    impl RowWithSelfBorrowedResultData {
+        /// Constructs [`RowWithSelfBorrowedResultData`] based on the first row from `raw_rows_and_metadata`.
         pub(super) fn first_from_raw_rows_and_metadata(
-            raw_rows: &DeserializedMetadataAndRawRows,
-            metadata: Arc<CassResultMetadata>,
+            raw_rows_and_metadata: Arc<CassRowsResultSharedData>,
         ) -> Result<Option<Self>, CassErrorResult> {
-            let row = raw_rows
-                .rows_iter::<Row>()
-                // unwrap: Row always passes the typecheck.
-                .unwrap()
-                .next()
-                .transpose()?
-                .map(|row: Row| Self::new_from_row_and_metadata(row, metadata));
+            enum AttachError {
+                CassErrorResult(CassErrorResult),
+                NoRows,
+            }
+            impl From<CassErrorResult> for AttachError {
+                fn from(err: CassErrorResult) -> Self {
+                    AttachError::CassErrorResult(err)
+                }
+            }
 
-            Ok(row)
+            let yoke_result = Yoke::try_attach_to_cart(
+                raw_rows_and_metadata,
+                |raw_rows_and_metadata_ref| -> Result<_, AttachError> {
+                    let CassRowsResultSharedData { raw_rows, metadata } = raw_rows_and_metadata_ref;
+
+                    let raw_row_result = raw_rows
+                        .rows_iter::<CassRawRow>()
+                        // unwrap: CassRawRow always passes the typecheck.
+                        .unwrap()
+                        .next()
+                        .ok_or(AttachError::NoRows)?;
+
+                    let row_result = raw_row_result
+                        .and_then(|raw_row| CassRow::from_raw_row_and_metadata(raw_row, metadata));
+
+                    let row = row_result
+                        .map_err(DeserializationError::into)
+                        .map_err(AttachError::CassErrorResult)?;
+
+                    Ok(CassRowWrapper(row))
+                },
+            );
+
+            match yoke_result {
+                Ok(yoke) => Ok(Some(Self(yoke))),
+                Err(AttachError::NoRows) => Ok(None),
+                Err(AttachError::CassErrorResult(err)) => Err(err),
+            }
         }
 
         pub(super) fn row(&self) -> &CassRow<'_> {
             &self.0.get().0
         }
+    }
+}
 
-        pub(super) fn new_from_row_and_metadata(
-            row: Row,
-            metadata: Arc<CassResultMetadata>,
-        ) -> Self {
-            let yoke = Yoke::attach_to_cart(metadata, |metadata_ref| {
-                CassRowWrapper(CassRow::from_row_and_metadata(row, metadata_ref))
-            });
+/// A separate module so there is no way to construct CassRawValue other than using `DeserializeValue` implementation.
+/// This is because `CassRawValue` maps the "empty" values to null in this implementation.
+pub(crate) mod cass_raw_value {
+    use scylla::cluster::metadata::{ColumnType, NativeType};
+    use scylla::deserialize::value::DeserializeValue;
+    use scylla::deserialize::FrameSlice;
+    use scylla::errors::{DeserializationError, TypeCheckError};
+    use thiserror::Error;
 
-            Self(yoke)
+    pub(crate) struct CassRawValue<'frame, 'metadata> {
+        typ: &'metadata ColumnType<'metadata>,
+        slice: Option<FrameSlice<'frame>>,
+        /// Required to implement [`super::cass_value_item_count`].
+        item_count: Option<usize>,
+    }
+
+    #[derive(Error, Debug)]
+    pub(crate) enum CollectionLengthDeserializationError {
+        #[error("Provided slice is too short. Expected at least 4 bytes, got {0}.")]
+        TooFewBytes(usize),
+        #[error("Deserialized length is negative: {0}.")]
+        NegativeLength(i32),
+    }
+
+    /// Precomputes the `item_count` from raw value.
+    /// It is required to implement [`cass_value_item_count`].
+    fn determine_value_item_count(
+        typ: &ColumnType<'_>,
+        slice: Option<FrameSlice<'_>>,
+    ) -> Result<Option<usize>, CollectionLengthDeserializationError> {
+        // Pre-compute the item count. Required to implement cass_value_item_count.
+        // The cpp-driver semantics:
+        // - tuples/UDTs - obtain the value count from type metadata
+        // - collections - deserialize the first 4 bytes as collection length
+        // - other types - always return 0 when `cass_value_item_count` is called
+        let item_count: Option<usize> = slice
+            .map(|frame_slice| match typ {
+                ColumnType::Collection { .. } => {
+                    let slice = frame_slice.as_slice();
+                    let length_arr: [u8; 4] = slice
+                        .get(0..4)
+                        .ok_or(CollectionLengthDeserializationError::TooFewBytes(
+                            slice.len(),
+                        ))?
+                        .try_into()
+                        // unwrap: Conversion from slice of length 4 to array of length 4 is safe.
+                        .unwrap();
+
+                    let i32_length = i32::from_be_bytes(length_arr);
+                    let length = i32_length.try_into().map_err(|_| {
+                        CollectionLengthDeserializationError::NegativeLength(i32_length)
+                    })?;
+
+                    Ok(Some(length))
+                }
+                ColumnType::Tuple(types) => Ok(Some(types.len())),
+                ColumnType::UserDefinedType { definition, .. } => {
+                    Ok(Some(definition.field_types.len()))
+                }
+                _ => Ok(None),
+            })
+            .transpose()?
+            .flatten();
+
+        Ok(item_count)
+    }
+
+    impl<'frame, 'metadata> DeserializeValue<'frame, 'metadata> for CassRawValue<'frame, 'metadata> {
+        fn type_check(_typ: &ColumnType) -> Result<(), TypeCheckError> {
+            Ok(())
+        }
+
+        fn deserialize(
+            typ: &'metadata ColumnType<'metadata>,
+            v: Option<FrameSlice<'frame>>,
+        ) -> Result<Self, DeserializationError> {
+            // Handle the "empty" values. cpp-driver fallbacks to null if:
+            // 1. the value is "empty", AND
+            // 2. the type is non-string/non-byte and emptiable.
+            // TODO: Extend the C API and support "empty" values.
+            let slice = match (typ, v) {
+                // For non-emptiable/string/byte types just return the slice.
+                (
+                    // These types do not support "empty values".
+                    // See https://github.com/scylladb/scylla-rust-driver/blob/v1.1.0/scylla-cql/src/frame/response/result.rs#L220-L240.
+                    ColumnType::Collection { .. }
+                    | ColumnType::UserDefinedType { .. }
+                    | ColumnType::Native(NativeType::Duration)
+                    | ColumnType::Native(NativeType::Counter)
+
+                    // string/byte types
+                    | ColumnType::Native(NativeType::Ascii)
+                    | ColumnType::Native(NativeType::Text)
+                    | ColumnType::Native(NativeType::Blob),
+                    slice,
+                ) => slice,
+
+                // For the types that support "empty" values, fallback to null.
+                (_, Some(slice)) if slice.is_empty() => None,
+
+                // Value is not "empty", just return the slice.
+                (_, slice) => slice,
+            };
+
+            let item_count =
+                determine_value_item_count(typ, slice).map_err(DeserializationError::new)?;
+
+            Ok(Self {
+                typ,
+                slice,
+                item_count,
+            })
+        }
+    }
+
+    impl<'frame, 'metadata> CassRawValue<'frame, 'metadata> {
+        pub(crate) fn typ(&self) -> &'metadata ColumnType<'metadata> {
+            self.typ
+        }
+
+        pub(crate) fn slice(&self) -> Option<FrameSlice<'frame>> {
+            self.slice
+        }
+
+        pub(crate) fn item_count(&self) -> Option<usize> {
+            self.item_count
         }
     }
 }
 
-pub enum Value {
-    RegularValue(CqlValue),
-    CollectionValue(Collection),
+pub struct CassValue<'result> {
+    pub(crate) value: CassRawValue<'result, 'result>,
+    pub(crate) value_type: &'result Arc<CassDataType>,
 }
 
-pub enum Collection {
-    List(Vec<CassValue>),
-    Map(Vec<(CassValue, CassValue)>),
-    Set(Vec<CassValue>),
-    UserDefinedType {
-        keyspace: String,
-        type_name: String,
-        fields: Vec<(String, Option<CassValue>)>,
-    },
-    Tuple(Vec<Option<CassValue>>),
-}
-
-pub struct CassValue {
-    pub value: Option<Value>,
-    pub value_type: Arc<CassDataType>,
-}
-
-impl FFI for CassValue {
+impl FFI for CassValue<'_> {
     type Origin = FromRef;
 }
 
-fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<CassValue> {
-    row.columns
-        .into_iter()
-        .zip(metadata.col_specs.iter())
-        .map(|(val, col_spec)| {
-            let column_type = Arc::clone(&col_spec.data_type);
-            CassValue {
-                value: val.map(|col_val| get_column_value(col_val, &column_type)),
-                value_type: column_type,
-            }
-        })
-        .collect()
+impl<'result> CassValue<'result> {
+    pub fn get_non_null<T>(&'result self) -> Result<T, NonNullDeserializationError>
+    where
+        T: DeserializeValue<'result, 'result>,
+    {
+        let (typ, frame_slice) = (self.value.typ(), self.value.slice());
+        if frame_slice.is_none() {
+            return Err(NonNullDeserializationError::IsNull);
+        }
+
+        T::type_check(typ)?;
+        let v = T::deserialize(typ, frame_slice)?;
+        Ok(v)
+    }
+
+    pub fn get_bytes_non_null(&self) -> Result<&'result [u8], NonNullDeserializationError> {
+        let Some(slice) = self.value.slice() else {
+            return Err(NonNullDeserializationError::IsNull);
+        };
+
+        Ok(slice.as_slice())
+    }
 }
 
-fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value {
-    match (column, unsafe { column_type.get_unchecked() }) {
-        (
-            CqlValue::List(list),
-            CassDataTypeInner::List {
-                typ: Some(list_type),
-                ..
-            },
-        ) => CollectionValue(Collection::List(
-            list.into_iter()
-                .map(|val| CassValue {
-                    value_type: list_type.clone(),
-                    value: Some(get_column_value(val, list_type)),
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::Map(map),
-            CassDataTypeInner::Map {
-                typ: MapDataType::KeyAndValue(key_type, value_type),
-                ..
-            },
-        ) => CollectionValue(Collection::Map(
-            map.into_iter()
-                .map(|(key, val)| {
-                    (
-                        CassValue {
-                            value_type: key_type.clone(),
-                            value: Some(get_column_value(key, key_type)),
-                        },
-                        CassValue {
-                            value_type: value_type.clone(),
-                            value: Some(get_column_value(val, value_type)),
-                        },
-                    )
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::Set(set),
-            CassDataTypeInner::Set {
-                typ: Some(set_type),
-                ..
-            },
-        ) => CollectionValue(Collection::Set(
-            set.into_iter()
-                .map(|val| CassValue {
-                    value_type: set_type.clone(),
-                    value: Some(get_column_value(val, set_type)),
-                })
-                .collect(),
-        )),
-        (
-            CqlValue::UserDefinedType {
-                keyspace,
-                name,
-                fields,
-            },
-            CassDataTypeInner::UDT(udt_type),
-        ) => CollectionValue(Collection::UserDefinedType {
-            keyspace,
-            type_name: name,
-            fields: fields
-                .into_iter()
-                .enumerate()
-                .map(|(index, (name, val_opt))| {
-                    let udt_field_type_opt = udt_type.get_field_by_index(index);
-                    if let (Some(val), Some(udt_field_type)) = (val_opt, udt_field_type_opt) {
-                        return (
-                            name,
-                            Some(CassValue {
-                                value_type: udt_field_type.clone(),
-                                value: Some(get_column_value(val, udt_field_type)),
-                            }),
-                        );
-                    }
-                    (name, None)
-                })
-                .collect(),
-        }),
-        (CqlValue::Tuple(tuple), CassDataTypeInner::Tuple(tuple_types)) => {
-            CollectionValue(Collection::Tuple(
-                tuple
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, val_opt)| {
-                        val_opt
-                            .zip(tuple_types.get(index))
-                            .map(|(val, tuple_field_type)| CassValue {
-                                value_type: tuple_field_type.clone(),
-                                value: Some(get_column_value(val, tuple_field_type)),
-                            })
-                    })
-                    .collect(),
-            ))
+#[derive(Debug, Error)]
+pub enum NonNullDeserializationError {
+    #[error("Value is null")]
+    IsNull,
+    #[error("Typecheck failed: {0}")]
+    Typecheck(#[from] TypeCheckError),
+    #[error("Deserialization failed: {0}")]
+    Deserialization(#[from] DeserializationError),
+}
+
+impl ToCassError for NonNullDeserializationError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            NonNullDeserializationError::IsNull => CassError::CASS_ERROR_LIB_NULL_VALUE,
+            NonNullDeserializationError::Typecheck(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE
+            }
+            NonNullDeserializationError::Deserialization(_) => {
+                CassError::CASS_ERROR_LIB_INVALID_DATA
+            }
         }
-        (regular_value, _) => RegularValue(regular_value),
     }
 }
 
@@ -364,7 +494,7 @@ unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CCons
 pub unsafe extern "C" fn cass_row_get_column<'result>(
     row_raw: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     index: size_t,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let row: &CassRow = RefFFI::as_ref(row_raw).unwrap();
 
     let index_usize: usize = index.try_into().unwrap();
@@ -380,7 +510,7 @@ pub unsafe extern "C" fn cass_row_get_column<'result>(
 pub unsafe extern "C" fn cass_row_get_column_by_name<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let name_str = unsafe { ptr_to_cstr(name) }.unwrap();
     let name_length = name_str.len();
 
@@ -392,7 +522,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
     name_length: size_t,
-) -> CassBorrowedSharedPtr<'result, CassValue, CConst> {
+) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
     let row_from_raw = RefFFI::as_ref(row).unwrap();
     let mut name_str = unsafe { ptr_to_cstr_n(name, name_length).unwrap() };
     let mut is_case_sensitive = false;
@@ -429,15 +559,20 @@ pub unsafe extern "C" fn cass_result_column_name(
     let result_from_raw = ArcFFI::as_ref(result).unwrap();
     let index_usize: usize = index.try_into().unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
+    let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result_from_raw.kind else {
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     };
 
-    if index_usize >= metadata.col_specs.len() {
+    if index_usize >= shared_data.metadata.col_specs.len() {
         return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
     }
 
-    let column_name = &metadata.col_specs.get(index_usize).unwrap().name;
+    let column_name = &shared_data
+        .metadata
+        .col_specs
+        .get(index_usize)
+        .unwrap()
+        .name;
 
     unsafe { write_str_to_c(column_name, name, name_length) };
 
@@ -466,11 +601,12 @@ pub unsafe extern "C" fn cass_result_column_data_type(
         .try_into()
         .expect("Provided index is out of bounds. Max possible value is usize::MAX");
 
-    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result_from_raw.kind else {
+    let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result_from_raw.kind else {
         return ArcFFI::null();
     };
 
-    metadata
+    shared_data
+        .metadata
         .col_specs
         .get(index_usize)
         .map(|col_spec| ArcFFI::as_ptr(&col_spec.data_type))
@@ -482,16 +618,16 @@ pub unsafe extern "C" fn cass_value_type(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
     let value_from_raw = RefFFI::as_ref(value).unwrap();
-    unsafe { cass_data_type_type(ArcFFI::as_ptr(&value_from_raw.value_type)) }
+    unsafe { cass_data_type_type(ArcFFI::as_ptr(value_from_raw.value_type)) }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_value_data_type(
-    value: CassBorrowedSharedPtr<CassValue, CConst>,
-) -> CassBorrowedSharedPtr<CassDataType, CConst> {
+pub unsafe extern "C" fn cass_value_data_type<'result>(
+    value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
+) -> CassBorrowedSharedPtr<'result, CassDataType, CConst> {
     let value_from_raw = RefFFI::as_ref(value).unwrap();
 
-    ArcFFI::as_ptr(&value_from_raw.value_type)
+    ArcFFI::as_ptr(value_from_raw.value_type)
 }
 
 macro_rules! val_ptr_to_ref_ensure_non_null {
@@ -510,11 +646,12 @@ pub unsafe extern "C" fn cass_value_get_float(
     output: *mut cass_float_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Float(f))) => unsafe { std::ptr::write(output, f) },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let f: f32 = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, f) };
 
     CassError::CASS_OK
 }
@@ -525,11 +662,12 @@ pub unsafe extern "C" fn cass_value_get_double(
     output: *mut cass_double_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Double(d))) => unsafe { std::ptr::write(output, d) },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let f: f64 = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, f) };
 
     CassError::CASS_OK
 }
@@ -540,13 +678,12 @@ pub unsafe extern "C" fn cass_value_get_bool(
     output: *mut cass_bool_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Boolean(b))) => unsafe {
-            std::ptr::write(output, b as cass_bool_t)
-        },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let b: bool = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, b as cass_bool_t) };
 
     CassError::CASS_OK
 }
@@ -557,11 +694,12 @@ pub unsafe extern "C" fn cass_value_get_int8(
     output: *mut cass_int8_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::TinyInt(i))) => unsafe { std::ptr::write(output, i) },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let i: i8 = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, i) };
 
     CassError::CASS_OK
 }
@@ -572,11 +710,12 @@ pub unsafe extern "C" fn cass_value_get_int16(
     output: *mut cass_int16_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::SmallInt(i))) => unsafe { std::ptr::write(output, i) },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let i: i16 = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, i) };
 
     CassError::CASS_OK
 }
@@ -587,11 +726,12 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     output: *mut cass_uint32_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Date(u))) => unsafe { std::ptr::write(output, u.0) }, // FIXME: hack
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let date: CqlDate = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, date.0) };
 
     CassError::CASS_OK
 }
@@ -602,11 +742,12 @@ pub unsafe extern "C" fn cass_value_get_int32(
     output: *mut cass_int32_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Int(i))) => unsafe { std::ptr::write(output, i) },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let i: i32 = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, i) };
 
     CassError::CASS_OK
 }
@@ -617,18 +758,40 @@ pub unsafe extern "C" fn cass_value_get_int64(
     output: *mut cass_int64_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::BigInt(i))) => unsafe { std::ptr::write(output, i) },
-        Some(Value::RegularValue(CqlValue::Counter(i))) => unsafe {
-            std::ptr::write(output, i.0 as cass_int64_t)
+
+    let i: i64 = match val.value.typ() {
+        ColumnType::Native(NativeType::BigInt) => match val.get_non_null::<i64>() {
+            Ok(v) => v,
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
         },
-        Some(Value::RegularValue(CqlValue::Time(d))) => unsafe { std::ptr::write(output, d.0) },
-        Some(Value::RegularValue(CqlValue::Timestamp(d))) => unsafe {
-            std::ptr::write(output, d.0 as cass_int64_t)
+        ColumnType::Native(NativeType::Counter) => match val.get_non_null::<Counter>() {
+            Ok(v) => v.0,
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
         },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+        ColumnType::Native(NativeType::Time) => match val.get_non_null::<CqlTime>() {
+            Ok(v) => v.0,
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
+        },
+        ColumnType::Native(NativeType::Timestamp) => match val.get_non_null::<CqlTimestamp>() {
+            Ok(v) => v.0,
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
+        },
+        _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
     };
+
+    unsafe { std::ptr::write(output, i) };
 
     CassError::CASS_OK
 }
@@ -639,16 +802,26 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     output: *mut CassUuid,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Uuid(uuid))) => unsafe {
-            std::ptr::write(output, uuid.into())
+
+    let uuid: Uuid = match val.value.typ() {
+        ColumnType::Native(NativeType::Uuid) => match val.get_non_null::<Uuid>() {
+            Ok(v) => v,
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
         },
-        Some(Value::RegularValue(CqlValue::Timeuuid(uuid))) => unsafe {
-            std::ptr::write(output, Into::<Uuid>::into(uuid).into())
+        ColumnType::Native(NativeType::Timeuuid) => match val.get_non_null::<CqlTimeuuid>() {
+            Ok(v) => v.into(),
+            Err(NonNullDeserializationError::Typecheck(_)) => {
+                panic!("The typecheck unexpectedly failed!")
+            }
+            Err(e) => return e.to_cass_error(),
         },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+        _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
     };
+
+    unsafe { std::ptr::write(output, uuid.into()) };
 
     CassError::CASS_OK
 }
@@ -659,13 +832,12 @@ pub unsafe extern "C" fn cass_value_get_inet(
     output: *mut CassInet,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match val.value {
-        Some(Value::RegularValue(CqlValue::Inet(inet))) => unsafe {
-            std::ptr::write(output, inet.into())
-        },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let inet: IpAddr = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
+    unsafe { std::ptr::write(output, inet.into()) };
 
     CassError::CASS_OK
 }
@@ -678,10 +850,10 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     scale: *mut cass_int32_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    let decimal = match &val.value {
-        Some(Value::RegularValue(CqlValue::Decimal(decimal))) => decimal,
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+
+    let decimal: CqlDecimalBorrowed = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
     };
 
     let (varint_value, scale_value) = decimal.as_signed_be_bytes_slice_and_exponent();
@@ -701,20 +873,25 @@ pub unsafe extern "C" fn cass_value_get_string(
     output_size: *mut size_t,
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
-    match &val.value {
-        // It seems that cpp driver doesn't check the type - you can call _get_string
-        // on any type and get internal represenation. I don't see how to do it easily in
-        // a compatible way in rust, so let's do something sensible - only return result
-        // for string values.
-        Some(Value::RegularValue(CqlValue::Ascii(s))) => unsafe {
-            write_str_to_c(s.as_str(), output, output_size)
-        },
-        Some(Value::RegularValue(CqlValue::Text(s))) => unsafe {
-            write_str_to_c(s.as_str(), output, output_size)
-        },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
-    }
+
+    // It seems that cpp driver doesn't check the type - you can call _get_string
+    // on any type and get internal representation. I don't see how to do it easily in
+    // a compatible way in rust, so let's do something sensible - only return result
+    // for string values.
+    let s = match val.value.typ() {
+        ColumnType::Native(NativeType::Ascii) | ColumnType::Native(NativeType::Text) => {
+            match val.get_non_null::<&str>() {
+                Ok(v) => v,
+                Err(NonNullDeserializationError::Typecheck(_)) => {
+                    panic!("The typecheck unexpectedly failed!")
+                }
+                Err(e) => return e.to_cass_error(),
+            }
+        }
+        _ => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
+    };
+
+    unsafe { write_str_to_c(s, output, output_size) };
 
     CassError::CASS_OK
 }
@@ -728,14 +905,15 @@ pub unsafe extern "C" fn cass_value_get_duration(
 ) -> CassError {
     let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
 
-    match &val.value {
-        Some(Value::RegularValue(CqlValue::Duration(duration))) => unsafe {
-            std::ptr::write(months, duration.months);
-            std::ptr::write(days, duration.days);
-            std::ptr::write(nanos, duration.nanoseconds);
-        },
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    let duration: CqlDuration = match val.get_non_null() {
+        Ok(v) => v,
+        Err(e) => return e.to_cass_error(),
+    };
+
+    unsafe {
+        std::ptr::write(months, duration.months);
+        std::ptr::write(days, duration.days);
+        std::ptr::write(nanos, duration.nanoseconds);
     }
 
     CassError::CASS_OK
@@ -749,22 +927,14 @@ pub unsafe extern "C" fn cass_value_get_bytes(
 ) -> CassError {
     let value_from_raw: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
 
-    // FIXME: This should be implemented for all CQL types
-    // Note: currently rust driver does not allow to get raw bytes of the CQL value.
-    match &value_from_raw.value {
-        Some(Value::RegularValue(CqlValue::Blob(bytes))) => unsafe {
-            *output = bytes.as_ptr() as *const cass_byte_t;
-            *output_size = bytes.len() as u64;
-        },
-        Some(Value::RegularValue(CqlValue::Varint(varint))) => {
-            let bytes = varint.as_signed_bytes_be_slice();
-            unsafe {
-                std::ptr::write(output, bytes.as_ptr());
-                std::ptr::write(output_size, bytes.len() as size_t);
-            }
-        }
-        Some(_) => return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE,
-        None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+    let bytes = match value_from_raw.get_bytes_non_null() {
+        Ok(s) => s,
+        Err(e) => return e.to_cass_error(),
+    };
+
+    unsafe {
+        std::ptr::write(output, bytes.as_ptr());
+        std::ptr::write(output_size, bytes.len() as size_t);
     }
 
     CassError::CASS_OK
@@ -775,7 +945,7 @@ pub unsafe extern "C" fn cass_value_is_null(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
     let val: &CassValue = RefFFI::as_ref(value).unwrap();
-    val.value.is_none() as cass_bool_t
+    val.value.slice().is_none() as cass_bool_t
 }
 
 #[no_mangle]
@@ -808,16 +978,7 @@ pub unsafe extern "C" fn cass_value_item_count(
 ) -> size_t {
     let val = RefFFI::as_ref(collection).unwrap();
 
-    match &val.value {
-        Some(Value::CollectionValue(Collection::List(list))) => list.len() as size_t,
-        Some(Value::CollectionValue(Collection::Map(map))) => map.len() as size_t,
-        Some(Value::CollectionValue(Collection::Set(set))) => set.len() as size_t,
-        Some(Value::CollectionValue(Collection::Tuple(tuple))) => tuple.len() as size_t,
-        Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) => {
-            fields.len() as size_t
-        }
-        _ => 0 as size_t,
-    }
+    val.value.item_count().unwrap_or(0) as size_t
 }
 
 #[no_mangle]
@@ -862,11 +1023,11 @@ pub unsafe extern "C" fn cass_result_row_count(
 ) -> size_t {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { raw_rows, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result.kind else {
         return 0;
     };
 
-    raw_rows.rows_count() as size_t
+    shared_data.raw_rows.rows_count() as size_t
 }
 
 #[no_mangle]
@@ -875,11 +1036,11 @@ pub unsafe extern "C" fn cass_result_column_count(
 ) -> size_t {
     let result = ArcFFI::as_ref(result_raw).unwrap();
 
-    let CassResultKind::Rows(CassRowsResult { metadata, .. }) = &result.kind else {
+    let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result.kind else {
         return 0;
     };
 
-    metadata.col_specs.len() as size_t
+    shared_data.metadata.col_specs.len() as size_t
 }
 
 #[no_mangle]
@@ -894,7 +1055,7 @@ pub unsafe extern "C" fn cass_result_first_row(
 
     first_row
         .as_ref()
-        .map(RowWithSelfBorrowedMetadata::row)
+        .map(RowWithSelfBorrowedResultData::row)
         .map(RefFFI::as_ptr)
         .unwrap_or(RefFFI::null())
 }
@@ -937,24 +1098,23 @@ mod tests {
     use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows, TableSpec};
     use scylla::response::query_result::ColumnSpecs;
     use scylla::response::PagingStateResponse;
-    use scylla::value::{CqlValue, Row};
 
-    use crate::argconv::CConst;
+    use crate::argconv::{ptr_to_cstr_n, CConst, CassBorrowedSharedPtr};
+    use crate::cass_types::{CassDataType, CassDataTypeInner};
     use crate::{
         argconv::{ArcFFI, RefFFI},
         cass_error::CassError,
-        cass_types::{CassDataType, CassDataTypeInner, CassValueType},
+        cass_types::CassValueType,
         query_result::{
-            cass_result_column_data_type, cass_result_column_name, cass_result_first_row,
-            ptr_to_cstr_n, size_t,
+            cass_result_column_data_type, cass_result_column_name, cass_result_first_row, size_t,
         },
     };
     use std::{ffi::c_char, ptr::addr_of_mut, sync::Arc};
 
-    use super::row_with_self_borrowed_metadata::RowWithSelfBorrowedMetadata;
+    use super::row_with_self_borrowed_result_data::RowWithSelfBorrowedResultData;
     use super::{
-        cass_result_column_count, cass_result_column_type, CassBorrowedSharedPtr, CassResult,
-        CassResultKind, CassResultMetadata, CassRowsResult,
+        cass_result_column_count, cass_result_column_type, CassResult, CassResultKind,
+        CassResultMetadata, CassRowsResult, CassRowsResultSharedData,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {
@@ -977,28 +1137,19 @@ mod tests {
             ),
         ])));
 
-        let first_row = Some(RowWithSelfBorrowedMetadata::new_from_row_and_metadata(
-            Row {
-                columns: vec![
-                    Some(CqlValue::BigInt(42)),
-                    None,
-                    Some(CqlValue::List(vec![
-                        CqlValue::Float(0.5),
-                        CqlValue::Float(42.42),
-                        CqlValue::Float(9999.9999),
-                    ])),
-                ],
-            },
-            Arc::clone(&metadata),
-        ));
+        let raw_rows = DeserializedMetadataAndRawRows::mock_empty();
+        let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
+        let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
+            Arc::clone(&shared_data),
+        )
+        .unwrap();
 
         CassResult {
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
             kind: CassResultKind::Rows(CassRowsResult {
-                raw_rows: DeserializedMetadataAndRawRows::mock_empty(),
+                shared_data,
                 first_row,
-                metadata,
             }),
         }
     }
