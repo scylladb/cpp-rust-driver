@@ -57,14 +57,14 @@ impl From<&WriteType> for CassWriteType {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_free(
     error_result: CassOwnedSharedPtr<CassErrorResult, CConst>,
 ) {
     ArcFFI::free(error_result);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_code(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassError {
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn cass_error_result_code(
     error_result.to_cass_error()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_consistency(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassConsistency {
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn cass_error_result_consistency(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_responses_received(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn cass_error_result_responses_received(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_responses_required(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn cass_error_result_responses_required(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_num_failures(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
@@ -153,7 +153,7 @@ pub unsafe extern "C" fn cass_error_result_num_failures(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_data_present(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_bool_t {
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn cass_error_result_data_present(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_write_type(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassWriteType {
@@ -197,7 +197,7 @@ pub unsafe extern "C" fn cass_error_result_write_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_keyspace(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
     c_keyspace: *mut *const ::std::os::raw::c_char,
@@ -221,7 +221,7 @@ pub unsafe extern "C" fn cass_error_result_keyspace(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_table(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
     c_table: *mut *const ::std::os::raw::c_char,
@@ -239,7 +239,7 @@ pub unsafe extern "C" fn cass_error_result_table(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_function(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
     c_function: *mut *const ::std::os::raw::c_char,
@@ -257,7 +257,7 @@ pub unsafe extern "C" fn cass_error_result_function(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_num_arg_types(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> size_t {
@@ -270,7 +270,7 @@ pub unsafe extern "C" fn cass_error_num_arg_types(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_result_arg_type(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
     index: size_t,

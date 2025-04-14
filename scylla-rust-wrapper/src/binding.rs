@@ -50,7 +50,7 @@
 
 macro_rules! make_index_binder {
     ($this:ty, $consume_v:expr, $fn_by_idx:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_idx(
             this: CassBorrowedExclusivePtr<$this, CMut>,
@@ -70,7 +70,7 @@ macro_rules! make_index_binder {
 
 macro_rules! make_name_binder {
     ($this:ty, $consume_v:expr, $fn_by_name:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_name(
             this: CassBorrowedExclusivePtr<$this, CMut>,
@@ -91,7 +91,7 @@ macro_rules! make_name_binder {
 
 macro_rules! make_name_n_binder {
     ($this:ty, $consume_v:expr, $fn_by_name_n:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_name_n(
             this: CassBorrowedExclusivePtr<$this, CMut>,
@@ -113,7 +113,7 @@ macro_rules! make_name_n_binder {
 
 macro_rules! make_appender {
     ($this:ty, $consume_v:expr, $fn_append:ident, $e:expr, [$($arg:ident @ $t:ty), *]) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_append(
             this: CassBorrowedExclusivePtr<$this, CMut>,

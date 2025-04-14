@@ -1,7 +1,7 @@
 use crate::cass_error::*;
 use std::os::raw::c_char;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_error_desc(error: CassError) -> *const c_char {
     let desc = match error {
         CassError::CASS_ERROR_LIB_BAD_PARAMS => c"Bad parameters",

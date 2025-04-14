@@ -68,18 +68,18 @@ fn monotonic_timestamp(last_timestamp: &mut AtomicU64) -> u64 {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_uuid_version(uuid: CassUuid) -> cass_uint8_t {
     ((uuid.time_and_version >> 60) & 0x0F) as cass_uint8_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_uuid_timestamp(uuid: CassUuid) -> cass_uint64_t {
     let timestamp: u64 = uuid.time_and_version & 0x0FFFFFFFFFFFFFFF;
     to_milliseconds(timestamp.wrapping_sub(TIME_OFFSET_BETWEEN_UTC_AND_EPOCH))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_min_from_time(timestamp: cass_uint64_t, output: *mut CassUuid) {
     let uuid = CassUuid {
         time_and_version: set_version(from_unix_timestamp(timestamp), 1),
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn cass_uuid_min_from_time(timestamp: cass_uint64_t, outpu
     unsafe { std::ptr::write(output, uuid) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_max_from_time(timestamp: cass_uint64_t, output: *mut CassUuid) {
     let uuid = CassUuid {
         time_and_version: set_version(from_unix_timestamp(timestamp), 1),
@@ -99,7 +99,7 @@ pub unsafe extern "C" fn cass_uuid_max_from_time(timestamp: cass_uint64_t, outpu
     unsafe { std::ptr::write(output, uuid) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_new() -> CassOwnedExclusivePtr<CassUuidGen, CMut> {
     // Inspired by C++ driver implementation in its intent.
     // The original driver tries to generate a number that
@@ -123,7 +123,7 @@ pub unsafe extern "C" fn cass_uuid_gen_new() -> CassOwnedExclusivePtr<CassUuidGe
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_new_with_node(
     node: cass_uint64_t,
 ) -> CassOwnedExclusivePtr<CassUuidGen, CMut> {
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn cass_uuid_gen_new_with_node(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_time(
     uuid_gen: CassBorrowedExclusivePtr<CassUuidGen, CMut>,
     output: *mut CassUuid,
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn cass_uuid_gen_time(
     unsafe { std::ptr::write(output, uuid) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
     let time_and_version: u64 = rand::random();
     let clock_seq_and_node: u64 = rand::random();
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, outpu
     unsafe { std::ptr::write(output, uuid) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_from_time(
     uuid_gen: CassBorrowedExclusivePtr<CassUuidGen, CMut>,
     timestamp: cass_uint64_t,
@@ -213,7 +213,7 @@ impl From<Uuid> for CassUuid {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_string(uuid_raw: CassUuid, output: *mut c_char) {
     let uuid: Uuid = uuid_raw.into();
 
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn cass_uuid_string(uuid_raw: CassUuid, output: *mut c_cha
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_from_string(
     value: *const c_char,
     output: *mut CassUuid,
@@ -239,7 +239,7 @@ pub unsafe extern "C" fn cass_uuid_from_string(
     unsafe { cass_uuid_from_string_n(value, strlen(value), output) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_from_string_n(
     value: *const c_char,
     value_length: size_t,
@@ -258,7 +258,7 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_uuid_gen_free(uuid_gen: CassOwnedExclusivePtr<CassUuidGen, CMut>) {
     BoxFFI::free(uuid_gen);
 }

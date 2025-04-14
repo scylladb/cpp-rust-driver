@@ -1,10 +1,10 @@
 use crate::argconv::{
     ArcFFI, BoxFFI, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr, CassOwnedExclusivePtr,
-    FromBox, FFI,
+    FFI, FromBox,
 };
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cass_types::{make_batch_type, CassBatchType};
+use crate::cass_types::{CassBatchType, make_batch_type};
 use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
@@ -32,7 +32,7 @@ pub struct CassBatchState {
     pub bound_values: Vec<Vec<MaybeUnset<Option<CassCqlValue>>>>,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_new(
     type_: CassBatchType,
 ) -> CassOwnedExclusivePtr<CassBatch, CMut> {
@@ -50,12 +50,12 @@ pub unsafe extern "C" fn cass_batch_new(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_free(batch: CassOwnedExclusivePtr<CassBatch, CMut>) {
     BoxFFI::free(batch);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_consistency(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     consistency: CassConsistency,
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn cass_batch_set_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_serial_consistency(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     serial_consistency: CassConsistency,
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_retry_policy(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -112,7 +112,7 @@ pub unsafe extern "C" fn cass_batch_set_retry_policy(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_timestamp(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     timestamp: cass_int64_t,
@@ -126,7 +126,7 @@ pub unsafe extern "C" fn cass_batch_set_timestamp(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_request_timeout(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     timeout_ms: cass_uint64_t,
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn cass_batch_set_request_timeout(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_is_idempotent(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     is_idempotent: cass_bool_t,
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn cass_batch_set_is_idempotent(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_tracing(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     enabled: cass_bool_t,
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn cass_batch_set_tracing(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_add_statement(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,

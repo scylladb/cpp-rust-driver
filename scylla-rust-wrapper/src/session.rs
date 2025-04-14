@@ -2,8 +2,8 @@ use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
 use crate::cass_types::get_column_type;
-use crate::cluster::build_session_builder;
 use crate::cluster::CassCluster;
+use crate::cluster::build_session_builder;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
@@ -19,8 +19,8 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::cluster::metadata::ColumnType;
 use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
-use scylla::response::query_result::QueryResult;
 use scylla::response::PagingStateResponse;
+use scylla::response::query_result::QueryResult;
 use scylla::statement::unprepared::Statement;
 use std::collections::HashMap;
 use std::future::Future;
@@ -141,13 +141,13 @@ impl FFI for CassSession {
     type Origin = FromArc;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
     let session = Arc::new(RwLock::new(None::<CassSessionInner>));
     ArcFFI::into_ptr(session)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_connect(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn cass_session_connect(
     CassSessionInner::connect(session_opt, cluster, None)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_connect_keyspace(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
@@ -167,7 +167,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace(
     unsafe { cass_session_connect_keyspace_n(session_raw, cluster_raw, keyspace, strlen(keyspace)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     CassSessionInner::connect(session_opt, cluster, keyspace)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
@@ -247,7 +247,7 @@ async fn request_with_timeout(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_execute(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     statement_raw: CassBorrowedSharedPtr<CassStatement, CConst>,
@@ -382,7 +382,7 @@ pub unsafe extern "C" fn cass_session_execute(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_prepare_from_existing(
     cass_session: CassBorrowedSharedPtr<CassSession, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,
@@ -418,7 +418,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_prepare(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
     query: *const c_char,
@@ -426,7 +426,7 @@ pub unsafe extern "C" fn cass_session_prepare(
     unsafe { cass_session_prepare_n(session, query, strlen(query)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_prepare_n(
     cass_session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     query: *const c_char,
@@ -465,12 +465,12 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassSession, CMut>) {
     ArcFFI::free(session_raw);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_close(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -491,7 +491,7 @@ pub unsafe extern "C" fn cass_session_close(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_get_client_id(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
 ) -> CassUuid {
@@ -501,7 +501,7 @@ pub unsafe extern "C" fn cass_session_get_client_id(
     client_id.into()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: CassBorrowedSharedPtr<CassSession, CConst>,
 ) -> CassOwnedExclusivePtr<CassSchemaMeta, CConst> {
@@ -594,17 +594,17 @@ mod tests {
             cass_cluster_set_retry_policy,
         },
         exec_profile::{
-            cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
+            ExecProfileName, cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
             cass_execution_profile_free, cass_execution_profile_new,
             cass_execution_profile_set_latency_aware_routing,
             cass_execution_profile_set_retry_policy, cass_statement_set_execution_profile,
-            cass_statement_set_execution_profile_n, ExecProfileName,
+            cass_statement_set_execution_profile_n,
         },
         future::{
             cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
         },
         retry_policy::{
-            cass_retry_policy_default_new, cass_retry_policy_fallthrough_new, CassRetryPolicy,
+            CassRetryPolicy, cass_retry_policy_default_new, cass_retry_policy_fallthrough_new,
         },
         statement::{cass_statement_free, cass_statement_new, cass_statement_set_retry_policy},
         testing::assert_cass_error_eq,
@@ -731,13 +731,15 @@ mod tests {
                 ));
                 // Initially, the profile map is empty.
 
-                assert!(ArcFFI::as_ref(session_raw.borrow())
-                    .unwrap()
-                    .blocking_read()
-                    .as_ref()
-                    .unwrap()
-                    .exec_profile_map
-                    .is_empty());
+                assert!(
+                    ArcFFI::as_ref(session_raw.borrow())
+                        .unwrap()
+                        .blocking_read()
+                        .as_ref()
+                        .unwrap()
+                        .exec_profile_map
+                        .is_empty()
+                );
 
                 cass_cluster_set_execution_profile(
                     cluster_raw.borrow_mut(),
@@ -745,13 +747,15 @@ mod tests {
                     profile_raw.borrow_mut(),
                 );
                 // Mutations in cluster do not affect the session that was connected before.
-                assert!(ArcFFI::as_ref(session_raw.borrow())
-                    .unwrap()
-                    .blocking_read()
-                    .as_ref()
-                    .unwrap()
-                    .exec_profile_map
-                    .is_empty());
+                assert!(
+                    ArcFFI::as_ref(session_raw.borrow())
+                        .unwrap()
+                        .blocking_read()
+                        .as_ref()
+                        .unwrap()
+                        .exec_profile_map
+                        .is_empty()
+                );
 
                 cass_future_wait_check_and_free(cass_session_close(session_raw.borrow()));
 
@@ -831,7 +835,9 @@ mod tests {
             let (nonexisting_name_c_str, nonexisting_name_len) = str_to_c_str_n(nonexisting_name);
 
             // Inserting into virtual system tables is prohibited and results in WriteFailure error.
-            let invalid_query = make_c_str!("INSERT INTO system.runtime_info (group, item, value) VALUES ('bindings_test', 'bindings_test', 'bindings_test')");
+            let invalid_query = make_c_str!(
+                "INSERT INTO system.runtime_info (group, item, value) VALUES ('bindings_test', 'bindings_test', 'bindings_test')"
+            );
             let mut statement_raw = cass_statement_new(invalid_query, 0);
             let mut batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
             assert_cass_error_eq!(
@@ -911,15 +917,17 @@ mod tests {
                         ),
                         CassError::CASS_ERROR_SERVER_WRITE_FAILURE
                     );
-                    assert!(statement
-                        .exec_profile
-                        .as_ref()
-                        .unwrap()
-                        .inner()
-                        .read()
-                        .unwrap()
-                        .as_handle()
-                        .is_some());
+                    assert!(
+                        statement
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_handle()
+                            .is_some()
+                    );
                     assert_cass_error_eq!(
                         cass_future_error_code(
                             cass_session_execute_batch(
@@ -930,15 +938,17 @@ mod tests {
                         ),
                         CassError::CASS_ERROR_SERVER_WRITE_FAILURE
                     );
-                    assert!(batch
-                        .exec_profile
-                        .as_ref()
-                        .unwrap()
-                        .inner()
-                        .read()
-                        .unwrap()
-                        .as_handle()
-                        .is_some());
+                    assert!(
+                        batch
+                            .exec_profile
+                            .as_ref()
+                            .unwrap()
+                            .inner()
+                            .read()
+                            .unwrap()
+                            .as_handle()
+                            .is_some()
+                    );
 
                     // NULL name sets exec profile to None
                     assert_cass_error_eq!(
@@ -1076,8 +1086,8 @@ mod tests {
         .await;
     }
 
-    fn retry_policy_on_statement_and_batch_is_handled_properly_rules(
-    ) -> impl IntoIterator<Item = RequestRule> {
+    fn retry_policy_on_statement_and_batch_is_handled_properly_rules()
+    -> impl IntoIterator<Item = RequestRule> {
         handshake_rules()
             .into_iter()
             .chain(iter::once(RequestRule(

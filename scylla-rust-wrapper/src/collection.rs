@@ -135,7 +135,7 @@ impl TryFrom<&CassCollection> for CassCqlValue {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_collection_new(
     collection_type: CassCollectionType,
     item_count: size_t,
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn cass_collection_new(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn cass_collection_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     item_count: size_t,
@@ -183,7 +183,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn cass_collection_data_type(
     collection: CassBorrowedSharedPtr<CassCollection, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
@@ -204,7 +204,7 @@ unsafe extern "C" fn cass_collection_data_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_collection_free(
     collection: CassOwnedExclusivePtr<CassCollection, CMut>,
 ) {
@@ -237,8 +237,8 @@ mod tests {
         argconv::ArcFFI,
         cass_error::CassError,
         cass_types::{
-            cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new, CassDataType,
-            CassDataTypeInner, CassValueType, MapDataType,
+            CassDataType, CassDataTypeInner, CassValueType, MapDataType,
+            cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new,
         },
         collection::{
             cass_collection_append_double, cass_collection_append_float, cass_collection_free,
@@ -247,9 +247,8 @@ mod tests {
     };
 
     use super::{
-        cass_bool_t, cass_collection_append_bool, cass_collection_append_int16,
+        CassCollectionType, cass_bool_t, cass_collection_append_bool, cass_collection_append_int16,
         cass_collection_data_type, cass_collection_new, cass_collection_new_from_data_type,
-        CassCollectionType,
     };
 
     #[test]

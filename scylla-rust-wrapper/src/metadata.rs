@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::cass_column_types::CassColumnType;
-use crate::cass_types::get_column_type;
 use crate::cass_types::CassDataType;
+use crate::cass_types::get_column_type;
 use crate::types::*;
 use scylla::cluster::metadata::{ColumnKind, Table};
 use std::collections::HashMap;
@@ -116,14 +116,14 @@ pub fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTa
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_schema_meta_free(
     schema_meta: CassOwnedExclusivePtr<CassSchemaMeta, CConst>,
 ) {
     BoxFFI::free(schema_meta);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name(
     schema_meta: CassBorrowedSharedPtr<CassSchemaMeta, CConst>,
     keyspace_name: *const c_char,
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
     schema_meta: CassBorrowedSharedPtr<CassSchemaMeta, CConst>,
     keyspace_name: *const c_char,
@@ -154,7 +154,7 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     name: *mut *const c_char,
@@ -164,7 +164,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_name(
     unsafe { write_str_to_c(keyspace_meta.name.as_str(), name, name_length) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     type_: *const c_char,
@@ -172,7 +172,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name(
     unsafe { cass_keyspace_meta_user_type_by_name_n(keyspace_meta, type_, strlen(type_)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     type_: *const c_char,
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_table_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     table: *const c_char,
@@ -202,7 +202,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name(
     unsafe { cass_keyspace_meta_table_by_name_n(keyspace_meta, table, strlen(table)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     table: *const c_char,
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_name(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     name: *mut *const c_char,
@@ -233,7 +233,7 @@ pub unsafe extern "C" fn cass_table_meta_name(
     unsafe { write_str_to_c(table_meta.name.as_str(), name, name_length) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_column_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
@@ -241,7 +241,7 @@ pub unsafe extern "C" fn cass_table_meta_column_count(
     table_meta.columns_metadata.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_column(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
@@ -294,7 +294,7 @@ pub unsafe extern "C" fn cass_table_meta_column(
         })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_partition_key(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
@@ -310,7 +310,7 @@ pub unsafe extern "C" fn cass_table_meta_partition_key(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_partition_key_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
@@ -318,7 +318,7 @@ pub unsafe extern "C" fn cass_table_meta_partition_key_count(
     table_meta.partition_keys.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_clustering_key(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
@@ -334,7 +334,7 @@ pub unsafe extern "C" fn cass_table_meta_clustering_key(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_clustering_key_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
@@ -342,7 +342,7 @@ pub unsafe extern "C" fn cass_table_meta_clustering_key_count(
     table_meta.clustering_keys.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_column_by_name(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     column: *const c_char,
@@ -350,7 +350,7 @@ pub unsafe extern "C" fn cass_table_meta_column_by_name(
     unsafe { cass_table_meta_column_by_name_n(table_meta, column, strlen(column)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_column_by_name_n(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     column: *const c_char,
@@ -369,7 +369,7 @@ pub unsafe extern "C" fn cass_table_meta_column_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_column_meta_name(
     column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
     name: *mut *const c_char,
@@ -379,7 +379,7 @@ pub unsafe extern "C" fn cass_column_meta_name(
     unsafe { write_str_to_c(column_meta.name.as_str(), name, name_length) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_column_meta_data_type(
     column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
@@ -387,7 +387,7 @@ pub unsafe extern "C" fn cass_column_meta_data_type(
     ArcFFI::as_ptr(&column_meta.column_type)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_column_meta_type(
     column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
 ) -> CassColumnType {
@@ -395,7 +395,7 @@ pub unsafe extern "C" fn cass_column_meta_type(
     column_meta.column_kind
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     view: *const c_char,
@@ -403,7 +403,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name(
     unsafe { cass_keyspace_meta_materialized_view_by_name_n(keyspace_meta, view, strlen(view)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name_n(
     keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
     view: *const c_char,
@@ -422,7 +422,7 @@ pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     view: *const c_char,
@@ -430,7 +430,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name(
     unsafe { cass_table_meta_materialized_view_by_name_n(table_meta, view, strlen(view)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     view: *const c_char,
@@ -449,7 +449,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_materialized_view_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
@@ -457,7 +457,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_count(
     table_meta.views.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_table_meta_materialized_view(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
@@ -470,7 +470,7 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     column: *const c_char,
@@ -478,7 +478,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name(
     unsafe { cass_materialized_view_meta_column_by_name_n(view_meta, column, strlen(column)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name_n(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     column: *const c_char,
@@ -497,7 +497,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_name(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     name: *mut *const c_char,
@@ -507,7 +507,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_name(
     unsafe { write_str_to_c(view_meta.name.as_str(), name, name_length) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> CassBorrowedSharedPtr<CassTableMeta, CConst> {
@@ -515,12 +515,14 @@ pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
 
     let ptr = unsafe { RefFFI::weak_as_ptr(&view_meta.base_table) };
     if RefFFI::is_null(&ptr) {
-        tracing::error!("Failed to upgrade a weak reference to table metadata from materialized view metadata! This is a driver bug!");
+        tracing::error!(
+            "Failed to upgrade a weak reference to table metadata from materialized view metadata! This is a driver bug!"
+        );
     }
     ptr
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_column_count(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> size_t {
@@ -528,7 +530,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_count(
     view_meta.view_metadata.columns_metadata.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_column(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
@@ -546,7 +548,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_partition_key_count(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> size_t {
@@ -569,7 +571,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key_count(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> size_t {

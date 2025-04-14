@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType, UserDefinedType};
-use scylla::deserialize::value::DeserializeValue;
 use scylla::deserialize::FrameSlice;
+use scylla::deserialize::value::DeserializeValue;
 use scylla::serialize::value::SerializeValue;
 use scylla::serialize::writers::CellWriter;
 use scylla::value::{CqlDecimal, CqlDuration, CqlValue};
@@ -29,18 +29,18 @@ use crate::cass_error::CassError;
 use crate::cass_types::get_column_type;
 use crate::inet::CassInet;
 use crate::iterator::{
-    cass_iterator_fields_from_user_type, cass_iterator_free, cass_iterator_from_collection,
-    cass_iterator_from_map, cass_iterator_from_tuple, cass_iterator_get_map_key,
-    cass_iterator_get_map_value, cass_iterator_get_user_type_field_name,
+    CassIterator, CassIteratorType, cass_iterator_fields_from_user_type, cass_iterator_free,
+    cass_iterator_from_collection, cass_iterator_from_map, cass_iterator_from_tuple,
+    cass_iterator_get_map_key, cass_iterator_get_map_value, cass_iterator_get_user_type_field_name,
     cass_iterator_get_user_type_field_value, cass_iterator_get_value, cass_iterator_next,
-    cass_iterator_type, CassIterator, CassIteratorType,
+    cass_iterator_type,
 };
 use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
-    cass_value_get_bool, cass_value_get_bytes, cass_value_get_decimal, cass_value_get_double,
-    cass_value_get_duration, cass_value_get_float, cass_value_get_inet, cass_value_get_int16,
-    cass_value_get_int32, cass_value_get_int64, cass_value_get_int8, cass_value_get_string,
-    cass_value_get_uuid, cass_value_is_null, cass_value_item_count, CassValue,
+    CassValue, cass_value_get_bool, cass_value_get_bytes, cass_value_get_decimal,
+    cass_value_get_double, cass_value_get_duration, cass_value_get_float, cass_value_get_inet,
+    cass_value_get_int8, cass_value_get_int16, cass_value_get_int32, cass_value_get_int64,
+    cass_value_get_string, cass_value_get_uuid, cass_value_is_null, cass_value_item_count,
 };
 use crate::testing::{assert_cass_error_eq, setup_tracing};
 use crate::types::size_t;
@@ -546,11 +546,19 @@ fn test_deserialize_map_iterator() {
             ),
         };
         let to_serialize = HashMap::<String, i32>::from([
-        (String::from("forty two"), 42),
-        (String::from("four thousand two hundred forty-two"), 4242),
-        (String::from("four hundred twenty-four thousand four hundred twenty-four"), 424242),
-        (String::from("four hundred twenty-four million two hundred forty-two thousand four hundred twenty-two"), 42424242),
-    ]);
+            (String::from("forty two"), 42),
+            (String::from("four thousand two hundred forty-two"), 4242),
+            (
+                String::from("four hundred twenty-four thousand four hundred twenty-four"),
+                424242,
+            ),
+            (
+                String::from(
+                    "four hundred twenty-four million two hundred forty-two thousand four hundred twenty-two",
+                ),
+                42424242,
+            ),
+        ]);
         let bytes = Bytes::from(do_serialize(&to_serialize, &typ));
         let data_type = Arc::new(get_column_type(&typ));
         let cass_value = CassValue {

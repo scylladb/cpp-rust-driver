@@ -1,10 +1,10 @@
-use std::ffi::{c_char, CString};
+use std::ffi::{CString, c_char};
 
 use crate::argconv::{BoxFFI, CMut, CassBorrowedExclusivePtr};
 use crate::cluster::CassCluster;
 use crate::types::{cass_int32_t, cass_uint16_t, size_t};
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_cluster_get_connect_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) -> cass_uint16_t {
@@ -13,7 +13,7 @@ pub unsafe extern "C" fn testing_cluster_get_connect_timeout(
     cluster.get_session_config().connect_timeout.as_millis() as cass_uint16_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_cluster_get_port(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) -> cass_int32_t {
@@ -22,7 +22,7 @@ pub unsafe extern "C" fn testing_cluster_get_port(
     cluster.get_port() as cass_int32_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_cluster_get_contact_points(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     contact_points: *mut *mut c_char,
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn testing_cluster_get_contact_points(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_free_contact_points(contact_points: *mut c_char) {
     let _ = unsafe { CString::from_raw(contact_points) };
 }

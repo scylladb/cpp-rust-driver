@@ -1,8 +1,8 @@
 use crate::argconv::*;
 use crate::cass_error::{CassError, ToCassError};
 use crate::cass_types::{
-    cass_data_type_type, get_column_type, CassColumnSpec, CassDataType, CassDataTypeInner,
-    CassValueType, MapDataType,
+    CassColumnSpec, CassDataType, CassDataTypeInner, CassValueType, MapDataType,
+    cass_data_type_type, get_column_type,
 };
 use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
@@ -17,8 +17,8 @@ use scylla::deserialize::row::{
 use scylla::deserialize::value::DeserializeValue;
 use scylla::errors::{DeserializationError, IntoRowsResultError, TypeCheckError};
 use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows};
-use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::response::PagingStateResponse;
+use scylla::response::query_result::{ColumnSpecs, QueryResult};
 use scylla::value::{
     Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid,
 };
@@ -290,8 +290,8 @@ mod row_with_self_borrowed_result_data {
 /// This is because `CassRawValue` maps the "empty" values to null in this implementation.
 pub(crate) mod cass_raw_value {
     use scylla::cluster::metadata::{ColumnType, NativeType};
-    use scylla::deserialize::value::DeserializeValue;
     use scylla::deserialize::FrameSlice;
+    use scylla::deserialize::value::DeserializeValue;
     use scylla::errors::{DeserializationError, TypeCheckError};
     use thiserror::Error;
 
@@ -473,12 +473,12 @@ impl ToCassError for NonNullDeserializationError {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_free(result_raw: CassOwnedSharedPtr<CassResult, CConst>) {
     ArcFFI::free(result_raw);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_has_more_pages(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> cass_bool_t {
@@ -490,7 +490,7 @@ unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CCons
     (!result.paging_state_response.finished()) as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_row_get_column<'result>(
     row_raw: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     index: size_t,
@@ -506,7 +506,7 @@ pub unsafe extern "C" fn cass_row_get_column<'result>(
     RefFFI::as_ptr(column_value)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_row_get_column_by_name<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
@@ -517,7 +517,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name<'result>(
     unsafe { cass_row_get_column_by_name_n(row, name, name_length as size_t) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     name: *const c_char,
@@ -549,7 +549,7 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
         .unwrap_or(RefFFI::null())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_column_name(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     index: size_t,
@@ -579,7 +579,7 @@ pub unsafe extern "C" fn cass_result_column_name(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_column_type(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     index: size_t,
@@ -591,7 +591,7 @@ pub unsafe extern "C" fn cass_result_column_type(
     unsafe { cass_data_type_type(data_type_ptr) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_column_data_type(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     index: size_t,
@@ -613,7 +613,7 @@ pub unsafe extern "C" fn cass_result_column_data_type(
         .unwrap_or(ArcFFI::null())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_type(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
@@ -621,7 +621,7 @@ pub unsafe extern "C" fn cass_value_type(
     unsafe { cass_data_type_type(ArcFFI::as_ptr(value_from_raw.value_type)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_data_type<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassDataType, CConst> {
@@ -640,7 +640,7 @@ macro_rules! val_ptr_to_ref_ensure_non_null {
     }};
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_float(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_float_t,
@@ -656,7 +656,7 @@ pub unsafe extern "C" fn cass_value_get_float(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_double(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_double_t,
@@ -672,7 +672,7 @@ pub unsafe extern "C" fn cass_value_get_double(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_bool(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_bool_t,
@@ -688,7 +688,7 @@ pub unsafe extern "C" fn cass_value_get_bool(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_int8(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int8_t,
@@ -704,7 +704,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_int16(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int16_t,
@@ -720,7 +720,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_uint32(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_uint32_t,
@@ -736,7 +736,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_int32(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int32_t,
@@ -752,7 +752,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_int64(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int64_t,
@@ -796,7 +796,7 @@ pub unsafe extern "C" fn cass_value_get_int64(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_uuid(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut CassUuid,
@@ -826,7 +826,7 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_inet(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut CassInet,
@@ -842,7 +842,7 @@ pub unsafe extern "C" fn cass_value_get_inet(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_decimal(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     varint: *mut *const cass_byte_t,
@@ -866,7 +866,7 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_string(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut *const c_char,
@@ -896,7 +896,7 @@ pub unsafe extern "C" fn cass_value_get_string(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_duration(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     months: *mut cass_int32_t,
@@ -919,7 +919,7 @@ pub unsafe extern "C" fn cass_value_get_duration(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_get_bytes(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut *const cass_byte_t,
@@ -940,7 +940,7 @@ pub unsafe extern "C" fn cass_value_get_bytes(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_is_null(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
@@ -948,7 +948,7 @@ pub unsafe extern "C" fn cass_value_is_null(
     val.value.slice().is_none() as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_is_collection(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
@@ -962,7 +962,7 @@ pub unsafe extern "C" fn cass_value_is_collection(
     ) as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_is_duration(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
@@ -972,7 +972,7 @@ pub unsafe extern "C" fn cass_value_is_duration(
         == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_item_count(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> size_t {
@@ -981,7 +981,7 @@ pub unsafe extern "C" fn cass_value_item_count(
     val.value.item_count().unwrap_or(0) as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_primary_sub_type(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
@@ -1002,7 +1002,7 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_value_secondary_sub_type(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
@@ -1017,7 +1017,7 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_row_count(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> size_t {
@@ -1030,7 +1030,7 @@ pub unsafe extern "C" fn cass_result_row_count(
     shared_data.raw_rows.rows_count() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_column_count(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> size_t {
@@ -1043,7 +1043,7 @@ pub unsafe extern "C" fn cass_result_column_count(
     shared_data.metadata.col_specs.len() as size_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_first_row(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> CassBorrowedSharedPtr<CassRow, CConst> {
@@ -1060,7 +1060,7 @@ pub unsafe extern "C" fn cass_result_first_row(
         .unwrap_or(RefFFI::null())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_result_paging_state_token(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     paging_state: *mut *const c_char,
@@ -1096,10 +1096,10 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
 mod tests {
     use scylla::cluster::metadata::{CollectionType, ColumnType, NativeType};
     use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows, TableSpec};
-    use scylla::response::query_result::ColumnSpecs;
     use scylla::response::PagingStateResponse;
+    use scylla::response::query_result::ColumnSpecs;
 
-    use crate::argconv::{ptr_to_cstr_n, CConst, CassBorrowedSharedPtr};
+    use crate::argconv::{CConst, CassBorrowedSharedPtr, ptr_to_cstr_n};
     use crate::cass_types::{CassDataType, CassDataTypeInner};
     use crate::{
         argconv::{ArcFFI, RefFFI},
@@ -1113,8 +1113,8 @@ mod tests {
 
     use super::row_with_self_borrowed_result_data::RowWithSelfBorrowedResultData;
     use super::{
-        cass_result_column_count, cass_result_column_type, CassResult, CassResultKind,
-        CassResultMetadata, CassRowsResult, CassRowsResultSharedData,
+        CassResult, CassResultKind, CassResultMetadata, CassRowsResult, CassRowsResultSharedData,
+        cass_result_column_count, cass_result_column_type,
     };
 
     fn col_spec(name: &'static str, typ: ColumnType<'static>) -> ColumnSpec<'static> {

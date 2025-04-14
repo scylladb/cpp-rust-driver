@@ -1,7 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::exec_profile::{exec_profile_builder_modify, CassExecProfile, ExecProfileName};
+use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
@@ -10,10 +10,10 @@ use crate::types::*;
 use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
+use scylla::client::SelfIdentity;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session::SessionConfig;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::client::SelfIdentity;
 use scylla::frame::Compression;
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
@@ -197,7 +197,7 @@ pub fn build_session_builder(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster, CMut> {
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
@@ -237,12 +237,12 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_free(cluster: CassOwnedExclusivePtr<CassCluster, CMut>) {
     BoxFFI::free(cluster);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_contact_points(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     contact_points: *const c_char,
@@ -250,7 +250,7 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points(
     unsafe { cass_cluster_set_contact_points_n(cluster, contact_points, strlen(contact_points)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_contact_points_n(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     contact_points: *const c_char,
@@ -291,7 +291,7 @@ unsafe fn cluster_set_contact_points(
     Ok(())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
     _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     _enabled: cass_bool_t,
@@ -301,7 +301,7 @@ pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_application_name(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_name: *const c_char,
@@ -309,7 +309,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_name(
     unsafe { cass_cluster_set_application_name_n(cluster_raw, app_name, strlen(app_name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_application_name_n(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_name: *const c_char,
@@ -327,7 +327,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_name_n(
         .set_application_name(app_name)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_application_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_version: *const c_char,
@@ -335,7 +335,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_version(
     unsafe { cass_cluster_set_application_version_n(cluster_raw, app_version, strlen(app_version)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_application_version_n(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     app_version: *const c_char,
@@ -353,7 +353,7 @@ pub unsafe extern "C" fn cass_cluster_set_application_version_n(
         .set_application_version(app_version);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_client_id(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     client_id: CassUuid,
@@ -371,7 +371,7 @@ pub unsafe extern "C" fn cass_cluster_set_client_id(
         .set_client_id(client_uuid_str)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -380,7 +380,7 @@ pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster.session_builder.config.fetch_schema_metadata = enabled != 0;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -389,7 +389,7 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
     cluster.session_builder.config.tcp_nodelay = enabled != 0;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -402,7 +402,7 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     interval_secs: c_uint,
@@ -413,7 +413,7 @@ pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
     cluster.session_builder.config.keepalive_interval = keepalive_interval;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_secs: c_uint,
@@ -424,7 +424,7 @@ pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
     cluster.session_builder.config.keepalive_timeout = keepalive_timeout;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_ms: c_uint,
@@ -433,7 +433,7 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_request_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_ms: c_uint,
@@ -446,7 +446,7 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_max_schema_wait_time(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     wait_time_ms: c_uint,
@@ -457,7 +457,7 @@ pub unsafe extern "C" fn cass_cluster_set_max_schema_wait_time(
         Duration::from_millis(wait_time_ms.into());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_schema_agreement_interval(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     interval_ms: c_uint,
@@ -468,7 +468,7 @@ pub unsafe extern "C" fn cass_cluster_set_schema_agreement_interval(
         Duration::from_millis(interval_ms.into());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_port(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     port: c_int,
@@ -482,7 +482,7 @@ pub unsafe extern "C" fn cass_cluster_set_port(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_credentials(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     username: *const c_char,
@@ -499,7 +499,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     username_raw: *const c_char,
@@ -516,7 +516,7 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     cluster.auth_password = Some(password.to_string());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) {
@@ -524,7 +524,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(
     cluster.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     local_dc: *const c_char,
@@ -567,7 +567,7 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     local_dc_raw: *const c_char,
@@ -588,7 +588,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     local_dc_raw: *const c_char,
@@ -605,7 +605,7 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware_n(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     local_dc_raw: *const c_char,
@@ -654,7 +654,7 @@ pub(crate) unsafe fn set_load_balance_rack_aware_n(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
     _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     path: *const c_char,
@@ -670,7 +670,7 @@ pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_exponential_reconnect(
     _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     base_delay_ms: cass_uint64_t,
@@ -699,13 +699,13 @@ pub unsafe extern "C" fn cass_cluster_set_exponential_reconnect(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_custom_payload_new() -> *const CassCustomPayload {
     // FIXME: should create a new custom payload that must be freed
     std::ptr::null()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_future_custom_payload_item(
     _future: CassBorrowedExclusivePtr<CassFuture, CMut>,
     _i: size_t,
@@ -717,14 +717,14 @@ pub extern "C" fn cass_future_custom_payload_item(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_future_custom_payload_item_count(
     _future: CassBorrowedExclusivePtr<CassFuture, CMut>,
 ) -> size_t {
     0
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_use_beta_protocol_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enable: cass_bool_t,
@@ -735,7 +735,7 @@ pub unsafe extern "C" fn cass_cluster_set_use_beta_protocol_version(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_protocol_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     protocol_version: c_int,
@@ -750,7 +750,7 @@ pub unsafe extern "C" fn cass_cluster_set_protocol_version(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn cass_cluster_set_queue_size_event(
     _cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     _queue_size: c_uint,
@@ -759,7 +759,7 @@ pub extern "C" fn cass_cluster_set_queue_size_event(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     constant_delay_ms: cass_int64_t,
@@ -783,7 +783,7 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) -> CassError {
@@ -796,7 +796,7 @@ pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -805,7 +805,7 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
     cluster.load_balancing_config.token_awareness_enabled = enabled != 0;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -817,7 +817,7 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
         .token_aware_shuffling_replicas_enabled = enabled != 0;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -835,7 +835,7 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_ssl(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
@@ -850,7 +850,7 @@ pub unsafe extern "C" fn cass_cluster_set_ssl(
     cluster_from_raw.session_builder.config.tls_context = Some(ssl_context_builder.build().into());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_compression(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     compression_type: CassCompressionType,
@@ -865,7 +865,7 @@ pub unsafe extern "C" fn cass_cluster_set_compression(
     cluster_from_raw.session_builder.config.compression = compression;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
@@ -874,7 +874,7 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing(
     cluster.load_balancing_config.latency_awareness_enabled = enabled != 0;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     exclusion_threshold: cass_double_t,
@@ -892,7 +892,7 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
         .minimum_measurements(min_measured as usize);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_consistency(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     consistency: CassConsistency,
@@ -910,7 +910,7 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     serial_consistency: CassConsistency,
@@ -928,7 +928,7 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_execution_profile(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     name: *const c_char,
@@ -937,7 +937,7 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile(
     unsafe { cass_cluster_set_execution_profile_n(cluster, name, strlen(name), profile) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     name: *const c_char,

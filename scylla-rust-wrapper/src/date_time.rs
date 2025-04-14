@@ -9,17 +9,17 @@ const CASS_TIME_NANOSECONDS_PER_SECOND: i64 = 1_000_000_000;
 // All type conversions (between i32, u64, i64) based on original Cpp Driver implementation
 // and C++ implicit type promotion rules.
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_date_from_epoch(epoch_secs: cass_int64_t) -> cass_uint32_t {
     ((epoch_secs / NUM_SECONDS_PER_DAY) + (CASS_DATE_EPOCH as i64)) as u32
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_time_from_epoch(epoch_secs: cass_int64_t) -> cass_int64_t {
     CASS_TIME_NANOSECONDS_PER_SECOND * (epoch_secs % NUM_SECONDS_PER_DAY)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_date_time_to_epoch(
     date: cass_uint32_t,
     time: cass_int64_t,

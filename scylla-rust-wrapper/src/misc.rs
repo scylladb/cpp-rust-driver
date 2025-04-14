@@ -1,4 +1,4 @@
-use std::ffi::{c_char, CStr};
+use std::ffi::{CStr, c_char};
 
 use crate::{cass_error_types::CassWriteType, cass_types::CassConsistency};
 
@@ -22,7 +22,7 @@ impl CassConsistency {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_consistency_string(consistency: CassConsistency) -> *const c_char {
     consistency.as_cstr().as_ptr() as *const c_char
 }
@@ -43,7 +43,7 @@ impl CassWriteType {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_write_type_string(write_type: CassWriteType) -> *const c_char {
     write_type.as_cstr().as_ptr() as *const c_char
 }

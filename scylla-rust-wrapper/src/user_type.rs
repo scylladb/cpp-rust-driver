@@ -83,7 +83,7 @@ impl From<&CassUserType> for CassCqlValue {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     data_type_raw: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassUserType, CMut> {
@@ -101,11 +101,11 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_user_type_free(user_type: CassOwnedExclusivePtr<CassUserType, CMut>) {
     BoxFFI::free(user_type);
 }
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_user_type_data_type(
     user_type: CassBorrowedSharedPtr<CassUserType, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {

@@ -1,13 +1,13 @@
-use crate::argconv::{ArcFFI, CMut, CassBorrowedSharedPtr, CassOwnedSharedPtr, FromArc, FFI};
+use crate::argconv::{ArcFFI, CMut, CassBorrowedSharedPtr, CassOwnedSharedPtr, FFI, FromArc};
 use crate::cass_error::CassError;
 use crate::types::size_t;
 use libc::{c_int, strlen};
 use openssl::ssl::SslVerifyMode;
 use openssl_sys::{
-    BIO_free_all, BIO_new_mem_buf, EVP_PKEY_free, PEM_read_bio_PrivateKey, PEM_read_bio_X509,
-    SSL_CTX_add_extra_chain_cert, SSL_CTX_free, SSL_CTX_new, SSL_CTX_set_cert_store,
-    SSL_CTX_set_verify, SSL_CTX_use_PrivateKey, SSL_CTX_use_certificate, TLS_method,
-    X509_STORE_add_cert, X509_STORE_new, X509_free, BIO, SSL_CTX, X509_STORE,
+    BIO, BIO_free_all, BIO_new_mem_buf, EVP_PKEY_free, PEM_read_bio_PrivateKey, PEM_read_bio_X509,
+    SSL_CTX, SSL_CTX_add_extra_chain_cert, SSL_CTX_free, SSL_CTX_new, SSL_CTX_set_cert_store,
+    SSL_CTX_set_verify, SSL_CTX_use_PrivateKey, SSL_CTX_use_certificate, TLS_method, X509_STORE,
+    X509_STORE_add_cert, X509_STORE_new, X509_free,
 };
 use std::convert::TryInto;
 use std::os::raw::c_char;
@@ -28,13 +28,13 @@ pub const CASS_SSL_VERIFY_PEER_CERT: i32 = 0x01;
 pub const CASS_SSL_VERIFY_PEER_IDENTITY: i32 = 0x02;
 pub const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_new() -> CassOwnedSharedPtr<CassSsl, CMut> {
     openssl_sys::init();
     unsafe { cass_ssl_new_no_lib_init() }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> CassOwnedSharedPtr<CassSsl, CMut> {
     let ssl_context: *mut SSL_CTX = unsafe { SSL_CTX_new(TLS_method()) };
     let trusted_store: *mut X509_STORE = unsafe { X509_STORE_new() };
@@ -67,7 +67,7 @@ impl Drop for CassSsl {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_free(ssl: CassOwnedSharedPtr<CassSsl, CMut>) {
     ArcFFI::free(ssl);
 }
@@ -98,7 +98,7 @@ unsafe extern "C" fn pem_password_callback(
     len as c_int
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_add_trusted_cert(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     cert: *const c_char,
@@ -110,7 +110,7 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert(
     unsafe { cass_ssl_add_trusted_cert_n(ssl, cert, strlen(cert).try_into().unwrap()) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     cert: *const c_char,
@@ -146,7 +146,7 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_set_verify_flags(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     flags: i32,
@@ -162,11 +162,15 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(
         },
         _ => {
             if flags & CASS_SSL_VERIFY_PEER_IDENTITY != 0 {
-                eprintln!("The CASS_SSL_VERIFY_PEER_CERT_IDENTITY is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context.");
+                eprintln!(
+                    "The CASS_SSL_VERIFY_PEER_CERT_IDENTITY is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context."
+                );
             }
 
             if flags & CASS_SSL_VERIFY_PEER_IDENTITY_DNS != 0 {
-                eprintln!("The CASS_SSL_VERIFY_PEER_CERT_IDENTITY_DNS is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context.");
+                eprintln!(
+                    "The CASS_SSL_VERIFY_PEER_CERT_IDENTITY_DNS is not supported, CASS_SSL_VERIFY_PEER_CERT is set in SSL context."
+                );
             }
 
             unsafe { SSL_CTX_set_verify(ssl.ssl_context, SslVerifyMode::PEER.bits(), None) };
@@ -174,7 +178,7 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_set_cert(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     cert: *const c_char,
@@ -186,7 +190,7 @@ pub unsafe extern "C" fn cass_ssl_set_cert(
     unsafe { cass_ssl_set_cert_n(ssl, cert, strlen(cert).try_into().unwrap()) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_set_cert_n(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     cert: *const c_char,
@@ -262,7 +266,7 @@ unsafe extern "C" fn SSL_CTX_use_certificate_chain_bio(
     ret
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_set_private_key(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     key: *const c_char,
@@ -283,7 +287,7 @@ pub unsafe extern "C" fn cass_ssl_set_private_key(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_set_private_key_n(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     key: *const c_char,

@@ -64,7 +64,7 @@ impl From<&CassTuple> for CassCqlValue {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_tuple_new(
     item_count: size_t,
 ) -> CassOwnedExclusivePtr<CassTuple, CMut> {
@@ -74,7 +74,7 @@ pub unsafe extern "C" fn cass_tuple_new(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassTuple, CMut> {
@@ -89,12 +89,12 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn cass_tuple_free(tuple: CassOwnedExclusivePtr<CassTuple, CMut>) {
     BoxFFI::free(tuple);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn cass_tuple_data_type(
     tuple: CassBorrowedSharedPtr<CassTuple, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
@@ -128,7 +128,7 @@ make_binders!(user_type, cass_tuple_set_user_type);
 #[cfg(test)]
 mod tests {
     use crate::cass_types::{
-        cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new, CassValueType,
+        CassValueType, cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new,
     };
 
     use super::{cass_tuple_data_type, cass_tuple_new};

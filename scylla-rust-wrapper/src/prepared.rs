@@ -5,7 +5,7 @@ use std::{os::raw::c_char, sync::Arc};
 use crate::{
     argconv::*,
     cass_error::CassError,
-    cass_types::{get_column_type, CassDataType},
+    cass_types::{CassDataType, get_column_type},
     query_result::CassResultMetadata,
     statement::{BoundPreparedStatement, BoundStatement, CassStatement},
     types::size_t,
@@ -77,14 +77,14 @@ impl FFI for CassPrepared {
     type Origin = FromArc;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_free(
     prepared_raw: CassOwnedSharedPtr<CassPrepared, CConst>,
 ) {
     ArcFFI::free(prepared_raw);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
 ) -> CassOwnedExclusivePtr<CassStatement, CMut> {
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn cass_prepared_bind(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_parameter_name(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     index: size_t,
@@ -131,7 +131,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     index: size_t,
@@ -144,7 +144,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     name: *const c_char,
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name(
     unsafe { cass_prepared_parameter_data_type_by_name_n(prepared_raw, name, strlen(name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     name: *const c_char,

@@ -2,12 +2,12 @@ use std::{convert::TryInto, net::IpAddr, sync::Arc};
 
 use scylla::cluster::metadata::NativeType;
 use scylla::frame::response::result::ColumnType;
+use scylla::serialize::SerializationError;
 use scylla::serialize::value::{
     BuiltinSerializationErrorKind, MapSerializationErrorKind, SerializeValue,
     SetOrListSerializationErrorKind, TupleSerializationErrorKind, UdtSerializationErrorKind,
 };
 use scylla::serialize::writers::{CellWriter, WrittenCellProof};
-use scylla::serialize::SerializationError;
 use scylla::value::{CqlDate, CqlDecimal, CqlDuration};
 use uuid::Uuid;
 
@@ -417,7 +417,7 @@ mod tests {
 
     use crate::{
         cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType, UDTDataType},
-        value::{is_type_compatible, CassCqlValue},
+        value::{CassCqlValue, is_type_compatible},
     };
 
     fn all_value_data_types() -> Vec<CassDataType> {
