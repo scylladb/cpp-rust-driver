@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
-use crate::logging::stderr_log_callback;
 use crate::logging::Logger;
+use crate::logging::stderr_log_callback;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use tokio::runtime::Runtime;
@@ -129,21 +129,21 @@ pub static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
 
 // To send a Rust object to C:
 
-// #[no_mangle]
+// #[unsafe(no_mangle)]
 // pub extern "C" fn create_foo() -> *mut Foo {
 //     BoxFFI::into_raw(Box::new(Foo))
 // }
 
 // To borrow (and not free) from C:
 
-// #[no_mangle]
+// #[unsafe(no_mangle)]
 // pub unsafe extern "C" fn do(foo: *mut Foo) -> *mut Foo {
 //     let foo = argconv::ptr_to_ref(foo);
 // }
 
 // To take over/destroy Rust object previously given to C:
 
-// #[no_mangle]
+// #[unsafe(no_mangle)]
 // pub unsafe extern "C" fn free_foo(foo: *mut Foo) {
 //     // Take the ownership of the value and it will be automatically dropped
 //     argconv::ptr_to_opt_box(foo);

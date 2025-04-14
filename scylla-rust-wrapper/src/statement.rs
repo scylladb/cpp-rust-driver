@@ -9,12 +9,12 @@ use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
 use scylla::response::{PagingState, PagingStateResponse};
+use scylla::serialize::SerializationError;
 use scylla::serialize::row::{RowSerializationContext, SerializeRow};
 use scylla::serialize::value::SerializeValue;
 use scylla::serialize::writers::RowWriter;
-use scylla::serialize::SerializationError;
-use scylla::statement::unprepared::Statement;
 use scylla::statement::SerialConsistency;
+use scylla::statement::unprepared::Statement;
 use scylla::value::MaybeUnset;
 use scylla::value::MaybeUnset::{Set, Unset};
 use std::collections::HashMap;
@@ -260,7 +260,7 @@ impl CassStatement {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_new(
     query: *const c_char,
     parameter_count: size_t,
@@ -268,7 +268,7 @@ pub unsafe extern "C" fn cass_statement_new(
     unsafe { cass_statement_new_n(query, strlen(query), parameter_count) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_new_n(
     query: *const c_char,
     query_length: size_t,
@@ -297,14 +297,14 @@ pub unsafe extern "C" fn cass_statement_new_n(
     }))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_free(
     statement_raw: CassOwnedExclusivePtr<CassStatement, CMut>,
 ) {
     BoxFFI::free(statement_raw);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_consistency(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     consistency: CassConsistency,
@@ -323,7 +323,7 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_paging_size(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     page_size: c_int,
@@ -345,7 +345,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_paging_state(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     result: CassBorrowedSharedPtr<CassResult, CConst>,
@@ -360,7 +360,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     paging_state: *const c_char,
@@ -380,7 +380,7 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_is_idempotent(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     is_idempotent: cass_bool_t,
@@ -395,7 +395,7 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_tracing(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     enabled: cass_bool_t,
@@ -410,7 +410,7 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -434,7 +434,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     serial_consistency: CassConsistency,
@@ -480,7 +480,7 @@ fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_timestamp(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     timestamp: cass_int64_t,
@@ -495,7 +495,7 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_request_timeout(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     timeout_ms: cass_uint64_t,
@@ -514,7 +514,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_reset_parameters(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     count: size_t,

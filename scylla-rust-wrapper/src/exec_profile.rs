@@ -14,15 +14,15 @@ use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 
 use crate::argconv::{
-    ptr_to_cstr_n, strlen, ArcFFI, BoxFFI, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
-    CassOwnedExclusivePtr, FromBox, FFI,
+    ArcFFI, BoxFFI, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr, CassOwnedExclusivePtr,
+    FFI, FromBox, ptr_to_cstr_n, strlen,
 };
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cluster::{
-    set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, LoadBalancingConfig,
-    LoadBalancingKind,
+    LoadBalancingConfig, LoadBalancingKind, set_load_balance_dc_aware_n,
+    set_load_balance_rack_aware_n,
 };
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
@@ -175,13 +175,13 @@ pub(crate) enum PerStatementExecProfileInner {
     Resolved(ExecutionProfileHandle),
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_new() -> CassOwnedExclusivePtr<CassExecProfile, CMut>
 {
     BoxFFI::into_ptr(Box::new(CassExecProfile::new()))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_free(
     profile: CassOwnedExclusivePtr<CassExecProfile, CMut>,
 ) {
@@ -190,7 +190,7 @@ pub unsafe extern "C" fn cass_execution_profile_free(
 
 /* Exec profiles scope setters */
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_execution_profile(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     name: *const c_char,
@@ -198,7 +198,7 @@ pub unsafe extern "C" fn cass_statement_set_execution_profile(
     unsafe { cass_statement_set_execution_profile_n(statement, name, strlen(name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     name: *const c_char,
@@ -212,7 +212,7 @@ pub unsafe extern "C" fn cass_statement_set_execution_profile_n(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_execution_profile(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     name: *const c_char,
@@ -220,7 +220,7 @@ pub unsafe extern "C" fn cass_batch_set_execution_profile(
     unsafe { cass_batch_set_execution_profile_n(batch, name, strlen(name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_set_execution_profile_n(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     name: *const c_char,
@@ -254,7 +254,7 @@ impl CassExecProfile {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_consistency(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     consistency: CassConsistency,
@@ -270,7 +270,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_policy(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
 ) -> CassError {
@@ -281,7 +281,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_pol
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_execution_policy(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     constant_delay_ms: cass_int64_t,
@@ -303,7 +303,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_executi
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     enabled: cass_bool_t,
@@ -316,7 +316,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing_settings(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     exclusion_threshold: cass_double_t,
@@ -335,7 +335,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_latency_aware_routing_settin
         .minimum_measurements(min_measured as usize);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     local_dc: *const c_char,
@@ -353,7 +353,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     local_dc: *const c_char,
@@ -374,7 +374,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_dc_aware_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     local_dc_raw: *const c_char,
@@ -391,7 +391,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     local_dc_raw: *const c_char,
@@ -412,7 +412,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_rack_aware_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
 ) -> CassError {
@@ -422,7 +422,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     timeout_ms: cass_uint64_t,
@@ -435,7 +435,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -451,7 +451,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     serial_consistency: CassConsistency,
@@ -472,7 +472,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     enabled: cass_bool_t,
@@ -485,7 +485,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing(
     CassError::CASS_OK
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_replicas(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     enabled: cass_bool_t,

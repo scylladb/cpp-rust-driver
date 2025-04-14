@@ -302,11 +302,7 @@ impl CassDataTypeInner {
                 udt_data_type.field_types.get(index).map(|(_, b)| b)
             }
             CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
-                if index > 0 {
-                    None
-                } else {
-                    typ.as_ref()
-                }
+                if index > 0 { None } else { typ.as_ref() }
             }
             CassDataTypeInner::Map {
                 typ: MapDataType::Untyped,
@@ -447,7 +443,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
     CassDataType::new(inner)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_new(
     value_type: CassValueType,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
@@ -474,7 +470,7 @@ pub unsafe extern "C" fn cass_data_type_new(
     ArcFFI::into_ptr(CassDataType::new_arced(inner))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_new_from_existing(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
@@ -484,7 +480,7 @@ pub unsafe extern "C" fn cass_data_type_new_from_existing(
     ))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_new_tuple(
     item_count: size_t,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
@@ -493,7 +489,7 @@ pub unsafe extern "C" fn cass_data_type_new_tuple(
     )))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_new_udt(
     field_count: size_t,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
@@ -502,12 +498,12 @@ pub unsafe extern "C" fn cass_data_type_new_udt(
     )))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_free(data_type: CassOwnedSharedPtr<CassDataType, CMut>) {
     ArcFFI::free(data_type);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassValueType {
@@ -515,7 +511,7 @@ pub unsafe extern "C" fn cass_data_type_type(
     unsafe { data_type.get_unchecked() }.get_value_type()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_is_frozen(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> cass_bool_t {
@@ -531,7 +527,7 @@ pub unsafe extern "C" fn cass_data_type_is_frozen(
     is_frozen as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_type_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     type_name: *mut *const c_char,
@@ -547,7 +543,7 @@ pub unsafe extern "C" fn cass_data_type_type_name(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_type_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     type_name: *const c_char,
@@ -555,7 +551,7 @@ pub unsafe extern "C" fn cass_data_type_set_type_name(
     unsafe { cass_data_type_set_type_name_n(data_type, type_name, strlen(type_name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_type_name_n(
     data_type_raw: CassBorrowedSharedPtr<CassDataType, CMut>,
     type_name: *const c_char,
@@ -575,7 +571,7 @@ pub unsafe extern "C" fn cass_data_type_set_type_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_keyspace(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     keyspace: *mut *const c_char,
@@ -591,7 +587,7 @@ pub unsafe extern "C" fn cass_data_type_keyspace(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_keyspace(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     keyspace: *const c_char,
@@ -599,7 +595,7 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace(
     unsafe { cass_data_type_set_keyspace_n(data_type, keyspace, strlen(keyspace)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     keyspace: *const c_char,
@@ -619,7 +615,7 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_class_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     class_name: *mut *const ::std::os::raw::c_char,
@@ -635,7 +631,7 @@ pub unsafe extern "C" fn cass_data_type_class_name(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_class_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     class_name: *const ::std::os::raw::c_char,
@@ -643,7 +639,7 @@ pub unsafe extern "C" fn cass_data_type_set_class_name(
     unsafe { cass_data_type_set_class_name_n(data_type, class_name, strlen(class_name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_set_class_name_n(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     class_name: *const ::std::os::raw::c_char,
@@ -662,7 +658,7 @@ pub unsafe extern "C" fn cass_data_type_set_class_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_sub_type_count(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> size_t {
@@ -683,14 +679,14 @@ pub unsafe extern "C" fn cass_data_type_sub_type_count(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_sub_type_count(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> size_t {
     unsafe { cass_data_type_sub_type_count(data_type) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_sub_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     index: size_t,
@@ -706,7 +702,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     name: *const ::std::os::raw::c_char,
@@ -714,7 +710,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name(
     unsafe { cass_data_type_sub_data_type_by_name_n(data_type, name, strlen(name)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name_n(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     name: *const ::std::os::raw::c_char,
@@ -731,7 +727,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_sub_type_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     index: size_t,
@@ -751,7 +747,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_name(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     sub_data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
@@ -765,7 +761,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     name: *const c_char,
@@ -774,7 +770,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name(
     unsafe { cass_data_type_add_sub_type_by_name_n(data_type, name, strlen(name), sub_data_type) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
     data_type_raw: CassBorrowedSharedPtr<CassDataType, CMut>,
     name: *const c_char,
@@ -798,7 +794,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     sub_value_type: CassValueType,
@@ -807,7 +803,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type(
     unsafe { cass_data_type_add_sub_type(data_type, ArcFFI::as_ptr(&sub_data_type)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     name: *const c_char,
@@ -817,7 +813,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name(
     unsafe { cass_data_type_add_sub_type_by_name(data_type, name, ArcFFI::as_ptr(&sub_data_type)) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     name: *const c_char,

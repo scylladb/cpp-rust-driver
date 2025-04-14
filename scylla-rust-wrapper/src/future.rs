@@ -1,3 +1,4 @@
+use crate::RUNTIME;
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_error::CassErrorMessage;
@@ -7,7 +8,6 @@ use crate::prepared::CassPrepared;
 use crate::query_result::CassResult;
 use crate::types::*;
 use crate::uuid::CassUuid;
-use crate::RUNTIME;
 use futures::future;
 use std::future::Future;
 use std::mem;
@@ -297,7 +297,7 @@ impl CassFuture {
 trait CheckSendSync: Send + Sync {}
 impl CheckSendSync for CassFuture {}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_set_callback(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
     callback: CassFutureCallback,
@@ -312,14 +312,14 @@ pub unsafe extern "C" fn cass_future_set_callback(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_wait(future_raw: CassBorrowedSharedPtr<CassFuture, CMut>) {
     ArcFFI::as_ref(future_raw)
         .unwrap()
         .with_waited_result(|_| ());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_wait_timed(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
     timeout_us: cass_duration_t,
@@ -330,7 +330,7 @@ pub unsafe extern "C" fn cass_future_wait_timed(
         .is_ok() as cass_bool_t
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_ready(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> cass_bool_t {
@@ -341,7 +341,7 @@ pub unsafe extern "C" fn cass_future_ready(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_error_code(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassError {
@@ -354,7 +354,7 @@ pub unsafe extern "C" fn cass_future_error_code(
         })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_error_message(
     future: CassBorrowedSharedPtr<CassFuture, CMut>,
     message: *mut *const ::std::os::raw::c_char,
@@ -375,12 +375,12 @@ pub unsafe extern "C" fn cass_future_error_message(
         });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_free(future_raw: CassOwnedSharedPtr<CassFuture, CMut>) {
     ArcFFI::free(future_raw);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_get_result(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassResult, CConst> {
@@ -395,7 +395,7 @@ pub unsafe extern "C" fn cass_future_get_result(
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_get_error_result(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassErrorResult, CConst> {
@@ -410,7 +410,7 @@ pub unsafe extern "C" fn cass_future_get_error_result(
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_get_prepared(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassPrepared, CConst> {
@@ -425,7 +425,7 @@ pub unsafe extern "C" fn cass_future_get_prepared(
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_tracing_id(
     future: CassBorrowedSharedPtr<CassFuture, CMut>,
     tracing_id: *mut CassUuid,

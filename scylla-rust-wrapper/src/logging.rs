@@ -1,20 +1,20 @@
+use crate::LOGGER;
 use crate::argconv::{
-    arr_to_cstr, ptr_to_cstr, str_to_arr, CConst, CassBorrowedSharedPtr, FromRef, RefFFI, FFI,
+    CConst, CassBorrowedSharedPtr, FFI, FromRef, RefFFI, arr_to_cstr, ptr_to_cstr, str_to_arr,
 };
 use crate::cass_log_types::{CassLogLevel, CassLogMessage};
 use crate::types::size_t;
-use crate::LOGGER;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_void};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::Level;
 use tracing::debug;
 use tracing::field::Field;
-use tracing::Level;
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::Layer;
 
 impl FFI for CassLogMessage {
     type Origin = FromRef;
@@ -164,7 +164,7 @@ pub fn set_tracing_subscriber_with_level(level: Level) {
     .unwrap_or(()) // Ignore if it is set already
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_set_level(log_level: CassLogLevel) {
     if log_level == CassLogLevel::CASS_LOG_DISABLED {
         debug!("Logging is disabled!");
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn cass_log_set_level(log_level: CassLogLevel) {
     debug!("Log level is set to {}", level);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_level_string(log_level: CassLogLevel) -> *const c_char {
     let log_level_str = match log_level {
         CassLogLevel::CASS_LOG_TRACE => c"TRACE",
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn cass_log_level_string(log_level: CassLogLevel) -> *cons
     log_level_str.as_ptr()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_set_callback(callback: CassLogCallback, data: *mut c_void) {
     let logger = Logger {
         cb: Some(callback.unwrap_or(noop_log_callback)),
@@ -204,7 +204,7 @@ pub unsafe extern "C" fn cass_log_set_callback(callback: CassLogCallback, data: 
     *LOGGER.write().unwrap() = logger;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_get_callback_and_data(
     callback_out: *mut CassLogCallback,
     data_out: *mut *const c_void,
@@ -217,12 +217,12 @@ pub unsafe extern "C" fn cass_log_get_callback_and_data(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_cleanup() {
     // Deprecated
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_log_set_queue_size(_queue_size: size_t) {
     // Deprecated
 }

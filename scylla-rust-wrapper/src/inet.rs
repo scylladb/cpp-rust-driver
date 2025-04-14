@@ -51,17 +51,17 @@ unsafe fn cass_inet_init(address: *const cass_uint8_t, address_length: CassInetL
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_inet_init_v4(address: *const cass_uint8_t) -> CassInet {
     unsafe { cass_inet_init(address, CassInetLength::CASS_INET_V4) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_inet_init_v6(address: *const cass_uint8_t) -> CassInet {
     unsafe { cass_inet_init(address, CassInetLength::CASS_INET_V6) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_inet_string(inet: CassInet, output: *mut c_char) {
     let ip_addr: IpAddr = match inet.try_into() {
         Ok(v) => v,
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn cass_inet_string(inet: CassInet, output: *mut c_char) {
     unsafe { *null_byte = 0 };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_inet_from_string(
     input: *const c_char,
     inet: *mut CassInet,
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn cass_inet_from_string(
     unsafe { cass_inet_from_string_n(input, strlen(input), inet) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_inet_from_string_n(
     input_raw: *const c_char,
     input_length: size_t,
