@@ -174,13 +174,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
         </tr>
         <tr>
-            <td colspan=2 align="center" style="font-weight:bold">Value</td>
-        </tr>
-        <tr>
-            <td>cass_value_get_bytes</td>
-            <td>When the above requirement is satisfied, this should be implemented for all CQL types. Currently, it returns only bytes of a Blob object, otherwise returns CASS_ERROR_LIB_INVALID_VALUE_TYPE.</td>
-        </tr>
-        <tr>
             <td colspan=2 align="center" style="font-weight:bold">Timestamp generators</td>
         </tr>
         <tr>
