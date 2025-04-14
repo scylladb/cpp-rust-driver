@@ -101,7 +101,7 @@ install-cargo-if-missing: update-apt-cache-if-needed
 install-valgrind-if-missing: update-apt-cache-if-needed
 	@valgrind --version >/dev/null 2>&1 || (\
 		echo "Valgrind not found in the system, install it.";\
-		sudo snap install valgrind --classic;\
+		sudo apt install -y valgrind;\
 	)
 
 install-clang-format-if-missing: update-apt-cache-if-needed
