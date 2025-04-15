@@ -24,8 +24,10 @@ use scylla::statement::{Consistency, SerialConsistency};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::os::raw::{c_char, c_int, c_uint};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -56,6 +58,8 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - default local ip address is arbitrary
+const DEFAULT_LOCAL_IP_ADDRESS: Option<IpAddr> = None;
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -227,6 +231,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .write_coalescing_delay(DEFAULT_WRITE_COALESCING_DELAY)
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
+            .local_ip_address(DEFAULT_LOCAL_IP_ADDRESS)
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
@@ -521,6 +526,52 @@ pub unsafe extern "C" fn cass_cluster_set_port(
 
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
     cluster.port = port as u16;
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_local_address(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    ip: *const c_char,
+) -> CassError {
+    // Safety: We assume that string is null-terminated.
+    unsafe { cass_cluster_set_local_address_n(cluster_raw, ip, strlen(ip)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_local_address_n(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    ip: *const c_char,
+    ip_length: size_t,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_local_address_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    // Semantics from cpp-driver - if pointer is null or length is 0, use the
+    // arbitrary address (INADDR_ANY, or in6addr_any).
+    let local_addr: Option<IpAddr> = if ip.is_null() || ip_length == 0 {
+        None
+    } else {
+        // SAFETY: We assume that user provides valid pointer and length.
+        match unsafe { ptr_to_cstr_n(ip, ip_length) } {
+            Some(ip_str) => match IpAddr::from_str(ip_str) {
+                Ok(addr) => Some(addr),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", ip_str, err);
+                    return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+                }
+            },
+            None => {
+                tracing::error!("Provided non-utf8 ip string to cass_cluster_set_local_address_n!");
+                return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            }
+        }
+    };
+
+    cluster.session_builder.config.local_ip_address = local_addr;
+
     CassError::CASS_OK
 }
 
@@ -1017,11 +1068,100 @@ mod tests {
         exec_profile::{cass_execution_profile_free, cass_execution_profile_new},
     };
     use assert_matches::assert_matches;
+    use std::net::{Ipv4Addr, Ipv6Addr};
     use std::{
         collections::HashSet,
         convert::{TryFrom, TryInto},
         os::raw::c_char,
     };
+
+    #[test]
+    fn test_local_ip_address() {
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+
+            // Check default address
+            {
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(cluster.session_builder.config.local_ip_address.is_none());
+            }
+
+            // null ip pointer
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(cluster_raw.borrow_mut(), std::ptr::null()),
+                    CassError::CASS_OK
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(cluster.session_builder.config.local_ip_address.is_none());
+            }
+
+            // empty string
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(cluster_raw.borrow_mut(), c"".as_ptr()),
+                    CassError::CASS_OK
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(cluster.session_builder.config.local_ip_address.is_none());
+            }
+
+            // valid ipv4 address
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(cluster_raw.borrow_mut(), c"1.2.3.4".as_ptr()),
+                    CassError::CASS_OK
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.session_builder.config.local_ip_address,
+                    Some(Ipv4Addr::new(1, 2, 3, 4).into())
+                );
+            }
+
+            // valid ipv6 address
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(
+                        cluster_raw.borrow_mut(),
+                        c"2001:db8::8a2e:370:7334".as_ptr()
+                    ),
+                    CassError::CASS_OK
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.session_builder.config.local_ip_address,
+                    Some(Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0x8a2e, 0x0370, 0x7334,).into())
+                );
+            }
+
+            // non-numeric address
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(cluster_raw.borrow_mut(), c"foo".as_ptr()),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // non-valid-utf8 slice
+            {
+                let non_utf8_slice: &[u8] = &[0xF0, 0x28, 0x8C, 0x28, 0x00];
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_address(
+                        cluster_raw.borrow_mut(),
+                        non_utf8_slice.as_ptr() as *const c_char
+                    ),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            cass_cluster_free(cluster_raw);
+        }
+    }
 
     #[test]
     #[ntest::timeout(100)]
