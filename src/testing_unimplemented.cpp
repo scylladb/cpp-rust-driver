@@ -74,9 +74,6 @@ CASS_EXPORT CassError cass_cluster_set_host_listener_callback(CassCluster* clust
                                                               void* data) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_host_listener_callback\n");
 }
-CASS_EXPORT CassError cass_cluster_set_local_address(CassCluster* cluster, const char* name) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_local_address\n");
-}
 CASS_EXPORT CassError cass_cluster_set_no_compact(CassCluster* cluster, cass_bool_t enabled) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_no_compact\n");
 }
