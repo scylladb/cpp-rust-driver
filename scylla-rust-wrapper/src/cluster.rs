@@ -20,6 +20,7 @@ use scylla::policies::load_balancing::{
 };
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
+use scylla::routing::ShardAwarePortRange;
 use scylla::statement::{Consistency, SerialConsistency};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -60,6 +61,9 @@ const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 // - default local ip address is arbitrary
 const DEFAULT_LOCAL_IP_ADDRESS: Option<IpAddr> = None;
+// - default shard aware local port range is ephemeral range
+const DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE: ShardAwarePortRange =
+    ShardAwarePortRange::EPHEMERAL_PORT_RANGE;
 
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -232,6 +236,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
             .local_ip_address(DEFAULT_LOCAL_IP_ADDRESS)
+            .shard_aware_local_port_range(DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE)
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
@@ -571,6 +576,47 @@ pub unsafe extern "C" fn cass_cluster_set_local_address_n(
     };
 
     cluster.session_builder.config.local_ip_address = local_addr;
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_local_port_range(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    lo: c_int,
+    hi: c_int,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_local_port_range!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    fn compute_range_from_raw(lo: i32, hi: i32) -> Result<ShardAwarePortRange, CassError> {
+        let start: u16 = lo
+            .try_into()
+            .map_err(|_| CassError::CASS_ERROR_LIB_BAD_PARAMS)?;
+        // In cpp-driver, the `hi` is exluded from the port range.
+        // In rust-driver, OTOH, we include the upper bound of the range - thus -1.
+        let end: u16 = hi
+            .checked_sub(1)
+            .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
+            .try_into()
+            .map_err(|_| CassError::CASS_ERROR_LIB_BAD_PARAMS)?;
+
+        // Further validation is performed by the constructor.
+        ShardAwarePortRange::new(start..=end).map_err(|_| CassError::CASS_ERROR_LIB_BAD_PARAMS)
+    }
+
+    let range: ShardAwarePortRange = match compute_range_from_raw(lo, hi) {
+        Ok(range) => range,
+        Err(cass_error) => {
+            // Let's use the error message from cpp-driver.
+            tracing::error!("Invalid local port range. Expected: 1024 < lo <= hi < 65536.");
+            return cass_error;
+        }
+    };
+
+    cluster.session_builder.config.shard_aware_local_port_range = range;
 
     CassError::CASS_OK
 }
@@ -1156,6 +1202,74 @@ mod tests {
                         non_utf8_slice.as_ptr() as *const c_char
                     ),
                     CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            cass_cluster_free(cluster_raw);
+        }
+    }
+
+    #[test]
+    fn test_local_port_range() {
+        // TODO: Currently no way to compare the `ShardAwarePortRange`. Either implement `PartialEq`
+        // or expose a getter for underlying range on rust-driver side. We can test the validation, though.
+
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+
+            // negative value
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), -1, 1025),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // start (inclusive) == end (exclusive)
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 5555, 5555),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // start == end - 1
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 5556, 5556),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // start > end
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 5556, 5555),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // 0 <= start,end < 1024
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 1, 3),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // end is i32::MIN - check that does not panic due to overflow
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 5555, i32::MIN),
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS
+                );
+            }
+
+            // some valid port range
+            {
+                assert_cass_error_eq!(
+                    cass_cluster_set_local_port_range(cluster_raw.borrow_mut(), 5555, 5557),
+                    CassError::CASS_OK
                 );
             }
 
