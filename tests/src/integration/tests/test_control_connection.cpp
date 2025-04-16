@@ -185,7 +185,7 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingUnresolvableLoc
 
   // Attempt to connect to the server using an unresolvable local IP address
   Cluster cluster = default_cluster();
-  EXPECT_EQ(CASS_ERROR_LIB_HOST_RESOLUTION,
+  EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS,
             cass_cluster_set_local_address(cluster.get(), "unknown.invalid"));
 }
 
