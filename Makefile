@@ -13,6 +13,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :PreparedTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
+:ControlConnectionTests.*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
 :ErrorTests.*\
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
@@ -25,6 +26,9 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
+:ControlConnectionTests.Integration_Cassandra_TopologyChange\
+:ControlConnectionTests.Integration_Cassandra_FullOutage\
+:ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
@@ -43,6 +47,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :PreparedTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
+:ControlConnectionTests.*\
 :ErrorTests.*\
 :SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
 :SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
@@ -55,6 +60,9 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
+:ControlConnectionTests.Integration_Cassandra_TopologyChange\
+:ControlConnectionTests.Integration_Cassandra_FullOutage\
+:ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
