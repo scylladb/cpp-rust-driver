@@ -204,7 +204,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingUnbindableLocal
   CHECK_FAILURE;
 
   // Attempt to connect to the server using an unbindable local IP address
-  logger_.add_critera("Unable to bind local address: address not available");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Cannot assign requested address");
   Cluster cluster = default_cluster().with_local_address("1.1.1.1");
   try {
     cluster.connect();
