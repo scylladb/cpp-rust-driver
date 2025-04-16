@@ -47,10 +47,6 @@ impl ToCassError for ExecutionError {
 
 impl ToCassError for ConnectionPoolError {
     fn to_cass_error(&self) -> CassError {
-        // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
-        // is hidden under the ConnectionPoolError.
-        // However, we still have a lot work to do when it comes to error conversion.
-        // I will address it, once we start resolving all issues related to error conversion.
         CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
     }
 }
