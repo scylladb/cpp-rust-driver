@@ -132,9 +132,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingInvalidIpAddres
   CHECK_FAILURE;
 
   // Attempt to connect to the server using an invalid IP address
-  logger_.add_critera("Unable to establish a control connection to host "
-                      "1.1.1.1 because of the following error: Underlying "
-                      "connection error: Connection timeout");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Connect timeout elapsed");
   Cluster cluster = Cluster::build().with_contact_points("1.1.1.1");
   try {
     cluster.connect();
