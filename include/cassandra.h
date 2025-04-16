@@ -1883,8 +1883,18 @@ cass_cluster_set_exponential_reconnect(CassCluster* cluster,
  * request's roundtrip time. Larger values should be used for throughput
  * bound workloads and lower values should be used for latency bound
  * workloads.
+ * 
+ * Notice that underlying Rust tokio timer has a granularity of millisecond.
+ * Thus, the sub-millisecond delays are implemented in a non-deterministic way
+ * by yielding the current tokio task.
+ * 
+ * The semantics of mapping the provided number microseconds to the delay
+ * on rust-driver side:
+ * - 0us -> no delay, i.e. the delay is disabled
+ * - 1us - 999us -> small, non-deterministic delay
+ * - N us where N >= 1000 -> delay of (N / 1000)ms
  *
- * <b>Default:</b> 200 us
+ * <b>Default:</b> small, non-deterministic delay
  *
  * @public @memberof CassCluster
  *
