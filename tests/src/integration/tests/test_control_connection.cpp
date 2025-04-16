@@ -236,8 +236,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests,
   // Attempt to connect to the server using an valid local IP address
   // but invalid remote address. The specified remote is not routable
   // from the specified local.
-  logger_.add_critera("Unable to establish a control connection to host "
-                      "1.1.1.1 because of the following error:");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Invalid argument");
   Cluster cluster = Cluster::build().with_contact_points("1.1.1.1").with_local_address("127.0.0.1");
   try {
     cluster.connect();
