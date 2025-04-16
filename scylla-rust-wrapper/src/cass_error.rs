@@ -47,7 +47,7 @@ impl ToCassError for ExecutionError {
 
 impl ToCassError for ConnectionPoolError {
     fn to_cass_error(&self) -> CassError {
-        CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+        CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
     }
 }
 
@@ -75,7 +75,7 @@ impl ToCassError for RequestAttemptError {
             }
             RequestAttemptError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             RequestAttemptError::BrokenConnectionError(_) => {
-                CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             RequestAttemptError::BodyExtensionsParseError(_) => {
                 CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
