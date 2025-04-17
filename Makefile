@@ -20,6 +20,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
+:LatencyAwarePolicyTest.*\
 :LoggingTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
@@ -49,6 +50,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
+:LatencyAwarePolicyTest.*\
 :LoggingTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
