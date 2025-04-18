@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
+use crate::cass_metrics_types::CassMetrics;
 use crate::cass_types::get_column_type;
 use crate::cluster::CassCluster;
 use crate::cluster::build_session_builder;
@@ -19,6 +20,7 @@ use scylla::client::session_builder::SessionBuilder;
 use scylla::cluster::metadata::ColumnType;
 use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
+use scylla::observability::metrics::MetricsError;
 use scylla::response::PagingStateResponse;
 use scylla::response::query_result::QueryResult;
 use scylla::statement::unprepared::Statement;
@@ -569,6 +571,91 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     }
 
     BoxFFI::into_ptr(Box::new(CassSchemaMeta { keyspaces }))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_session_get_metrics(
+    session_raw: CassBorrowedSharedPtr<CassSession, CConst>,
+    metrics: *mut CassMetrics,
+) {
+    let Some(maybe_session_lock) = ArcFFI::as_ref(session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_get_metrics!");
+        return;
+    };
+    if metrics.is_null() {
+        tracing::error!("Provided null metrics pointer to cass_session_get_metrics!");
+        return;
+    }
+
+    let maybe_session_guard = maybe_session_lock.blocking_read();
+    let maybe_session = maybe_session_guard.as_ref();
+    let Some(session) = maybe_session else {
+        tracing::warn!("Attempted to get metrics before connecting session object");
+        return;
+    };
+
+    let rust_metrics = session.session.get_metrics();
+    // TODO (rust-driver): Add Snapshot::default() or Snapshot::empty() with 0-initialized snapshot.
+    let (
+        min,
+        max,
+        mean,
+        stddev,
+        median,
+        percentile_75,
+        percentile_95,
+        percentile_98,
+        percentile_99,
+        percentile_99_9,
+    ) = match rust_metrics.get_snapshot() {
+        Ok(snapshot) => (
+            snapshot.min,
+            snapshot.max,
+            snapshot.mean,
+            snapshot.stddev,
+            snapshot.median,
+            snapshot.percentile_75,
+            snapshot.percentile_95,
+            snapshot.percentile_98,
+            snapshot.percentile_99,
+            snapshot.percentile_99_9,
+        ),
+        // Histogram is empty, but we don't want to return because there
+        // are other metrics that don't depend on histogram.
+        Err(MetricsError::Empty) => (0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        Err(e) => {
+            tracing::error!("Failed to get metrics snapshot: {}", e);
+            return;
+        }
+    };
+
+    const MILLIS_TO_MICROS: u64 = 1000;
+    // SAFETY: We assume that user provided valid CassMetrics pointer.
+    unsafe {
+        (*metrics).requests.min = min * MILLIS_TO_MICROS;
+        (*metrics).requests.max = max * MILLIS_TO_MICROS;
+        (*metrics).requests.mean = mean * MILLIS_TO_MICROS;
+        (*metrics).requests.stddev = stddev * MILLIS_TO_MICROS;
+        (*metrics).requests.median = median * MILLIS_TO_MICROS;
+        (*metrics).requests.percentile_75th = percentile_75 * MILLIS_TO_MICROS;
+        (*metrics).requests.percentile_95th = percentile_95 * MILLIS_TO_MICROS;
+        (*metrics).requests.percentile_98th = percentile_98 * MILLIS_TO_MICROS;
+        (*metrics).requests.percentile_99th = percentile_99 * MILLIS_TO_MICROS;
+        (*metrics).requests.percentile_999th = percentile_99_9 * MILLIS_TO_MICROS;
+        (*metrics).requests.mean_rate = rust_metrics.get_mean_rate();
+        (*metrics).requests.one_minute_rate = rust_metrics.get_one_minute_rate();
+        (*metrics).requests.five_minute_rate = rust_metrics.get_five_minute_rate();
+        (*metrics).requests.fifteen_minute_rate = rust_metrics.get_fifteen_minute_rate();
+
+        (*metrics).stats.total_connections = rust_metrics.get_total_connections();
+        (*metrics).stats.available_connections = 0; // Deprecated
+        (*metrics).stats.exceeded_pending_requests_water_mark = 0; // Deprecated
+        (*metrics).stats.exceeded_write_bytes_water_mark = 0; // Deprecated
+
+        (*metrics).errors.connection_timeouts = rust_metrics.get_connection_timeouts();
+        (*metrics).errors.pending_request_timeouts = 0; // Deprecated
+        (*metrics).errors.request_timeouts = rust_metrics.get_request_timeouts();
+    }
 }
 
 #[cfg(test)]
