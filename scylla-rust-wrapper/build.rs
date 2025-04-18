@@ -153,4 +153,9 @@ fn main() {
         &["CassIteratorType_", "CassIteratorType"],
         &out_path,
     );
+    prepare_cppdriver_data(
+        "cppdriver_metrics_types.rs",
+        &["CassMetrics_", "CassMetrics"],
+        &out_path,
+    );
 }
