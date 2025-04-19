@@ -83,7 +83,7 @@ CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatDisabled) {
 CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatFailed) {
   CHECK_FAILURE;
 
-  logger_.add_critera("Failed to send a heartbeat within connection idle interval.");
+  logger_.add_critera("Timed out while waiting for response to keepalive request");
   Cluster cluster =
       default_cluster().with_connection_heartbeat_interval(1).with_connection_idle_timeout(5);
   connect(cluster);
