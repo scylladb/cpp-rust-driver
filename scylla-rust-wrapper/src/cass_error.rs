@@ -33,7 +33,7 @@ impl ToCassError for ExecutionError {
             ExecutionError::BadQuery(bad_query) => bad_query.to_cass_error(),
             ExecutionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
             ExecutionError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
-            ExecutionError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            ExecutionError::MetadataError(e) => e.to_cass_error(),
             ExecutionError::ConnectionPoolError(e) => e.to_cass_error(),
             ExecutionError::PrepareError(e) => e.to_cass_error(),
             ExecutionError::LastAttemptError(e) => e.to_cass_error(),
@@ -47,11 +47,7 @@ impl ToCassError for ExecutionError {
 
 impl ToCassError for ConnectionPoolError {
     fn to_cass_error(&self) -> CassError {
-        // I know that TranslationError (corresponding to CASS_ERROR_LIB_HOST_RESOLUTION)
-        // is hidden under the ConnectionPoolError.
-        // However, we still have a lot work to do when it comes to error conversion.
-        // I will address it, once we start resolving all issues related to error conversion.
-        CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+        CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
     }
 }
 
@@ -79,7 +75,7 @@ impl ToCassError for RequestAttemptError {
             }
             RequestAttemptError::UnableToAllocStreamId => CassError::CASS_ERROR_LIB_NO_STREAMS,
             RequestAttemptError::BrokenConnectionError(_) => {
-                CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT
+                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             RequestAttemptError::BodyExtensionsParseError(_) => {
                 CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
@@ -164,11 +160,41 @@ impl ToCassError for NewSessionError {
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             NewSessionError::EmptyKnownNodesList => CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-            NewSessionError::MetadataError(_) => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            NewSessionError::MetadataError(e) => e.to_cass_error(),
             NewSessionError::UseKeyspaceError(_) => {
                 CassError::CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE
             }
             // NS error is non_exhaustive
+            _ => CassError::CASS_ERROR_LAST_ENTRY,
+        }
+    }
+}
+
+impl ToCassError for MetadataError {
+    fn to_cass_error(&self) -> CassError {
+        match self {
+            MetadataError::ConnectionPoolError(e) => e.to_cass_error(),
+            MetadataError::FetchError(e) => match &e.error {
+                // Server bug - invalid CQL type in system table.
+                MetadataFetchErrorKind::InvalidColumnType(_) => {
+                    CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+                }
+                MetadataFetchErrorKind::PrepareError(e) => e.to_cass_error(),
+                MetadataFetchErrorKind::SerializationError(e) => e.to_cass_error(),
+                MetadataFetchErrorKind::NextRowError(_) => {
+                    CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+                }
+
+                // non_exhaustive
+                _ => CassError::CASS_ERROR_LAST_ENTRY,
+            },
+            // Remaining errors indicate a serious server bug - e.g. all peers have empty token lists.
+            MetadataError::Keyspaces(_)
+            | MetadataError::Peers(_)
+            | MetadataError::Tables(_)
+            | MetadataError::Udts(_) => CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE,
+
+            // non_exhaustive
             _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }

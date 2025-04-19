@@ -132,9 +132,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingInvalidIpAddres
   CHECK_FAILURE;
 
   // Attempt to connect to the server using an invalid IP address
-  logger_.add_critera("Unable to establish a control connection to host "
-                      "1.1.1.1 because of the following error: Underlying "
-                      "connection error: Connection timeout");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Connect timeout elapsed");
   Cluster cluster = Cluster::build().with_contact_points("1.1.1.1");
   try {
     cluster.connect();
@@ -185,7 +185,7 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingUnresolvableLoc
 
   // Attempt to connect to the server using an unresolvable local IP address
   Cluster cluster = default_cluster();
-  EXPECT_EQ(CASS_ERROR_LIB_HOST_RESOLUTION,
+  EXPECT_EQ(CASS_ERROR_LIB_BAD_PARAMS,
             cass_cluster_set_local_address(cluster.get(), "unknown.invalid"));
 }
 
@@ -204,7 +204,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests, ConnectUsingUnbindableLocal
   CHECK_FAILURE;
 
   // Attempt to connect to the server using an unbindable local IP address
-  logger_.add_critera("Unable to bind local address: address not available");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Cannot assign requested address");
   Cluster cluster = default_cluster().with_local_address("1.1.1.1");
   try {
     cluster.connect();
@@ -234,8 +236,9 @@ CASSANDRA_INTEGRATION_TEST_F(ControlConnectionTests,
   // Attempt to connect to the server using an valid local IP address
   // but invalid remote address. The specified remote is not routable
   // from the specified local.
-  logger_.add_critera("Unable to establish a control connection to host "
-                      "1.1.1.1 because of the following error:");
+  logger_.add_critera("Could not fetch metadata, error: "
+                      "Control connection pool error: The pool is broken; "
+                      "Last connection failed with: Invalid argument");
   Cluster cluster = Cluster::build().with_contact_points("1.1.1.1").with_local_address("127.0.0.1");
   try {
     cluster.connect();
