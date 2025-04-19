@@ -47,7 +47,7 @@ CASSANDRA_INTEGRATION_TEST_F(LatencyAwarePolicyTest, IsEnabled) {
   connect(cluster_);
 
   logger_.reset();
-  logger_.add_critera("Calculated new minimum:");
+  logger_.add_critera("Latency awareness: updated min average latency to");
 
   for (int i = 0; i < 9; ++i) { // Greater than min measured
     session_.execute("SELECT release_version FROM system.local WHERE key='local'");
