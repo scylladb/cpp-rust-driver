@@ -1,8 +1,17 @@
+use std::net::IpAddr;
 use std::sync::Arc;
 
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
 };
+
+#[derive(Clone, Debug)]
+pub(crate) struct FilteringConfig {
+    pub(crate) whitelist_hosts: Vec<IpAddr>,
+    pub(crate) blacklist_hosts: Vec<IpAddr>,
+    pub(crate) whitelist_dc: Vec<String>,
+    pub(crate) blacklist_dc: Vec<String>,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct LoadBalancingConfig {
@@ -11,6 +20,7 @@ pub(crate) struct LoadBalancingConfig {
     pub(crate) load_balancing_kind: Option<LoadBalancingKind>,
     pub(crate) latency_awareness_enabled: bool,
     pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
+    pub(crate) filtering: FilteringConfig,
 }
 
 impl LoadBalancingConfig {
@@ -59,6 +69,12 @@ impl Default for LoadBalancingConfig {
             load_balancing_kind: None,
             latency_awareness_enabled: false,
             latency_awareness_builder: Default::default(),
+            filtering: FilteringConfig {
+                whitelist_hosts: Vec::new(),
+                blacklist_hosts: Vec::new(),
+                whitelist_dc: Vec::new(),
+                blacklist_dc: Vec::new(),
+            },
         }
     }
 }
