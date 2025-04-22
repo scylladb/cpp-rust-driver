@@ -1,7 +1,9 @@
 use std::convert::{TryFrom, TryInto};
 use std::ffi::c_char;
 use std::future::Future;
+use std::net::IpAddr;
 use std::ops::Deref;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -20,7 +22,9 @@ use crate::argconv::{
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cluster::{set_load_balance_dc_aware_n, set_load_balance_rack_aware_n};
+use crate::cluster::{
+    set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, update_comma_delimited_list,
+};
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
@@ -469,6 +473,170 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
     profile_builder.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 
     CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_whitelist_filtering_n(profile_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_whitelist_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder
+                .load_balancing_config
+                .filtering
+                .whitelist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_blacklist_filtering_n(profile_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_blacklist_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder
+                .load_balancing_config
+                .filtering
+                .blacklist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_dc_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_whitelist_dc_filtering_n(profile_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_dc_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_whitelist_dc_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder.load_balancing_config.filtering.whitelist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_dc_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_blacklist_dc_filtering_n(profile_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_dc_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_blacklist_dc_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder.load_balancing_config.filtering.blacklist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
 }
 
 #[unsafe(no_mangle)]
