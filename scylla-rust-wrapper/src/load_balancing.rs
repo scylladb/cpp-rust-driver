@@ -1,8 +1,11 @@
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
+use scylla::cluster::{ClusterState, NodeRef};
+use scylla::errors::RequestAttemptError;
 use scylla::policies::load_balancing::{
-    DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
+    DefaultPolicyBuilder, FallbackPlan, LatencyAwarenessBuilder, LoadBalancingPolicy, RoutingInfo,
 };
 
 #[derive(Clone, Debug)]
@@ -11,6 +14,73 @@ pub(crate) struct FilteringConfig {
     pub(crate) blacklist_hosts: Vec<IpAddr>,
     pub(crate) whitelist_dc: Vec<String>,
     pub(crate) blacklist_dc: Vec<String>,
+}
+
+impl FilteringConfig {
+    /// Maps each white/blacklist into `Option<Vec<_>>`.
+    /// If the list is empty, it is not going to be used for filtering (None).
+    fn into_filtering_info(self) -> FilteringInfo {
+        FilteringInfo {
+            whitelist_hosts: (!self.whitelist_hosts.is_empty()).then_some(self.whitelist_hosts),
+            blacklist_hosts: (!self.blacklist_hosts.is_empty()).then_some(self.blacklist_hosts),
+            whitelist_dc: (!self.whitelist_dc.is_empty()).then_some(self.whitelist_dc),
+            blacklist_dc: (!self.blacklist_dc.is_empty()).then_some(self.blacklist_dc),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct FilteringInfo {
+    pub(crate) whitelist_hosts: Option<Vec<IpAddr>>,
+    pub(crate) blacklist_hosts: Option<Vec<IpAddr>>,
+    pub(crate) whitelist_dc: Option<Vec<String>>,
+    pub(crate) blacklist_dc: Option<Vec<String>>,
+}
+
+impl FilteringInfo {
+    /// Checks if the host is valid according to the filtering rules.
+    ///
+    /// If host does not belong to any datacenter, its datacenter is treated
+    /// as empty string. This way, if for example only `dc1` is whitelisted, the
+    /// node with unknown DC will be rejected.
+    pub(crate) fn is_host_allowed(&self, ip: &IpAddr, dc: Option<&str>) -> bool {
+        // Treat missing dc as empty string.
+        let dc = dc.unwrap_or_default();
+
+        if self
+            .whitelist_hosts
+            .as_ref()
+            .is_some_and(|wl| !wl.contains(ip))
+        {
+            return false;
+        }
+
+        if self
+            .blacklist_hosts
+            .as_ref()
+            .is_some_and(|bl| bl.contains(ip))
+        {
+            return false;
+        }
+
+        if self
+            .whitelist_dc
+            .as_ref()
+            .is_some_and(|wl| !wl.iter().any(|wl_dc| wl_dc.as_str() == dc))
+        {
+            return false;
+        }
+
+        if self
+            .blacklist_dc
+            .as_ref()
+            .is_some_and(|bl| bl.iter().any(|bl_dc| bl_dc.as_str() == dc))
+        {
+            return false;
+        }
+
+        true
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -57,7 +127,12 @@ impl LoadBalancingConfig {
         if self.latency_awareness_enabled {
             builder = builder.latency_awareness(self.latency_awareness_builder);
         }
-        builder.build()
+        let child_policy = builder.build();
+
+        Arc::new(FilteringLoadBalancingPolicy {
+            filtering: self.filtering.into_filtering_info(),
+            child_policy,
+        })
     }
 }
 
@@ -89,4 +164,61 @@ pub(crate) enum LoadBalancingKind {
         local_dc: String,
         local_rack: String,
     },
+}
+
+#[derive(Debug)]
+pub(crate) struct FilteringLoadBalancingPolicy {
+    pub(crate) filtering: FilteringInfo,
+    pub(crate) child_policy: Arc<dyn LoadBalancingPolicy>,
+}
+
+impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
+    fn pick<'a>(
+        &'a self,
+        request: &'a RoutingInfo,
+        cluster: &'a ClusterState,
+    ) -> Option<(scylla::cluster::NodeRef<'a>, Option<scylla::routing::Shard>)> {
+        let picked = self.child_policy.pick(request, cluster);
+
+        picked.and_then(|target| {
+            let node = target.0;
+            self.filtering
+                .is_host_allowed(&node.address.ip(), node.datacenter.as_deref())
+                .then_some(target)
+        })
+    }
+
+    fn fallback<'a>(
+        &'a self,
+        request: &'a RoutingInfo,
+        cluster: &'a ClusterState,
+    ) -> FallbackPlan<'a> {
+        Box::new(
+            self.child_policy
+                .fallback(request, cluster)
+                .filter(|(node, _shard)| {
+                    self.filtering
+                        .is_host_allowed(&node.address.ip(), node.datacenter.as_deref())
+                }),
+        )
+    }
+
+    fn on_request_success(&self, request: &RoutingInfo, latency: Duration, node: NodeRef<'_>) {
+        self.child_policy.on_request_success(request, latency, node);
+    }
+
+    fn on_request_failure(
+        &self,
+        request: &RoutingInfo,
+        latency: Duration,
+        node: NodeRef<'_>,
+        error: &RequestAttemptError,
+    ) {
+        self.child_policy
+            .on_request_failure(request, latency, node, error);
+    }
+
+    fn name(&self) -> String {
+        format!("FilteringLoadBalancingPolicy({})", self.child_policy.name())
+    }
 }
