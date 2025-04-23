@@ -12,7 +12,7 @@ use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::client::{SelfIdentity, WriteCoalescingDelay};
+use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::net::IpAddr;
-use std::num::NonZero;
+use std::num::{NonZero, NonZeroUsize};
 use std::os::raw::{c_char, c_int, c_uint};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -452,6 +452,32 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
 ) {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_core_connections_per_host(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    num_connections: c_uint,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_core_connections_per_host!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match NonZeroUsize::new(num_connections as usize) {
+        Some(non_zero_conns) => {
+            cluster.session_builder.config.connection_pool_size = PoolSize::PerHost(non_zero_conns);
+            CassError::CASS_OK
+        }
+        None => {
+            tracing::error!(
+                "Provided zero connections to cass_cluster_set_core_connections_per_host!"
+            );
+            CassError::CASS_ERROR_LIB_BAD_PARAMS
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
