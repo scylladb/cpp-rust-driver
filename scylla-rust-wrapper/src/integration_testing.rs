@@ -1,8 +1,16 @@
 use std::ffi::{CString, c_char};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
+
+use scylla::errors::{RequestAttemptError, RequestError};
+use scylla::observability::history::{AttemptId, HistoryListener, RequestId, SpeculativeId};
+use scylla::policies::retry::RetryDecision;
 
 use crate::argconv::{BoxFFI, CMut, CassBorrowedExclusivePtr};
 use crate::cluster::CassCluster;
-use crate::types::{cass_int32_t, cass_uint16_t, size_t};
+use crate::statement::{BoundStatement, CassStatement};
+use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_cluster_get_connect_timeout(
@@ -53,4 +61,58 @@ pub unsafe extern "C" fn testing_cluster_get_contact_points(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_free_contact_points(contact_points: *mut c_char) {
     let _ = unsafe { CString::from_raw(contact_points) };
+}
+
+#[derive(Debug)]
+struct SleepingHistoryListener(Duration);
+
+impl HistoryListener for SleepingHistoryListener {
+    fn log_request_start(&self) -> RequestId {
+        RequestId(0)
+    }
+
+    fn log_request_success(&self, _request_id: RequestId) {}
+
+    fn log_request_error(&self, _request_id: RequestId, _error: &RequestError) {}
+
+    fn log_new_speculative_fiber(&self, _request_id: RequestId) -> SpeculativeId {
+        SpeculativeId(0)
+    }
+
+    fn log_attempt_start(
+        &self,
+        _request_id: RequestId,
+        _speculative_id: Option<SpeculativeId>,
+        _node_addr: SocketAddr,
+    ) -> AttemptId {
+        // Sleep to simulate a delay in the request
+        std::thread::sleep(self.0);
+        AttemptId(0)
+    }
+
+    fn log_attempt_success(&self, _attempt_id: AttemptId) {}
+
+    fn log_attempt_error(
+        &self,
+        _attempt_id: AttemptId,
+        _error: &RequestAttemptError,
+        _retry_decision: &RetryDecision,
+    ) {
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_statement_set_sleeping_history_listener(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    sleep_time_ms: cass_uint64_t,
+) {
+    let sleep_time = Duration::from_millis(sleep_time_ms);
+    let history_listener = Arc::new(SleepingHistoryListener(sleep_time));
+
+    match &mut BoxFFI::as_mut_ref(statement_raw).unwrap().statement {
+        BoundStatement::Simple(inner) => inner.query.set_history_listener(history_listener),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_history_listener(history_listener),
+    }
 }

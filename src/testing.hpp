@@ -50,6 +50,8 @@ CASS_EXPORT String get_server_name(CassFuture* future);
 
 CASS_EXPORT void set_record_attempted_hosts(CassStatement* statement, bool enable);
 
+CASS_EXPORT void set_sleeping_history_listener_on_statement(CassStatement* statement, uint64_t sleep_time_ms);
+
 }}} // namespace datastax::internal::testing
 
 #endif

@@ -98,4 +98,8 @@ void set_record_attempted_hosts(CassStatement* statement, bool enable) {
   throw std::runtime_error("Unimplemented 'set_record_attempted_hosts'!");
 }
 
+void set_sleeping_history_listener_on_statement(CassStatement* statement, uint64_t sleep_time_ms) {
+  testing_statement_set_sleeping_history_listener(statement, sleep_time_ms);
+}
+
 }}} // namespace datastax::internal::testing

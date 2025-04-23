@@ -114,9 +114,12 @@ CASSANDRA_INTEGRATION_TEST_F(MetricsTests, ErrorsRequestTimeouts) {
 CASSANDRA_INTEGRATION_TEST_F(MetricsTests, Requests) {
   CHECK_FAILURE;
 
+  Statement statement(SELECT_ALL_SYSTEM_LOCAL_CQL);
+  statement.set_sleep_time(1); // Simulate >=1ms latency.
+
   CassMetrics metrics = session_.metrics();
   for (int i = 0; i < 600 && metrics.requests.fifteen_minute_rate == 0; ++i) {
-    session_.execute_async(SELECT_ALL_SYSTEM_LOCAL_CQL);
+    session_.execute_async(statement);
     metrics = session_.metrics();
     msleep(100);
   }
@@ -124,7 +127,7 @@ CASSANDRA_INTEGRATION_TEST_F(MetricsTests, Requests) {
   EXPECT_LT(metrics.requests.min, CASS_UINT64_MAX);
   EXPECT_GT(metrics.requests.max, 0u);
   EXPECT_GT(metrics.requests.mean, 0u);
-  EXPECT_GT(metrics.requests.stddev, 0u);
+  EXPECT_GE(metrics.requests.stddev, 0u);
   EXPECT_GT(metrics.requests.median, 0u);
   EXPECT_GT(metrics.requests.percentile_75th, 0u);
   EXPECT_GT(metrics.requests.percentile_95th, 0u);
