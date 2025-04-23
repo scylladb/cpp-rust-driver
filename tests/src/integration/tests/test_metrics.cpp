@@ -77,6 +77,31 @@ CASSANDRA_INTEGRATION_TEST_F(MetricsTests, ErrorsConnectionTimeouts) {
 }
 
 /**
+ * This test ensures that the driver is reporting the number of connections
+ * when connection pool size is configured per shard.
+ */
+CASSANDRA_INTEGRATION_TEST_F(MetricsTests, StatsShardConnections) {
+  CHECK_FAILURE;
+
+  const unsigned int CONNS_PER_SHARD = 2;
+
+  Session session =
+      default_cluster().with_core_connections_per_shard(CONNS_PER_SHARD).connect();
+
+  size_t nr_hosts = explode(contact_points_, ',').size();
+  size_t nr_shards = Options::is_scylla() ? Options::smp() : 1;
+  size_t expected_connection_count = nr_hosts * nr_shards * CONNS_PER_SHARD;
+
+  CassMetrics metrics = session.metrics();
+  for (int i = 0; i < 100 && metrics.stats.total_connections < expected_connection_count; ++i) {
+    metrics = session.metrics();
+    msleep(100);
+  }
+
+  EXPECT_GE(metrics.stats.total_connections, expected_connection_count);
+}
+
+/**
  * This test ensures that the driver is reporting the proper timeouts for requests
  *
  * @since 2.0.0
