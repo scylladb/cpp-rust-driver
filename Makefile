@@ -147,7 +147,7 @@ build-integration-test-bin:
 		echo "Building integration test binary to ${INTEGRATION_TEST_BIN}";\
   		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
 		cd "${BUILD_DIR}";\
-		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON .. && (make -j 4 || make);\
+		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
 	}
 
 build-integration-test-bin-if-missing:
@@ -156,7 +156,7 @@ build-integration-test-bin-if-missing:
 		echo "Integration test binary not found at ${INTEGRATION_TEST_BIN}, building it";\
 		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
 		cd "${BUILD_DIR}";\
-		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON .. && (make -j 4 || make);\
+		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
 	}
 
 _update-rust-tooling:
