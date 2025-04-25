@@ -1146,6 +1146,7 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
         Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
         Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
         Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
+        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
         None => {
             tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
             return;
