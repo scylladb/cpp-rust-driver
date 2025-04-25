@@ -4,7 +4,6 @@ use crate::cass_types::CassConsistency;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
-use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::types::*;
 use crate::uuid::CassUuid;
@@ -964,9 +963,11 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
 
     let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy).unwrap() {
-        DefaultRetryPolicy(default) => Arc::clone(default) as _,
-        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
-        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
+        CassRetryPolicy::DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => {
+            Arc::clone(downgrading) as _
+        }
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {

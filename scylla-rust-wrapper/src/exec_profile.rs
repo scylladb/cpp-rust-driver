@@ -25,9 +25,6 @@ use crate::cluster::{
     set_load_balance_rack_aware_n,
 };
 use crate::retry_policy::CassRetryPolicy;
-use crate::retry_policy::RetryPolicy::{
-    DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
-};
 use crate::session::CassSessionInner;
 use crate::statement::CassStatement;
 use crate::types::{
@@ -441,9 +438,11 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy).unwrap() {
-        DefaultRetryPolicy(default) => Arc::clone(default) as _,
-        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
-        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
+        CassRetryPolicy::DefaultRetryPolicy(default) => Arc::clone(default) as _,
+        CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
+        CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => {
+            Arc::clone(downgrading) as _
+        }
     };
     let profile_builder = BoxFFI::as_mut_ref(profile).unwrap();
     profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
