@@ -27,9 +27,6 @@ use crate::cluster::{
 };
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
-use crate::retry_policy::RetryPolicy::{
-    DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
-};
 use crate::session::CassSessionInner;
 use crate::statement::CassStatement;
 use crate::types::{
@@ -670,9 +667,11 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
     let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(DefaultRetryPolicy(default)) => Arc::clone(default) as _,
-        Some(FallthroughRetryPolicy(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(DowngradingConsistencyRetryPolicy(downgrading)) => Arc::clone(downgrading) as _,
+        Some(CassRetryPolicy::DefaultRetryPolicy(default)) => Arc::clone(default) as _,
+        Some(CassRetryPolicy::FallthroughRetryPolicy(fallthrough)) => Arc::clone(fallthrough) as _,
+        Some(CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading)) => {
+            Arc::clone(downgrading) as _
+        }
         None => {
             tracing::error!(
                 "Provided null retry policy pointer to cass_execution_profile_set_retry_policy!"
