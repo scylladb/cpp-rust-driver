@@ -443,6 +443,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => {
             Arc::clone(downgrading) as _
         }
+        CassRetryPolicy::LoggingRetryPolicy(logging) => Arc::clone(logging) as _,
     };
     let profile_builder = BoxFFI::as_mut_ref(profile).unwrap();
     profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));

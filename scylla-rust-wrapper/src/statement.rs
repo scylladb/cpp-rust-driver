@@ -422,6 +422,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
             }
             CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+            CassRetryPolicy::LoggingRetryPolicy(logging) => Arc::clone(logging) as _,
         });
 
     match &mut BoxFFI::as_mut_ref(statement).unwrap().statement {

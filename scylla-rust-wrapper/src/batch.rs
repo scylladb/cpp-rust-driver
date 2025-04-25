@@ -103,6 +103,7 @@ pub unsafe extern "C" fn cass_batch_set_retry_policy(
             }
             CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+            CassRetryPolicy::LoggingRetryPolicy(logging) => Arc::clone(logging) as _,
         });
 
     Arc::make_mut(&mut batch.state)

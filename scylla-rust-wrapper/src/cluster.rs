@@ -968,6 +968,7 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
         CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => {
             Arc::clone(downgrading) as _
         }
+        CassRetryPolicy::LoggingRetryPolicy(logging) => Arc::clone(logging) as _,
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
