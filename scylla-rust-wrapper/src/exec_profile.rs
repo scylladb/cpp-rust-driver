@@ -672,6 +672,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         Some(CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading)) => {
             Arc::clone(downgrading) as _
         }
+        Some(CassRetryPolicy::LoggingRetryPolicy(logging)) => Arc::clone(logging) as _,
         None => {
             tracing::error!(
                 "Provided null retry policy pointer to cass_execution_profile_set_retry_policy!"
