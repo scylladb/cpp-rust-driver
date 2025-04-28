@@ -1780,8 +1780,31 @@ cass_cluster_set_queue_size_event(CassCluster* cluster,
                                   unsigned queue_size));
 
 /**
- * Sets the number of connections made to each server in each
- * IO thread.
+ * Sets the number of connections opened by the driver to each host.
+ *
+ * Notice that this overrides the number of connections per shard
+ * set by `cass_cluster_set_core_connections_per_shard()`.
+ *
+ * <b>Default:</b> 1 per shard (i.e. `cass_cluster_set_core_connections_per_shard(cluster, 1)`)
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] num_connections
+ * @return CASS_OK if successful, otherwise an error occurred.
+ *
+ * @see cass_cluster_set_core_connections_per_shard()
+ */
+CASS_EXPORT CassError
+cass_cluster_set_core_connections_per_host(CassCluster* cluster,
+                                           unsigned num_connections);
+
+/**
+ * Sets the number of connections opened by the driver to each shard.
+ *
+ * Cassandra nodes are treated as if they have one shard.
+ * 
+ * This will override the `cass_cluster_set_core_connections_per_host`, if set.
  *
  * <b>Default:</b> 1
  *
@@ -1790,9 +1813,11 @@ cass_cluster_set_queue_size_event(CassCluster* cluster,
  * @param[in] cluster
  * @param[in] num_connections
  * @return CASS_OK if successful, otherwise an error occurred.
+ *
+ * @see cass_cluster_set_core_connections_per_host()
  */
 CASS_EXPORT CassError
-cass_cluster_set_core_connections_per_host(CassCluster* cluster,
+cass_cluster_set_core_connections_per_shard(CassCluster* cluster,
                                            unsigned num_connections);
 
 /**

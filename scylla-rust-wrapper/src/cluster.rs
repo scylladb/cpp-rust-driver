@@ -12,7 +12,7 @@ use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::client::{SelfIdentity, WriteCoalescingDelay};
+use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use std::net::IpAddr;
-use std::num::NonZero;
+use std::num::{NonZero, NonZeroUsize};
 use std::os::raw::{c_char, c_int, c_uint};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -47,6 +47,8 @@ const DEFAULT_MAX_SCHEMA_WAIT_TIME: Duration = Duration::from_millis(10000);
 const DEFAULT_SCHEMA_AGREEMENT_INTERVAL: Duration = Duration::from_millis(200);
 // - setting TCP_NODELAY is true
 const DEFAULT_SET_TCP_NO_DELAY: bool = true;
+// - connection pool size is 1 per shard
+const DEFAULT_CONNECTION_POOL_SIZE: PoolSize = PoolSize::PerShard(NonZeroUsize::new(1).unwrap());
 // - enabling write coalescing
 const DEFAULT_ENABLE_WRITE_COALESCING: bool = true;
 // - write coalescing delay
@@ -234,6 +236,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .schema_agreement_interval(DEFAULT_SCHEMA_AGREEMENT_INTERVAL)
             .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
+            .pool_size(DEFAULT_CONNECTION_POOL_SIZE)
             .write_coalescing(DEFAULT_ENABLE_WRITE_COALESCING)
             .write_coalescing_delay(DEFAULT_WRITE_COALESCING_DELAY)
             .keepalive_interval(DEFAULT_KEEPALIVE_INTERVAL)
@@ -452,6 +455,59 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
 ) {
     let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_core_connections_per_host(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    num_connections: c_uint,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_core_connections_per_host!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match NonZeroUsize::new(num_connections as usize) {
+        Some(non_zero_conns) => {
+            cluster.session_builder.config.connection_pool_size = PoolSize::PerHost(non_zero_conns);
+            CassError::CASS_OK
+        }
+        None => {
+            tracing::error!(
+                "Provided zero connections to cass_cluster_set_core_connections_per_host!"
+            );
+            CassError::CASS_ERROR_LIB_BAD_PARAMS
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_core_connections_per_shard(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    num_connections: c_uint,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_core_connections_per_shard!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match NonZeroUsize::new(num_connections as usize) {
+        Some(non_zero_conns) => {
+            cluster.session_builder.config.connection_pool_size =
+                PoolSize::PerShard(non_zero_conns);
+            CassError::CASS_OK
+        }
+        None => {
+            tracing::error!(
+                "Provided zero connections to cass_cluster_set_core_connections_per_shard!"
+            );
+            CassError::CASS_ERROR_LIB_BAD_PARAMS
+        }
+    }
 }
 
 #[unsafe(no_mangle)]

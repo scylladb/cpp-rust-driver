@@ -65,10 +65,6 @@ CASS_EXPORT CassError cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib
 CASS_EXPORT void cass_cluster_set_constant_reconnect(CassCluster* cluster, cass_uint64_t delay_ms) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_constant_reconnect\n");
 }
-CASS_EXPORT CassError cass_cluster_set_core_connections_per_host(CassCluster* cluster,
-                                                                 unsigned num_connections) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_core_connections_per_host\n");
-}
 CASS_EXPORT CassError cass_cluster_set_host_listener_callback(CassCluster* cluster,
                                                               CassHostListenerCallback callback,
                                                               void* data) {

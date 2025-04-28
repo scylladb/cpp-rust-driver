@@ -170,6 +170,19 @@ public:
     return *this;
   }
 
+    /**
+   * Assign the number of connections made to each shard
+   *
+   * NOTE: One extra connection is established (the control connection)
+   *
+   * @param connections Number of connection per shard (default: 1)
+   * @return Cluster object
+   */
+  Cluster& with_core_connections_per_shard(unsigned int connections = 1u) {
+    EXPECT_EQ(CASS_OK, cass_cluster_set_core_connections_per_shard(get(), connections));
+    return *this;
+  }
+
   /**
    * Sets credentials for plain text authentication
    *
