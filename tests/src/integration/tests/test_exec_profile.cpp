@@ -331,38 +331,48 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, Consistency) {
 }
 
 /**
- * Utilize the execution profile to override statement serial consistency
- *
- * This test will perform an insert query using the execution profile
- * 'serial_consistency'; overriding the default setting. The execution profile
- * should fail due to an invalid serial consistency applied to profile.
+ * Attempt to utilize an invalid serial consistency level on a statement.
  *
  * @jira_ticket CPP-492
  * @test_category execution_profiles
  * @since DSE 1.4.0
- * @expected_result Execution profile will fail (invalid serial consistency)
+ * @expected_result Setting bad consistency level as serial consistency fails
  */
 CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, SerialConsistency) {
   SKIP_IF_CASSANDRA_VERSION_LT(2.0.0);
   CHECK_FAILURE;
 
-  // Execute a batched query with assigned profile (should fail
-  Batch batch;
-  batch.add(insert_);
-  batch.set_execution_profile("serial_consistency");
-  Result result = session_.execute(batch, false);
-  ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
-  ASSERT_TRUE(contains(
-      result.error_message(),
-      "Invalid consistency for conditional update. Must be one of SERIAL or LOCAL_SERIAL"));
+  // Original test case expected us to set consistency ONE in place of serial consistency.
+  // The statement would then be executed, resulting in server error.
+  // This is something that we could technically do, but rust-driver disallows it on a type level.
+  // In result, we do not allow this in cpp-rust-driver as well.
+  // We can at least check that setting the bad consistency level for serial consistency
+  // fails on client side.
+  ExecutionProfile builder = ExecutionProfile::build();
+  ASSERT_EQ(CASS_ERROR_LIB_BAD_PARAMS, cass_execution_profile_set_serial_consistency(
+      builder.get(), CASS_CONSISTENCY_ONE));
 
-  // Execute a simple query with assigned profile (should fail)
-  insert_.set_execution_profile("serial_consistency");
-  result = session_.execute(insert_, false);
-  ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
-  ASSERT_TRUE(contains(
-      result.error_message(),
-      "Invalid consistency for conditional update. Must be one of SERIAL or LOCAL_SERIAL"));
+  // --- ORIGINAL TEST CASE BEGIN ---
+
+  // // Execute a batched query with assigned profile (should fail
+  // Batch batch;
+  // batch.add(insert_);
+  // batch.set_execution_profile("serial_consistency");
+  // Result result = session_.execute(batch, false);
+  // ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+  // ASSERT_TRUE(contains(
+  //     result.error_message(),
+  //     "Invalid consistency for conditional update. Must be one of SERIAL or LOCAL_SERIAL"));
+
+  // // Execute a simple query with assigned profile (should fail)
+  // insert_.set_execution_profile("serial_consistency");
+  // result = session_.execute(insert_, false);
+  // ASSERT_EQ(CASS_ERROR_SERVER_INVALID_QUERY, result.error_code());
+  // ASSERT_TRUE(contains(
+  //     result.error_message(),
+  //     "Invalid consistency for conditional update. Must be one of SERIAL or LOCAL_SERIAL"));
+
+  // --- ORIGINAL TEST CASE BEGIN ---
 }
 
 /**
