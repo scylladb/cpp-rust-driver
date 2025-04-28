@@ -27,12 +27,13 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
+:ExecutionProfileTest.Integration_Cassandra_RetryPolicy\
+:ExecutionProfileTest.Integration_Cassandra_InvalidName\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
-:ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
@@ -68,6 +69,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
+:ExecutionProfileTest.Integration_Cassandra_RetryPolicy\
+:ExecutionProfileTest.Integration_Cassandra_InvalidName\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
@@ -75,7 +78,6 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
-:ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
