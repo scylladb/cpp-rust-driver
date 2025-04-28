@@ -444,7 +444,7 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, LatencyAwareRouting) {
   CHECK_FAILURE;
 
   // Execute batch with the assigned profile and add criteria for the logger
-  logger_.add_critera("Calculated new minimum");
+  logger_.add_critera("Latency awareness: updated min average latency to");
   for (int i = 0; i < 1000; ++i) {
     Batch batch;
     batch.add(insert_);
