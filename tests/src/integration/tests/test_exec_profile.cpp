@@ -632,7 +632,10 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
   CHECK_FAILURE;
 
   // Create a logger criteria for retry policy validation
-  logger_.add_critera("Ignoring unavailable error");
+  // Provided execution profile uses cl THREE, while we have only two nodes.
+  logger_.add_critera("Retrying on the next target; "
+                      "Error: Database returned an error: "
+                      "Not enough nodes are alive to satisfy required consistency level");
 
   // Execute a simple query without assigned profile
   Statement statement(default_select_all());
@@ -645,8 +648,9 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
 
   // Execute a simple query with assigned profile
   statement.set_execution_profile("retry_policy");
-  result = session_.execute(statement);
-  ASSERT_EQ(CASS_OK, result.error_code());
+  // Don't expect CASS_OK.
+  result = session_.execute(statement, false);
+  ASSERT_EQ(CASS_ERROR_SERVER_UNAVAILABLE, result.error_code());
   ASSERT_EQ(1u, logger_.count());
 }
 
