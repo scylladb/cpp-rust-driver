@@ -21,6 +21,7 @@ pub mod execution_error;
 mod external;
 pub mod future;
 pub mod inet;
+#[cfg(cpp_integration_testing)]
 pub mod integration_testing;
 pub mod iterator;
 mod logging;

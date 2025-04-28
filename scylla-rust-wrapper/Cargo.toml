@@ -60,3 +60,6 @@ strip = "none"
 
 [lints.rust]
 unsafe-op-in-unsafe-fn = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(cpp_integration_testing)',
+] }
