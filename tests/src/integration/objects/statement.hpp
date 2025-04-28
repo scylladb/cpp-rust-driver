@@ -166,6 +166,16 @@ public:
   }
 
   /**
+   * Set a sleeping history listener on the statement.
+   * This can be used to enforce a sleep time during statement execution, which increases the latency.
+   *
+   * @param sleep_time_ms Sleep time in milliseconds
+   */
+  void set_sleep_time(uint64_t sleep_time_ms) {
+    datastax::internal::testing::set_sleeping_history_listener_on_statement(get(), sleep_time_ms);
+  }
+
+  /**
    * Enable/Disable whether the statement is idempotent. Idempotent statements
    * are able to be automatically retried after timeouts/errors and can be
    * speculatively executed.

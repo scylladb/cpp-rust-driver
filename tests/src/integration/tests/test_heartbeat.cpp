@@ -83,7 +83,7 @@ CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatDisabled) {
 CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatFailed) {
   CHECK_FAILURE;
 
-  logger_.add_critera("Failed to send a heartbeat within connection idle interval.");
+  logger_.add_critera("Timed out while waiting for response to keepalive request");
   Cluster cluster =
       default_cluster().with_connection_heartbeat_interval(1).with_connection_idle_timeout(5);
   connect(cluster);
@@ -91,11 +91,14 @@ CASSANDRA_INTEGRATION_TEST_F(HeartbeatTests, HeartbeatFailed) {
   cass_uint64_t initial_connections = session_.metrics().stats.total_connections;
   pause_node(2);
   start_timer();
-  while (session_.metrics().stats.total_connections >= initial_connections &&
+
+  CassMetrics metrics = session_.metrics();
+  while (metrics.stats.total_connections >= initial_connections &&
          elapsed_time() < 60000) {
     session_.execute_async(SELECT_ALL_SYSTEM_LOCAL_CQL); // Simply execute statements ignore any
                                                          // error that can occur from paused node
+    metrics = session_.metrics();
   }
-  EXPECT_LT(session_.metrics().stats.total_connections, initial_connections);
+  EXPECT_LT(metrics.stats.total_connections, initial_connections);
   EXPECT_GE(logger_.count(), 1u);
 }

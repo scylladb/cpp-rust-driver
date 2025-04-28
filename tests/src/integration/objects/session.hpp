@@ -111,7 +111,7 @@ public:
    * @return Driver metrics
    */
   CassMetrics metrics() const {
-    CassMetrics metrics;
+    CassMetrics metrics = {};
     cass_session_get_metrics(get(), &metrics);
     return metrics;
   }

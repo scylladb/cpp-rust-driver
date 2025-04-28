@@ -119,6 +119,13 @@ pub mod cass_iterator_types {
     include_bindgen_generated!("cppdriver_iterator_types.rs");
 }
 
+/// CassMetrics
+pub mod cass_metrics_types {
+    #![allow(non_camel_case_types, non_snake_case)]
+
+    include_bindgen_generated!("cppdriver_metrics_types.rs");
+}
+
 pub static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 pub static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
     RwLock::new(Logger {

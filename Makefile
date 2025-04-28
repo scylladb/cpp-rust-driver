@@ -25,6 +25,8 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :LoggingTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
+:MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
+:MetricsTests.Integration_Cassandra_Requests\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
@@ -34,6 +36,11 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+endif
+
+ifndef SCYLLA_NO_VALGRIND_TEST_FILTER
+SCYLLA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integration_Cassandra_Simple\
+:HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
 ifndef CASSANDRA_TEST_FILTER
@@ -59,6 +66,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :LoggingTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
+:MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
+:MetricsTests.Integration_Cassandra_Requests\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
@@ -70,6 +79,11 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+endif
+
+ifndef CASSANDRA_NO_VALGRIND_TEST_FILTER
+CASSANDRA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integration_Cassandra_Simple\
+:HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
 ifndef CCM_COMMIT_ID
@@ -226,7 +240,7 @@ endif
 	@echo "Running integration tests on scylla ${SCYLLA_VERSION}"
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
 	@echo "Running timeout sensitive tests on scylla ${SCYLLA_VERSION}"
-	build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="AsyncTests.Integration_Cassandra_Simple"
+	build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_NO_VALGRIND_TEST_FILTER}"
 
 run-test-integration-cassandra: prepare-integration-test download-ccm-cassandra-image install-java8-if-missing
 ifdef DONT_REBUILD_INTEGRATION_BIN
@@ -237,7 +251,7 @@ endif
 	@echo "Running integration tests on cassandra ${CASSANDRA_VERSION}"
 	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_TEST_FILTER}"
 	@echo "Running timeout sensitive tests on cassandra ${CASSANDRA_VERSION}"
-	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="AsyncTests.Integration_Cassandra_Simple"
+	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_NO_VALGRIND_TEST_FILTER}"
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo test

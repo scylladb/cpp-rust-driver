@@ -205,9 +205,6 @@ CASS_EXPORT CassRetryPolicy* cass_retry_policy_logging_new(CassRetryPolicy* chil
 CASS_EXPORT CassVersion cass_schema_meta_version(const CassSchemaMeta* schema_meta) {
   throw std::runtime_error("UNIMPLEMENTED cass_schema_meta_version\n");
 }
-CASS_EXPORT void cass_session_get_metrics(const CassSession* session, CassMetrics* output) {
-  throw std::runtime_error("UNIMPLEMENTED cass_session_get_metrics\n");
-}
 CASS_EXPORT void
 cass_session_get_speculative_execution_metrics(const CassSession* session,
                                                CassSpeculativeExecutionMetrics* output) {

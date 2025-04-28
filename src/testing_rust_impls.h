@@ -21,6 +21,11 @@ CASS_EXPORT void testing_cluster_get_contact_points(CassCluster* cluster, char**
                                                     size_t* contact_points_length);
 
 CASS_EXPORT void testing_free_contact_points(char* contact_points);
+
+// Sets a sleeping history listener on the statement.
+// This can be used to enforce a sleep time during statement execution, which increases the latency.
+CASS_EXPORT void testing_statement_set_sleeping_history_listener(CassStatement *statement,
+                                                                 cass_uint64_t sleep_time_ms);
 }
 
 #endif
