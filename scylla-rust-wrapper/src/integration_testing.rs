@@ -8,6 +8,7 @@ use scylla::observability::history::{AttemptId, HistoryListener, RequestId, Spec
 use scylla::policies::retry::RetryDecision;
 
 use crate::argconv::{BoxFFI, CMut, CassBorrowedExclusivePtr};
+use crate::batch::CassBatch;
 use crate::cluster::CassCluster;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
@@ -115,4 +116,19 @@ pub unsafe extern "C" fn testing_statement_set_sleeping_history_listener(
             .statement
             .set_history_listener(history_listener),
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_batch_set_sleeping_history_listener(
+    batch_raw: CassBorrowedExclusivePtr<CassBatch, CMut>,
+    sleep_time_ms: cass_uint64_t,
+) {
+    let sleep_time = Duration::from_millis(sleep_time_ms);
+    let history_listener = Arc::new(SleepingHistoryListener(sleep_time));
+
+    let batch = BoxFFI::as_mut_ref(batch_raw).unwrap();
+
+    Arc::make_mut(&mut batch.state)
+        .batch
+        .set_history_listener(history_listener)
 }
