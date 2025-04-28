@@ -42,9 +42,9 @@ public:
     // Create the execution profiles for the test cases
     if (!skip_base_execution_profile_) {
       profiles_["request_timeout"] = ExecutionProfile::build().with_request_timeout(1);
-      // Setting bad consistency type for exec profile is forbidden in cpp-rust-driver
-      // profiles_["consistency"] =
-      //     ExecutionProfile::build().with_consistency(CASS_CONSISTENCY_SERIAL);
+      profiles_["consistency"] =
+          ExecutionProfile::build().with_consistency(CASS_CONSISTENCY_SERIAL);
+      // Setting bad serial-consistency type for exec profile is forbidden in cpp-rust-driver
       // profiles_["serial_consistency"] =
       //     ExecutionProfile::build().with_serial_consistency(CASS_CONSISTENCY_ONE);
       profiles_["round_robin"] =
@@ -317,7 +317,7 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, Consistency) {
     cass_version = static_cast<CCM::DseVersion>(cass_version).get_cass_version();
   }
   std::string expected_message = "SERIAL is not supported as conditional update commit consistency";
-  if (cass_version >= "4.0.0") {
+  if (!Options::is_scylla() && cass_version >= "4.0.0") {
     expected_message = "You must use conditional updates for serializable writes";
   }
   ASSERT_TRUE(contains(result.error_message(), expected_message));
