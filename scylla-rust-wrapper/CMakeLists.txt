@@ -27,6 +27,10 @@ else()
   set(CMAKE_Rust_FLAGS "--cfg cpp_rust_unstable")
 endif()
 
+if(CASS_BUILD_INTEGRATION_TESTS)
+  set(CMAKE_Rust_FLAGS "${CMAKE_Rust_FLAGS} --cfg cpp_integration_testing")
+endif()
+
 if(APPLE)
   set(INSTALL_NAME_SHARED "libscylla-cpp-driver.${PROJECT_VERSION_STRING}.dylib")
   set(INSTALL_NAME_SHARED_SYMLINK_VERSION "libscylla-cpp-driver.${PROJECT_VERSION_MAJOR}.dylib")

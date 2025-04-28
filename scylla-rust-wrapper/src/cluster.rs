@@ -11,7 +11,6 @@ use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
 use openssl_sys::SSL_CTX_up_ref;
 use scylla::client::execution_profile::ExecutionProfileBuilder;
-use scylla::client::session::SessionConfig;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::client::{SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
@@ -161,7 +160,16 @@ impl CassCluster {
     }
 
     #[inline]
-    pub(crate) fn get_session_config(&self) -> &SessionConfig {
+    pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
+        self.client_id
+    }
+}
+
+// Utilities for integration testing
+#[cfg(cpp_integration_testing)]
+impl CassCluster {
+    #[inline]
+    pub(crate) fn get_session_config(&self) -> &scylla::client::session::SessionConfig {
         &self.session_builder.config
     }
 
@@ -173,11 +181,6 @@ impl CassCluster {
     #[inline]
     pub(crate) fn get_contact_points(&self) -> &[String] {
         &self.contact_points
-    }
-
-    #[inline]
-    pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
-        self.client_id
     }
 }
 
