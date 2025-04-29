@@ -282,6 +282,55 @@ where
     intersection.filter(|v| !v.is_empty())
 }
 
+impl CassHostFilter {
+    /// Computes the filtering rules from the load balancing policies, and
+    /// returns a corresponding `HostFilter`.
+    ///
+    /// In cpp-driver, the following rule is upheld: if a host is rejected
+    /// by **all** policies, the connection to that host is not opened at all.
+    /// See: https://github.com/scylladb/cpp-driver/blob/fa0f27069a6250/src/request_processor.cpp#L436-L451
+    ///
+    /// We can achieve this by:
+    /// - taking the union of all whitelists (per hosts and per dcs)
+    /// - taking the intersection of all blacklists (per hosts and per dcs)
+    ///
+    /// Now, if a host is not in the union of whitelists, it is rejected.
+    /// If a host is in the intersection of blacklists, it is rejected.
+    pub(crate) fn new_from_lbp_configs<'a>(
+        configs: impl Iterator<Item = &'a LoadBalancingConfig> + Clone,
+    ) -> Arc<dyn HostFilter> {
+        let whitelist_hosts = nonempty_union(
+            configs
+                .clone()
+                .map(|lbp_config| &lbp_config.filtering.whitelist_hosts),
+        );
+
+        let blacklist_hosts = nonempty_intersection(
+            configs
+                .clone()
+                .map(|lbp_config| &lbp_config.filtering.blacklist_hosts),
+        );
+
+        let whitelist_dc = nonempty_union(
+            configs
+                .clone()
+                .map(|lbp_config| &lbp_config.filtering.whitelist_dc),
+        );
+
+        let blacklist_dc =
+            nonempty_intersection(configs.map(|lbp_config| &lbp_config.filtering.blacklist_dc));
+
+        Arc::new(Self {
+            filtering: FilteringInfo {
+                whitelist_hosts,
+                blacklist_hosts,
+                whitelist_dc,
+                blacklist_dc,
+            },
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

@@ -39,7 +39,7 @@ use crate::types::{
 #[derive(Clone, Debug)]
 pub struct CassExecProfile {
     inner: ExecutionProfileBuilder,
-    load_balancing_config: LoadBalancingConfig,
+    pub(crate) load_balancing_config: LoadBalancingConfig,
 }
 
 impl FFI for CassExecProfile {

@@ -21,6 +21,7 @@ use scylla::cluster::metadata::ColumnType;
 use scylla::errors::ExecutionError;
 use scylla::frame::types::Consistency;
 use scylla::observability::metrics::MetricsError;
+use scylla::policies::host_filter::HostFilter;
 use scylla::response::PagingStateResponse;
 use scylla::response::query_result::QueryResult;
 use scylla::statement::unprepared::Statement;
@@ -78,11 +79,13 @@ impl CassSessionInner {
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
         let session_builder = build_session_builder(cluster);
         let exec_profile_map = cluster.execution_profile_map().clone();
+        let host_filter = cluster.build_host_filter();
 
         CassFuture::make_raw(Self::connect_fut(
             session_opt,
             session_builder,
             exec_profile_map,
+            host_filter,
             cluster
                 .get_client_id()
                 // If user did not set a client id, generate a random uuid v4.
@@ -95,6 +98,7 @@ impl CassSessionInner {
         session_opt: Arc<RwLock<Option<CassSessionInner>>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
+        host_filter: Arc<dyn HostFilter>,
         client_id: uuid::Uuid,
         keyspace: Option<String>,
     ) -> CassFutureResult {
@@ -124,6 +128,7 @@ impl CassSessionInner {
         }
 
         let session = session_builder
+            .host_filter(host_filter)
             .build()
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
