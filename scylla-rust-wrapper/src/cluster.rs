@@ -3,7 +3,7 @@ use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
-use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
+use crate::load_balancing::{CassHostFilter, LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
@@ -16,6 +16,7 @@ use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
+use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
@@ -96,6 +97,25 @@ impl CassCluster {
     #[inline]
     pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
         self.client_id
+    }
+
+    pub(crate) fn build_host_filter(&self) -> Arc<dyn HostFilter> {
+        CassHostFilter::new_from_lbp_configs(
+            std::iter::once(&self.load_balancing_config).chain(
+                self.execution_profile_map
+                    .values()
+                    // Filter out the profiles that do not have specified base LBP.
+                    // If base LBP is not specified, the extensions such as filtering
+                    // are simply ignored - default (cluster) LBP is used.
+                    .filter_map(|exec_profile| {
+                        exec_profile
+                            .load_balancing_config
+                            .load_balancing_kind
+                            .as_ref()
+                            .map(|_| &exec_profile.load_balancing_config)
+                    }),
+            ),
+        )
     }
 }
 
