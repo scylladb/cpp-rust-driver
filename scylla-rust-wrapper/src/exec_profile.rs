@@ -20,10 +20,8 @@ use crate::argconv::{
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::cluster::{
-    LoadBalancingConfig, LoadBalancingKind, set_load_balance_dc_aware_n,
-    set_load_balance_rack_aware_n,
-};
+use crate::cluster::{set_load_balance_dc_aware_n, set_load_balance_rack_aware_n};
+use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
