@@ -234,6 +234,123 @@ pub(crate) struct CassHostFilter {
 impl HostFilter for CassHostFilter {
     fn accept(&self, peer: &Peer) -> bool {
         self.filtering
-            .is_host_valid(&peer.address.ip(), &peer.datacenter)
+            .is_host_allowed(&peer.address.ip(), peer.datacenter.as_deref())
+    }
+}
+
+/// Returns the union of all non-empty vectors (sets).
+/// If at least one set is empty, it return None.
+fn nonempty_union<'a, T>(iter: impl Iterator<Item = &'a Vec<T>>) -> Option<Vec<T>>
+where
+    T: Clone + PartialEq + 'a,
+{
+    let mut union = Vec::new();
+
+    for values in iter {
+        // If at least one set is empty, we return None.
+        if values.is_empty() {
+            return None;
+        }
+
+        for v in values {
+            if !union.contains(v) {
+                union.push(v.clone());
+            }
+        }
+    }
+
+    (!union.is_empty()).then_some(union)
+}
+
+/// Returns the intersection of all vectors (sets).
+/// If the intersection is empty, it returns None.
+fn nonempty_intersection<'a, T>(mut iter: impl Iterator<Item = &'a Vec<T>>) -> Option<Vec<T>>
+where
+    T: Clone + PartialEq + 'a,
+{
+    // Get the first set (initial intersection).
+    let mut intersection = iter.next().cloned();
+
+    // Remove the items from the intersection that are not present in the other sets.
+    if let Some(intersection) = intersection.as_mut() {
+        for set in iter {
+            intersection.retain(|item| set.contains(item));
+        }
+    }
+
+    // If the intersection is empty, return None.
+    intersection.filter(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_union_and_intersection() {
+        struct TestCase {
+            input: Vec<Vec<i32>>,
+            expected_union: Option<Vec<i32>>,
+            expected_intersection: Option<Vec<i32>>,
+        }
+
+        let test_cases = &[
+            TestCase {
+                input: vec![],
+                expected_union: None,
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![]],
+                expected_union: None,
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![], vec![1]],
+                expected_union: None,
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![1]],
+                expected_union: Some(vec![1]),
+                expected_intersection: Some(vec![1]),
+            },
+            TestCase {
+                input: vec![vec![], vec![1], vec![2]],
+                expected_union: None,
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![1], vec![2]],
+                expected_union: Some(vec![1, 2]),
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![1, 2], vec![2, 3]],
+                expected_union: Some(vec![1, 2, 3]),
+                expected_intersection: Some(vec![2]),
+            },
+            TestCase {
+                input: vec![vec![1, 2], vec![3, 4]],
+                expected_union: Some(vec![1, 2, 3, 4]),
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![1, 2], vec![2, 3], vec![3, 4]],
+                expected_union: Some(vec![1, 2, 3, 4]),
+                expected_intersection: None,
+            },
+            TestCase {
+                input: vec![vec![1, 2], vec![2, 3], vec![2, 5]],
+                expected_union: Some(vec![1, 2, 3, 5]),
+                expected_intersection: Some(vec![2]),
+            },
+        ];
+
+        for test in test_cases {
+            let union = super::nonempty_union(test.input.iter());
+            let intersection = super::nonempty_intersection(test.input.iter());
+
+            assert_eq!(union, test.expected_union);
+            assert_eq!(intersection, test.expected_intersection);
+        }
     }
 }
