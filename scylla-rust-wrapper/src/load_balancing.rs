@@ -2,8 +2,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use scylla::cluster::metadata::Peer;
 use scylla::cluster::{ClusterState, NodeRef};
 use scylla::errors::RequestAttemptError;
+use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, FallbackPlan, LatencyAwarenessBuilder, LoadBalancingPolicy, RoutingInfo,
 };
@@ -220,5 +222,18 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
 
     fn name(&self) -> String {
         format!("FilteringLoadBalancingPolicy({})", self.child_policy.name())
+    }
+}
+
+/// A host filter used by cpp-rust-driver. It's constructed based on the
+/// filtering configuration provided by the user.
+pub(crate) struct CassHostFilter {
+    pub(crate) filtering: FilteringInfo,
+}
+
+impl HostFilter for CassHostFilter {
+    fn accept(&self, peer: &Peer) -> bool {
+        self.filtering
+            .is_host_valid(&peer.address.ip(), &peer.datacenter)
     }
 }
