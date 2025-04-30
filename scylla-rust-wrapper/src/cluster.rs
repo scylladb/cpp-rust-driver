@@ -1437,7 +1437,7 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::assert_cass_error_eq;
+    use crate::testing::{assert_cass_error_eq, setup_tracing};
 
     use super::*;
     use crate::{
@@ -1886,6 +1886,132 @@ mod tests {
                         CassError::CASS_ERROR_LIB_BAD_PARAMS
                     );
                 }
+            }
+
+            cass_cluster_free(cluster_raw);
+        }
+    }
+
+    #[test]
+    fn test_cluster_whitelist_blacklist_filtering_config() {
+        setup_tracing();
+
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+
+            // Check the defaults
+            {
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_dc
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_dc
+                        .is_empty()
+                );
+            }
+
+            // add some addresses (and some additional whitespaces)
+            {
+                cass_cluster_set_whitelist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c" 127.0.0.1 ,  127.0.0.2 ".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.whitelist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))
+                    ]
+                );
+            }
+
+            // Mixed valid and unparsable addressed.
+            // Unparsable addresses should be ignored.
+            {
+                cass_cluster_set_whitelist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c"foo, 127.0.0.3, bar,,baz".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.whitelist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))
+                    ]
+                );
+            }
+
+            // Provide empty string - this should clear the list.
+            {
+                cass_cluster_set_whitelist_filtering(cluster_raw.borrow_mut(), c"".as_ptr());
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+            }
+
+            // Populate the list again...
+            {
+                cass_cluster_set_blacklist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c"1.1.1.1,2.2.2.2,foo,,,,  ,3.3.3.3,".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                        IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)),
+                        IpAddr::V4(Ipv4Addr::new(3, 3, 3, 3))
+                    ]
+                );
+            }
+
+            // ..and clear it with the null pointer
+            {
+                cass_cluster_set_blacklist_filtering(cluster_raw.borrow_mut(), std::ptr::null());
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
             }
 
             cass_cluster_free(cluster_raw);

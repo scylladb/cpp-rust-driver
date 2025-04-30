@@ -752,9 +752,11 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use super::*;
 
-    use crate::testing::assert_cass_error_eq;
+    use crate::testing::{assert_cass_error_eq, setup_tracing};
     use crate::{
         argconv::{make_c_str, str_to_c_str_n},
         batch::{cass_batch_add_statement, cass_batch_free, cass_batch_new},
@@ -763,6 +765,138 @@ mod tests {
     };
 
     use assert_matches::assert_matches;
+
+    #[test]
+    fn test_exec_profile_whitelist_blacklist_filtering_config() {
+        setup_tracing();
+
+        unsafe {
+            let mut profile_raw = cass_execution_profile_new();
+
+            // Check the defaults
+            {
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_dc
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_dc
+                        .is_empty()
+                );
+            }
+
+            // add some addresses (and some additional whitespaces)
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c" 127.0.0.1 ,  127.0.0.2 ".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    profile.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))
+                    ]
+                );
+            }
+
+            // Mixed valid and unparsable addressed.
+            // Unparsable addresses should be ignored.
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"foo, 127.0.0.3, bar,,baz".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    profile.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))
+                    ]
+                );
+            }
+
+            // Provide empty string - this should clear the list.
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+            }
+
+            // Populate the list again...
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"1.1.1.1,2.2.2.2,foo,,,,  ,3.3.3.3,".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                        IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)),
+                        IpAddr::V4(Ipv4Addr::new(3, 3, 3, 3))
+                    ]
+                );
+            }
+
+            // ..and clear it with the null pointer
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    std::ptr::null(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+            }
+
+            cass_execution_profile_free(profile_raw);
+        }
+    }
 
     #[test]
     #[ntest::timeout(100)]
