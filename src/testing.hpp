@@ -52,6 +52,8 @@ CASS_EXPORT void set_record_attempted_hosts(CassStatement* statement, bool enabl
 
 CASS_EXPORT void set_sleeping_history_listener_on_statement(CassStatement* statement, uint64_t sleep_time_ms);
 
+CASS_EXPORT void set_sleeping_history_listener_on_batch(CassBatch* batch, uint64_t sleep_time_ms);
+
 }}} // namespace datastax::internal::testing
 
 #endif

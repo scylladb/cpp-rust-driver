@@ -28,12 +28,16 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
+:ExecutionProfileTest.Integration_Cassandra_InvalidName\
+:ExecutionProfileTest.Integration_Cassandra_RequestTimeout\
+:ExecutionProfileTest.Integration_Cassandra_Consistency\
+:ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
+:ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
-:ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
@@ -70,6 +74,11 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
+:ExecutionProfileTest.Integration_Cassandra_InvalidName\
+:ExecutionProfileTest.Integration_Cassandra_RequestTimeout\
+:ExecutionProfileTest.Integration_Cassandra_Consistency\
+:ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
+:ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
@@ -77,7 +86,6 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
-:ExecutionProfileTest.InvalidName\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
 :UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)

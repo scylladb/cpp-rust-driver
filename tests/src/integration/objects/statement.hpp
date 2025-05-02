@@ -366,6 +366,16 @@ public:
   }
 
   /**
+   * Set a sleeping history listener on the batch.
+   * This can be used to enforce a sleep time during batch execution, which increases the latency.
+   *
+   * @param sleep_time_ms Sleep time in milliseconds
+   */
+  void set_sleep_time(uint64_t sleep_time_ms) {
+    datastax::internal::testing::set_sleeping_history_listener_on_batch(get(), sleep_time_ms);
+  }
+
+  /**
    * Enable/Disable whether the statements in a batch are idempotent. Idempotent
    * batches are able to be automatically retried after timeouts/errors and can
    * be speculatively executed.

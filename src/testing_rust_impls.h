@@ -26,6 +26,11 @@ CASS_EXPORT void testing_free_contact_points(char* contact_points);
 // This can be used to enforce a sleep time during statement execution, which increases the latency.
 CASS_EXPORT void testing_statement_set_sleeping_history_listener(CassStatement *statement,
                                                                  cass_uint64_t sleep_time_ms);
+
+// Sets a sleeping history listener on the batch.
+// This can be used to enforce a sleep time during batch execution, which increases the latency.
+CASS_EXPORT void testing_batch_set_sleeping_history_listener(CassBatch *batch,
+    cass_uint64_t sleep_time_ms);
 }
 
 #endif
