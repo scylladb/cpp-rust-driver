@@ -17,7 +17,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
 :ErrorTests.*\
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
+:SchemaMetadataTest.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
@@ -37,6 +37,8 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
+:SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
+:SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
@@ -68,7 +70,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ControlConnectionTests.*\
 :ErrorTests.*\
 :SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
+:SchemaMetadataTest.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
@@ -89,6 +91,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
+:SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
+:SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
