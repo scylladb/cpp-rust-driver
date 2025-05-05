@@ -67,7 +67,11 @@ public:
  */
 class SerialConsistencyTests : public Integration {
 public:
-  SerialConsistencyTests() { number_dc1_nodes_ = 1; }
+  SerialConsistencyTests() {
+    number_dc1_nodes_ = 1;
+    // LWTs do not work with tablets.
+    disable_tablets_ = true;
+  }
 
   virtual void SetUp() {
     // Call the parent setup function
