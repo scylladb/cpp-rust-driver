@@ -30,6 +30,8 @@ public:
       // We do not implement logging retry policy in cpp-rust-driver
       // , logging_retry_policy_(child_retry_policy_)
       , skip_base_execution_profile_(false) {
+    // LWTs do not work with tablets.
+    disable_tablets_ = true;
     replication_factor_ = 2;
     number_dc1_nodes_ = 2;
     is_beta_protocol_ = false; // Issue with beta protocol v5 and functions on Cassandra v3.10.0+
