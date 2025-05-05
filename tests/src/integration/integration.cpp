@@ -268,7 +268,7 @@ std::string Integration::default_replication_strategy() {
     replication_strategy_s << "'NetworkTopologyStrategy', 'dc1': " << number_dc1_nodes_ << ", "
                            << "'dc2': " << number_dc2_nodes_;
   } else {
-    replication_strategy_s << "'SimpleStrategy', 'replication_factor': ";
+    replication_strategy_s << "'NetworkTopologyStrategy', 'dc1': ";
 
     // Ensure the replication factor has not been overridden or already set
     if (replication_factor_ == 0) {
