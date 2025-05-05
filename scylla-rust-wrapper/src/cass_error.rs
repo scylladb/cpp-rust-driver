@@ -32,7 +32,7 @@ impl ToCassError for ExecutionError {
         match self {
             ExecutionError::BadQuery(bad_query) => bad_query.to_cass_error(),
             ExecutionError::RequestTimeout(_) => CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT,
-            ExecutionError::EmptyPlan => CassError::CASS_ERROR_LIB_INVALID_STATE,
+            ExecutionError::EmptyPlan => CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
             ExecutionError::MetadataError(e) => e.to_cass_error(),
             ExecutionError::ConnectionPoolError(e) => e.to_cass_error(),
             ExecutionError::PrepareError(e) => e.to_cass_error(),
