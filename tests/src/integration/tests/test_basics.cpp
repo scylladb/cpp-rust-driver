@@ -21,6 +21,11 @@
  */
 class BasicsTests : public Integration {};
 
+class BasicsNoTabletsTests : public BasicsTests {
+ public:
+  BasicsNoTabletsTests() { disable_tablets_ = true; }
+};
+
 /**
  * Perform inserts and validate the timestamps from the server
  *
@@ -81,7 +86,7 @@ CASSANDRA_INTEGRATION_TEST_F(BasicsTests, Timestamps) {
  * @since core:1.0.0
  * @expected_result Cassandra values are inserted and counters are validated
  */
-CASSANDRA_INTEGRATION_TEST_F(BasicsTests, Counters) {
+CASSANDRA_INTEGRATION_TEST_F(BasicsNoTabletsTests, Counters) {
   CHECK_FAILURE;
 
   // Create the table and update/upsert queries for the test

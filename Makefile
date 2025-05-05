@@ -4,6 +4,7 @@ SPACE := ${EMPTY} ${EMPTY}
 ifndef SCYLLA_TEST_FILTER
 SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
+:BasicsNoTabletsTests.*\
 :ConfigTests.*\
 :NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
@@ -58,6 +59,7 @@ endif
 ifndef CASSANDRA_TEST_FILTER
 CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
+:BasicsNoTabletsTests.*\
 :ConfigTests.*\
 :NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
