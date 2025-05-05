@@ -28,6 +28,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :ServerSideFailureTests.*\
 :TimestampTests.*\
+:HostFilterTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
@@ -84,6 +85,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :ServerSideFailureTests.*\
 :TimestampTests.*\
+:HostFilterTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
