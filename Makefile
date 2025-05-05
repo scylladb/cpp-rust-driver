@@ -32,11 +32,10 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ServerSideFailureThreeNodeTests.*\
 :TimestampTests.*\
 :HostFilterTest.*\
+:DisconnectedNullStringApiArgsTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
-:DisconnectedNullStringApiArgsTest.Integration_Cassandra_SetContactPoints\
-:DisconnectedNullStringApiArgsTest.Integration_Cassandra_ConnectKeyspaceNullKeyspace\
 :ExecutionProfileTest.Integration_Cassandra_InvalidName\
 :ExecutionProfileTest.Integration_Cassandra_RequestTimeout\
 :ExecutionProfileTest.Integration_Cassandra_Consistency\
@@ -92,11 +91,10 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ServerSideFailureThreeNodeTests.*\
 :TimestampTests.*\
 :HostFilterTest.*\
+:DisconnectedNullStringApiArgsTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
-:DisconnectedNullStringApiArgsTest.Integration_Cassandra_SetContactPoints\
-:DisconnectedNullStringApiArgsTest.Integration_Cassandra_ConnectKeyspaceNullKeyspace\
 :ExecutionProfileTest.Integration_Cassandra_InvalidName\
 :ExecutionProfileTest.Integration_Cassandra_RequestTimeout\
 :ExecutionProfileTest.Integration_Cassandra_Consistency\
