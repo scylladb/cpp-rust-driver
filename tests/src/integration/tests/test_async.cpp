@@ -23,6 +23,8 @@
  */
 class AsyncTests : public Integration {
 public:
+  AsyncTests() { disable_tablets_ = true; }
+
   void SetUp() {
     // Call the parent setup function
     Integration::SetUp();
