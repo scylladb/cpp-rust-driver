@@ -309,6 +309,12 @@ protected:
    * (DEFAULT: true)
    */
   bool is_beta_protocol_;
+  /** Flag to indicate if tablets should be disabled for Scylla keyspace.
+   * There are some cases where the test logic will fail for tablets keyspace
+   * (e.g. when test uses LWT statements).
+   * (DEFAULT: false)
+   */
+  bool disable_tablets_;
   /**
    * Workload to apply to the cluster
    */
@@ -507,6 +513,14 @@ protected:
    * @return Comma delimited IP address (e.g. contact points)
    */
   std::string generate_contact_points(const std::string& ip_prefix, size_t number_of_nodes);
+
+  /**
+   * Check if Scylla supports a specific feature.
+   *
+   * @param feature Feature to check if supported by Scylla
+   * @return True if Scylla supports the feature; false otherwise
+   */
+  bool scylla_supports_feature(const std::string& feature);
 
   /**
    * Variable argument string formatter
