@@ -280,38 +280,78 @@ pub unsafe extern "C" fn cass_cluster_set_contact_points_n(
     contact_points: *const c_char,
     contact_points_length: size_t,
 ) -> CassError {
-    match unsafe { cluster_set_contact_points(cluster, contact_points, contact_points_length) } {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_contact_points_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match unsafe {
+        update_comma_delimited_list(
+            &mut cluster.contact_points,
+            contact_points,
+            contact_points_length,
+            // Ignore empty contact points.
+            |s| (!s.is_empty()).then(|| s.to_string()),
+        )
+    } {
         Ok(()) => CassError::CASS_OK,
         Err(err) => err,
     }
 }
 
-unsafe fn cluster_set_contact_points(
-    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
-    contact_points_raw: *const c_char,
-    contact_points_length: size_t,
-) -> Result<(), CassError> {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
-    let mut contact_points = unsafe { ptr_to_cstr_n(contact_points_raw, contact_points_length) }
-        .ok_or(CassError::CASS_ERROR_LIB_BAD_PARAMS)?
-        .split(',')
-        .filter(|s| !s.is_empty()) // Extra commas should be ignored.
-        .peekable();
+/// A utility method to parse a comma-delimited list of items,
+/// and update the provided vector accordingly.
+///
+/// If the provided string is null or empty, the list is cleared.
+/// Otherwise, string is splitted by a comma, each item is trimmed of
+/// whitespace, and passed to the provided `convert` function. Resulting
+/// items are then appended to the list.
+///
+/// `convert` function should filter out invalid items - they will be ignored.
+pub(crate) unsafe fn update_comma_delimited_list<T, F>(
+    list: &mut Vec<T>,
+    item_ptr: *const c_char,
+    item_length: size_t,
+    convert: F,
+) -> Result<(), CassError>
+where
+    F: Fn(&str) -> Option<T>,
+{
+    // item_ptr is null if the user provided a null string.
+    // null string is equivalent to empty string in this case - it clears the list.
+    let item_str = if item_ptr.is_null() {
+        None
+    } else {
+        match unsafe { ptr_to_cstr_n(item_ptr, item_length) } {
+            Some(h) => Some(h),
+            None => {
+                tracing::error!("Provided non-utf8 string representing a comma-delimited list");
+                return Err(CassError::CASS_ERROR_LIB_BAD_PARAMS);
+            }
+        }
+    };
 
-    if contact_points.peek().is_none() || contact_points.peek().unwrap().is_empty() {
-        // If cass_cluster_set_contact_points() is called with empty
-        // set of contact points, the contact points should be cleared.
-        cluster.contact_points.clear();
-        return Ok(());
+    let item_iter = item_str.and_then(|non_null_item_str| {
+        // Check for string emptiness **before** splitting and parsing the entries.
+        // This is what cpp-driver does.
+        // For example, if user provides: "foo,bar,baz" (invalid IP addresses), we don't
+        // want to clear the list, but simply ignore bad entries.
+        (!non_null_item_str.is_empty()).then(|| {
+            non_null_item_str
+                .split(',')
+                .map(|s| s.trim())
+                .filter_map(convert)
+        })
+    });
+
+    if let Some(item_iter) = item_iter {
+        // We should append new entries.
+        list.extend(item_iter);
+    } else {
+        // If the string is empty or null, we should clear the list.
+        list.clear();
     }
 
-    // cass_cluster_set_contact_points() will append
-    // in subsequent calls, not overwrite.
-    cluster.contact_points.extend(
-        contact_points
-            .map(|cp| cp.trim().to_string())
-            .filter(|cp| !cp.is_empty()),
-    );
     Ok(())
 }
 
