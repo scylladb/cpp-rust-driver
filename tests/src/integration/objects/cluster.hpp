@@ -391,6 +391,18 @@ public:
   }
 
   /**
+   * Enable blacklist filtering.
+   *
+   * @param hosts A comma delimited list of hosts (addresses or
+   *              names)
+   * @return Cluster object
+   */
+  Cluster& with_blacklist_filtering(const std::string& hosts) {
+    cass_cluster_set_blacklist_filtering(get(), hosts.c_str());
+    return *this;
+  }
+
+  /**
    * Enable/Disable preparing all hosts when preparing a new statement.
    *
    * @param enable
