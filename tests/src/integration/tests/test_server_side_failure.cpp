@@ -79,9 +79,13 @@ private:
 CASSANDRA_INTEGRATION_TEST_F(ServerSideFailureTests, Warning) {
   CHECK_FAILURE;
   SKIP_IF_CASSANDRA_VERSION_LT(2.2);
+  if (Options::is_scylla()) {
+    SKIP_TEST("Scylla does not emit 'Aggregation query used without partition key' warning");
+  }
 
-  logger_.add_critera("Server-side warning: Aggregation query used without partition key");
-  session_.execute("SELECT sum(gossip_generation) FROM system.local WHERE key='local'");
+  logger_.add_critera("Response from the database contains a warning, "
+                      "warning: \"Aggregation query used without partition key\"");
+  session_.execute("SELECT sum(gossip_generation) FROM system.local");
   EXPECT_EQ(logger_.count(), 1u);
 }
 
