@@ -22,32 +22,6 @@
 
 using namespace datastax::internal::core;
 
-extern "C" {
-
-CassTimestampGen* cass_timestamp_gen_server_side_new() {
-  TimestampGenerator* timestamp_gen = new ServerSideTimestampGenerator();
-  timestamp_gen->inc_ref();
-  return CassTimestampGen::to(timestamp_gen);
-}
-
-CassTimestampGen* cass_timestamp_gen_monotonic_new() {
-  TimestampGenerator* timestamp_gen = new MonotonicTimestampGenerator();
-  timestamp_gen->inc_ref();
-  return CassTimestampGen::to(timestamp_gen);
-}
-
-CassTimestampGen* cass_timestamp_gen_monotonic_new_with_settings(int64_t warning_threshold_us,
-                                                                 int64_t warning_interval_ms) {
-  TimestampGenerator* timestamp_gen =
-      new MonotonicTimestampGenerator(warning_threshold_us, warning_interval_ms);
-  timestamp_gen->inc_ref();
-  return CassTimestampGen::to(timestamp_gen);
-}
-
-void cass_timestamp_gen_free(CassTimestampGen* timestamp_gen) { timestamp_gen->dec_ref(); }
-
-} // extern "C"
-
 int64_t MonotonicTimestampGenerator::next() {
   while (true) {
     int64_t last = last_.load();
