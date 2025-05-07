@@ -6,6 +6,7 @@ use crate::future::CassFuture;
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
+use crate::timestamp_generator::CassTimestampGen;
 use crate::types::*;
 use crate::uuid::CassUuid;
 use openssl::ssl::SslContextBuilder;
@@ -19,6 +20,7 @@ use scylla::policies::load_balancing::{
 };
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
+use scylla::policies::timestamp_generator::TimestampGenerator;
 use scylla::routing::ShardAwarePortRange;
 use scylla::statement::{Consistency, SerialConsistency};
 use std::collections::HashMap;
@@ -464,6 +466,33 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
 
     cluster.session_builder.config.tcp_keepalive_interval = tcp_keepalive_interval;
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_timestamp_gen(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    timestamp_gen_raw: CassBorrowedSharedPtr<CassTimestampGen, CMut>,
+) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_timestamp_gen!");
+        return;
+    };
+    let Some(timestamp_gen) = BoxFFI::as_ref(timestamp_gen_raw) else {
+        tracing::error!(
+            "Provided null timestamp generator pointer to cass_cluster_set_timestamp_gen!"
+        );
+        return;
+    };
+
+    let rust_timestamp_gen: Option<Arc<dyn TimestampGenerator>> = match timestamp_gen {
+        // In rust-driver, `None` is equivalent to using server-side timestamp generator.
+        CassTimestampGen::ServerSide => None,
+        CassTimestampGen::Monotonic(monotonic_timestamp_generator) => {
+            Some(Arc::clone(monotonic_timestamp_generator) as _)
+        }
+    };
+
+    cluster.session_builder.config.timestamp_generator = rust_timestamp_gen;
 }
 
 #[unsafe(no_mangle)]

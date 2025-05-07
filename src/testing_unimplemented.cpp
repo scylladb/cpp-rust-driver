@@ -84,10 +84,6 @@ CASS_EXPORT CassError cass_cluster_set_prepare_on_up_or_add_host(CassCluster* cl
                                                                  cass_bool_t enabled) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_up_or_add_host\n");
 }
-CASS_EXPORT void cass_cluster_set_timestamp_gen(CassCluster* cluster,
-                                                CassTimestampGen* timestamp_gen) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_timestamp_gen\n");
-}
 CASS_EXPORT void cass_cluster_set_whitelist_dc_filtering(CassCluster* cluster, const char* dcs) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_whitelist_dc_filtering\n");
 }

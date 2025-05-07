@@ -37,6 +37,7 @@ pub mod ssl;
 pub mod statement;
 #[cfg(test)]
 pub mod testing;
+pub mod timestamp_generator;
 pub mod tuple;
 pub mod user_type;
 pub mod uuid;

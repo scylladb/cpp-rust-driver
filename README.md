@@ -174,25 +174,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
             <td>Unimplemented because of the same reasons as binding for statements.<br> <b>Note</b>: The driver does not check whether the type of the value being set for a field of the UDT is compatible with the field's actual type.</td>
         </tr>
         <tr>
-            <td colspan=2 align="center" style="font-weight:bold">Timestamp generators</td>
-        </tr>
-        <tr>
-            <td>cass_timestamp_gen_server_side_new</td>
-            <td rowspan="5">Timestamp generator is not implemented in the Rust driver.</td>
-        </tr>
-        <tr>
-            <td>cass_timestamp_gen_monotonic_new</td>
-        </tr>
-        <tr>
-            <td>cass_timestamp_gen_monotonic_new_with_settings</td>
-        </tr>
-        <tr>
-            <td>cass_timestamp_gen_free</td>
-        </tr>
-        <tr>
-            <td>cass_cluster_set_timestamp_gen</td>
-        </tr>
-        <tr>
             <td colspan=2 align="center" style="font-weight:bold">Metadata</td>
         </tr>
         <tr>
