@@ -22,7 +22,11 @@
 
 class SchemaMetadataTest : public Integration {
 public:
-  SchemaMetadataTest() { is_schema_metadata_ = true; }
+  SchemaMetadataTest() { 
+    is_schema_metadata_ = true;
+    // Materialized views do not work with tablets.
+    disable_tablets_ = true;
+  }
 
   void SetUp() {
     SKIP_IF_CASSANDRA_VERSION_LT(2.2.0);

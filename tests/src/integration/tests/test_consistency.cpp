@@ -67,7 +67,11 @@ public:
  */
 class SerialConsistencyTests : public Integration {
 public:
-  SerialConsistencyTests() { number_dc1_nodes_ = 1; }
+  SerialConsistencyTests() {
+    number_dc1_nodes_ = 1;
+    // LWTs do not work with tablets.
+    disable_tablets_ = true;
+  }
 
   virtual void SetUp() {
     // Call the parent setup function
@@ -240,18 +244,18 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleEachQuorum) {
 
 /**
  * Perform multiple inserts and selects using different consistencies against a
- * cluster with a single decommissioned node
+ * cluster with a single stopped node
  *
  * This test will perform insert and select operations using a simple statement
  * while validating the operation were successful or failed against a three
- * three node cluster with a decommissioned node.
+ * three node cluster with a stopped node.
  *
  * @test_category consistency
  * @since core:1.0.0
  * @expected_result Successful insert and select using multiple consistencies:
  *                  `ALL`, `ONE`, `TWO`, and `QUORUM`
  *                  Failed insert and select using multiple consistencies:
- *                  `ALL` (after decommission) and `THREE`
+ *                  `ALL` (after stopping) and `THREE`
  */
 CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, OneNodeDecommissioned) {
   CHECK_FAILURE;
@@ -262,8 +266,8 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, OneNodeDecommissi
   session_.execute(insert_);
   session_.execute(select_);
 
-  // Decommission node two
-  decommission_node(2);
+  // Stop node two
+  stop_node(2);
 
   // Perform a check using consistency `QUORUM` (N=2, RF=3)
   insert_.set_consistency(CASS_CONSISTENCY_QUORUM);
@@ -298,18 +302,18 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, OneNodeDecommissi
 
 /**
  * Perform multiple inserts and selects using different consistencies against a
- * cluster with a two decommissioned nodes
+ * cluster with two stopped nodes
  *
  * This test will perform insert and select operations using a simple statement
  * while validating the operation were successful or failed against a three
- * node cluster with two decommissioned nodes.
+ * node cluster with two stopped nodes.
  *
  * @test_category consistency
  * @since core:1.0.0
  * @expected_result Successful insert and select using multiple consistencies:
  *                  `ALL`, and `ONE`
  *                  Failed insert and select using multiple consistencies:
- *                  `ALL` (after decommission), `QUORUM`, `TWO`, and `THREE`
+ *                  `ALL` (after stopped), `QUORUM`, `TWO`, and `THREE`
  */
 CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, TwoNodesDecommissioned) {
   CHECK_FAILURE;
@@ -320,9 +324,9 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyThreeNodeClusterTests, TwoNodesDecommiss
   session_.execute(insert_);
   session_.execute(select_);
 
-  // Decommission node two and three
-  decommission_node(2);
-  decommission_node(3);
+  // Stop node two and three
+  stop_node(2);
+  stop_node(3);
 
   // Perform a check using consistency `ONE` (N=1, RF=3)
   insert_.set_consistency(CASS_CONSISTENCY_ONE);

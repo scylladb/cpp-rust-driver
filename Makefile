@@ -4,6 +4,7 @@ SPACE := ${EMPTY} ${EMPTY}
 ifndef SCYLLA_TEST_FILTER
 SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
+:BasicsNoTabletsTests.*\
 :ConfigTests.*\
 :NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
@@ -17,7 +18,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
 :ErrorTests.*\
 :SslNoClusterTests*:SslNoSslOnClusterTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
+:SchemaMetadataTest.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
@@ -38,6 +39,8 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
+:SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
+:SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :TimestampTests.Integration_Cassandra_MonotonicTimestampGenerator\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
@@ -58,6 +61,7 @@ endif
 ifndef CASSANDRA_TEST_FILTER
 CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :BasicsTests.*\
+:BasicsNoTabletsTests.*\
 :ConfigTests.*\
 :NullStringApiArgsTest.*\
 :ConsistencyTwoNodeClusterTests.*\
@@ -70,7 +74,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ControlConnectionTests.*\
 :ErrorTests.*\
 :SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
+:SchemaMetadataTest.*\
 :TracingTests.*\
 :ByNameTests.*\
 :CompressionTests.*\
@@ -92,6 +96,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
+:SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
+:SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed\
 :TimestampTests.Integration_Cassandra_MonotonicTimestampGenerator\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\

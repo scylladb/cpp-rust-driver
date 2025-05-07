@@ -66,6 +66,7 @@ Integration::Integration()
     , is_keyspace_change_requested_(true)
     , is_test_chaotic_(false)
     , is_beta_protocol_(Options::is_beta_protocol())
+    , disable_tablets_(false)
     , protocol_version_(CASS_PROTOCOL_VERSION_V4)
     , create_keyspace_query_("")
     , start_time_(0ull) {
@@ -267,7 +268,7 @@ std::string Integration::default_replication_strategy() {
     replication_strategy_s << "'NetworkTopologyStrategy', 'dc1': " << number_dc1_nodes_ << ", "
                            << "'dc2': " << number_dc2_nodes_;
   } else {
-    replication_strategy_s << "'SimpleStrategy', 'replication_factor': ";
+    replication_strategy_s << "'NetworkTopologyStrategy', 'dc1': ";
 
     // Ensure the replication factor has not been overridden or already set
     if (replication_factor_ == 0) {
@@ -347,6 +348,13 @@ void Integration::connect(Cluster cluster) {
     }
     TEST_LOG("Branch/Tag Option was Used: Retrieved server version is "
              << server_version_.to_string());
+  }
+
+  // Check if scylla supports TABLETS feature. If so, and test
+  // does not work with tablets (e.g. it uses LWT), disable the tablets
+  // for test keyspace.
+  if (disable_tablets_ && scylla_supports_feature("TABLETS")) {
+    create_keyspace_query_ = create_keyspace_query_ + " AND TABLETS = { 'enabled': false }";
   }
 
   // Create the keyspace for the integration test
@@ -472,6 +480,19 @@ std::string Integration::generate_contact_points(const std::string& ip_prefix,
     contact_points.push_back(contact_point.str());
   }
   return implode(contact_points, ',');
+}
+
+bool Integration::scylla_supports_feature(const std::string& feature) {
+  if (!Options::is_scylla()) {
+    return false;
+  }
+
+  Result res = session_.execute("SELECT supported_features FROM system.local WHERE key='local'");
+  Text supported_features = res.first_row().column_by_name<Text>("supported_features");
+  if (supported_features.is_null()) {
+    return false;
+  }
+  return supported_features.value().find(feature) != std::string::npos;
 }
 
 std::string Integration::format_string(const char* format, ...) const {

@@ -105,7 +105,11 @@ protected:
  */
 class BatchCounterSingleNodeClusterTests : public BatchSingleNodeClusterTests {
 public:
-  BatchCounterSingleNodeClusterTests() { value_cql_data_type_ = "counter"; }
+  BatchCounterSingleNodeClusterTests() {
+    value_cql_data_type_ = "counter";
+    // Counter type is not supported with tablets.
+    disable_tablets_ = true;
+  }
 
   /**
    * Validate the result for the text data type
