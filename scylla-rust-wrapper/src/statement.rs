@@ -1,6 +1,7 @@
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::exec_profile::PerStatementExecProfile;
+use crate::inet::CassInet;
 use crate::prepared::CassPrepared;
 use crate::query_result::CassResult;
 use crate::retry_policy::CassRetryPolicy;
@@ -8,6 +9,7 @@ use crate::types::*;
 use crate::value::CassCqlValue;
 use crate::{argconv::*, value};
 use scylla::frame::types::Consistency;
+use scylla::policies::load_balancing::{NodeIdentifier, SingleTargetLoadBalancingPolicy};
 use scylla::response::{PagingState, PagingStateResponse};
 use scylla::serialize::SerializationError;
 use scylla::serialize::row::{RowSerializationContext, SerializeRow};
@@ -19,8 +21,10 @@ use scylla::value::MaybeUnset;
 use scylla::value::MaybeUnset::{Set, Unset};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::net::{IpAddr, SocketAddr};
 use std::os::raw::{c_char, c_int};
 use std::slice;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -441,6 +445,103 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_statement_set_host(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    host: *const c_char,
+    port: c_int,
+) -> CassError {
+    unsafe { cass_statement_set_host_n(statement_raw, host, strlen(host), port) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_statement_set_host_n(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    host: *const c_char,
+    host_length: size_t,
+    port: c_int,
+) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_host_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let host = match unsafe { ptr_to_cstr_n(host, host_length) } {
+        Some(v) => v,
+        None => {
+            tracing::error!("Provided null or non-utf8 host pointer to cass_statement_set_host_n!");
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+    };
+    let Ok(port): Result<u16, _> = port.try_into() else {
+        tracing::error!("Provided invalid port value to cass_statement_set_host_n: {port}");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let address = match IpAddr::from_str(host) {
+        Ok(ip_addr) => SocketAddr::new(ip_addr, port),
+        Err(e) => {
+            tracing::error!("Failed to parse ip address <{}>: {}", host, e);
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+    };
+    let enforce_target_lbp =
+        SingleTargetLoadBalancingPolicy::new(NodeIdentifier::NodeAddress(address), None);
+
+    match &mut statement.statement {
+        BoundStatement::Simple(inner) => inner
+            .query
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+    }
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_statement_set_host_inet(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    host: *const CassInet,
+    port: c_int,
+) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_host_inet!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    if host.is_null() {
+        tracing::error!("Provided null host pointer to cass_statement_set_host_inet!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+    // SAFETY: Assuming that user provided valid pointer.
+    let ip_addr: IpAddr = match unsafe { *host }.try_into() {
+        Ok(ip_addr) => ip_addr,
+        Err(_) => {
+            tracing::error!("Provided invalid CassInet value to cass_statement_set_host_inet!");
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+    };
+    let Ok(port): Result<u16, _> = port.try_into() else {
+        tracing::error!("Provided invalid port value to cass_statement_set_host_n: {port}");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let address = SocketAddr::new(ip_addr, port);
+    let enforce_target_lbp =
+        SingleTargetLoadBalancingPolicy::new(NodeIdentifier::NodeAddress(address), None);
+
+    match &mut statement.statement {
+        BoundStatement::Simple(inner) => inner
+            .query
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+    }
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -694,3 +795,141 @@ make_binders!(
     cass_statement_bind_user_type_by_name,
     cass_statement_bind_user_type_by_name_n
 );
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+    use std::ptr::addr_of;
+    use std::str::FromStr;
+
+    use crate::argconv::BoxFFI;
+    use crate::cass_error::CassError;
+    use crate::inet::CassInet;
+    use crate::statement::{cass_statement_set_host, cass_statement_set_host_inet};
+    use crate::testing::assert_cass_error_eq;
+
+    use super::{cass_statement_free, cass_statement_new};
+
+    #[test]
+    fn test_statement_set_host() {
+        unsafe {
+            let mut statement_raw = cass_statement_new(c"dummy".as_ptr(), 0);
+
+            // cass_statement_set_host
+            {
+                // Null statement
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host(BoxFFI::null_mut(), c"127.0.0.1".as_ptr(), 9042)
+                );
+
+                // Null ip address
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host(statement_raw.borrow_mut(), std::ptr::null(), 9042)
+                );
+
+                // Unparsable ip address
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host(statement_raw.borrow_mut(), c"invalid".as_ptr(), 9042)
+                );
+
+                // Negative port
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host(statement_raw.borrow_mut(), c"127.0.0.1".as_ptr(), -1)
+                );
+
+                // Port too big
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host(
+                        statement_raw.borrow_mut(),
+                        c"127.0.0.1".as_ptr(),
+                        70000
+                    )
+                );
+
+                // Valid ip address and port
+                assert_cass_error_eq!(
+                    CassError::CASS_OK,
+                    cass_statement_set_host(
+                        statement_raw.borrow_mut(),
+                        c"127.0.0.1".as_ptr(),
+                        9042
+                    )
+                );
+            }
+
+            // cass_statement_set_host_inet
+            {
+                let valid_inet: CassInet = IpAddr::from_str("127.0.0.1").unwrap().into();
+
+                let invalid_inet = CassInet {
+                    address: [0; 16],
+                    // invalid length - should be 4 or 16
+                    address_length: 3,
+                };
+
+                // Null statement
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host_inet(BoxFFI::null_mut(), addr_of!(valid_inet), 9042)
+                );
+
+                // Null CassInet
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host_inet(
+                        statement_raw.borrow_mut(),
+                        std::ptr::null(),
+                        9042
+                    )
+                );
+
+                // Invalid CassInet
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host_inet(
+                        statement_raw.borrow_mut(),
+                        addr_of!(invalid_inet),
+                        9042
+                    )
+                );
+
+                // Negative port
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host_inet(
+                        statement_raw.borrow_mut(),
+                        addr_of!(valid_inet),
+                        -1
+                    )
+                );
+
+                // Port too big
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_host_inet(
+                        statement_raw.borrow_mut(),
+                        addr_of!(valid_inet),
+                        70000
+                    )
+                );
+
+                // Valid ip address and port
+                assert_cass_error_eq!(
+                    CassError::CASS_OK,
+                    cass_statement_set_host_inet(
+                        statement_raw.borrow_mut(),
+                        addr_of!(valid_inet),
+                        9042
+                    )
+                );
+            }
+
+            cass_statement_free(statement_raw);
+        }
+    }
+}
