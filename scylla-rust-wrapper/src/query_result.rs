@@ -73,7 +73,7 @@ impl CassResult {
                     ))
                 });
 
-                let (raw_rows, tracing_id, _) = rows_result.into_inner();
+                let (raw_rows, tracing_id, _, _coordinator) = rows_result.into_inner();
                 let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
                 let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
                     Arc::clone(&shared_data),
