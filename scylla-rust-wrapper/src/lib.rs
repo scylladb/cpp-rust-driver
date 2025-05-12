@@ -24,6 +24,7 @@ pub mod inet;
 #[cfg(cpp_integration_testing)]
 pub mod integration_testing;
 pub mod iterator;
+mod load_balancing;
 mod logging;
 pub mod metadata;
 pub mod misc;
