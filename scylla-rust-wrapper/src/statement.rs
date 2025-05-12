@@ -3,7 +3,7 @@ use crate::cass_types::CassConsistency;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::inet::CassInet;
 use crate::prepared::CassPrepared;
-use crate::query_result::CassResult;
+use crate::query_result::{CassNode, CassResult};
 use crate::retry_policy::CassRetryPolicy;
 use crate::types::*;
 use crate::value::CassCqlValue;
@@ -542,6 +542,35 @@ pub unsafe extern "C" fn cass_statement_set_host_inet(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_statement_set_node(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    node_raw: CassBorrowedSharedPtr<CassNode, CConst>,
+) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_node!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let Some(node) = RefFFI::as_ref(node_raw) else {
+        tracing::error!("Provided null node pointer to cass_statement_set_node!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let enforce_target_lbp =
+        SingleTargetLoadBalancingPolicy::new(NodeIdentifier::Node(Arc::clone(node.node())), None);
+
+    match &mut statement.statement {
+        BoundStatement::Simple(inner) => inner
+            .query
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_load_balancing_policy(Some(enforce_target_lbp)),
+    }
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
@@ -802,10 +831,12 @@ mod tests {
     use std::ptr::addr_of;
     use std::str::FromStr;
 
-    use crate::argconv::BoxFFI;
+    use crate::argconv::{BoxFFI, RefFFI};
     use crate::cass_error::CassError;
     use crate::inet::CassInet;
-    use crate::statement::{cass_statement_set_host, cass_statement_set_host_inet};
+    use crate::statement::{
+        cass_statement_set_host, cass_statement_set_host_inet, cass_statement_set_node,
+    };
     use crate::testing::assert_cass_error_eq;
 
     use super::{cass_statement_free, cass_statement_new};
@@ -926,6 +957,21 @@ mod tests {
                         addr_of!(valid_inet),
                         9042
                     )
+                );
+            }
+
+            // cass_statement_set_node
+            {
+                // Null statement
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_node(BoxFFI::null_mut(), RefFFI::null())
+                );
+
+                // Null CassNode
+                assert_cass_error_eq!(
+                    CassError::CASS_ERROR_LIB_BAD_PARAMS,
+                    cass_statement_set_node(statement_raw.borrow_mut(), RefFFI::null())
                 );
             }
 
