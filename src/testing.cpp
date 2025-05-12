@@ -45,7 +45,7 @@ String get_host_from_future(CassFuture* future) {
   OStringStream ss;
   ss << host_str;
 
-  testing_free_host(host);
+  testing_free_cstring(host);
 
   return ss.str();
 }
@@ -74,7 +74,7 @@ String get_contact_points_from_cluster(CassCluster* cluster) {
   OStringStream ss;
   ss << contact_points_str;
 
-  testing_free_contact_points(contact_points);
+  testing_free_cstring(contact_points);
 
   return ss.str();
 }
