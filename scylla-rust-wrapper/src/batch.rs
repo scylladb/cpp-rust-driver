@@ -60,7 +60,11 @@ pub unsafe extern "C" fn cass_batch_set_consistency(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     consistency: CassConsistency,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_consistency!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let consistency = match consistency.try_into().ok() {
         Some(c) => c,
         None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -77,7 +81,11 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_serial_consistency!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let serial_consistency = match serial_consistency.try_into().ok() {
         Some(c) => c,
         None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -94,7 +102,10 @@ pub unsafe extern "C" fn cass_batch_set_retry_policy(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_retry_policy!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
         ArcFFI::as_ref(retry_policy).map(|policy| match policy {
@@ -117,7 +128,10 @@ pub unsafe extern "C" fn cass_batch_set_timestamp(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     timestamp: cass_int64_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_timestamp!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     Arc::make_mut(&mut batch.state)
         .batch
@@ -131,7 +145,10 @@ pub unsafe extern "C" fn cass_batch_set_request_timeout(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_request_timeout!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
     batch.batch_request_timeout_ms = Some(timeout_ms);
 
     CassError::CASS_OK
@@ -142,7 +159,11 @@ pub unsafe extern "C" fn cass_batch_set_is_idempotent(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     is_idempotent: cass_bool_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_is_idempotent!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     Arc::make_mut(&mut batch.state)
         .batch
         .set_is_idempotent(is_idempotent != 0);
@@ -155,7 +176,11 @@ pub unsafe extern "C" fn cass_batch_set_tracing(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     enabled: cass_bool_t,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_set_tracing!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     Arc::make_mut(&mut batch.state)
         .batch
         .set_tracing(enabled != 0);
@@ -168,9 +193,16 @@ pub unsafe extern "C" fn cass_batch_add_statement(
     batch: CassBorrowedExclusivePtr<CassBatch, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,
 ) -> CassError {
-    let batch = BoxFFI::as_mut_ref(batch).unwrap();
+    let Some(batch) = BoxFFI::as_mut_ref(batch) else {
+        tracing::error!("Provided null batch pointer to cass_batch_add_statement!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let Some(statement) = BoxFFI::as_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_batch_add_statement!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let state = Arc::make_mut(&mut batch.state);
-    let statement = BoxFFI::as_ref(statement).unwrap();
 
     match &statement.statement {
         BoundStatement::Simple(q) => {
