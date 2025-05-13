@@ -381,7 +381,10 @@ pub unsafe extern "C" fn cass_cluster_set_application_name_n(
     app_name: *const c_char,
     app_name_len: size_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_application_name_n!");
+        return;
+    };
     let app_name = unsafe { ptr_to_cstr_n(app_name, app_name_len) }
         .unwrap()
         .to_string();
@@ -407,7 +410,10 @@ pub unsafe extern "C" fn cass_cluster_set_application_version_n(
     app_version: *const c_char,
     app_version_len: size_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_application_version_n!");
+        return;
+    };
     let app_version = unsafe { ptr_to_cstr_n(app_version, app_version_len) }
         .unwrap()
         .to_string();
@@ -424,7 +430,10 @@ pub unsafe extern "C" fn cass_cluster_set_client_id(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     client_id: CassUuid,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_client_id!");
+        return;
+    };
 
     let client_uuid: uuid::Uuid = client_id.into();
     let client_uuid_str = client_uuid.to_string();
@@ -442,7 +451,11 @@ pub unsafe extern "C" fn cass_cluster_set_use_schema(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_use_schema!");
+        return;
+    };
+
     cluster.session_builder.config.fetch_schema_metadata = enabled != 0;
 }
 
@@ -451,7 +464,11 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_nodelay(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_tcp_nodelay!");
+        return;
+    };
+
     cluster.session_builder.config.tcp_nodelay = enabled != 0;
 }
 
@@ -461,7 +478,11 @@ pub unsafe extern "C" fn cass_cluster_set_tcp_keepalive(
     enabled: cass_bool_t,
     delay_secs: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_tcp_keepalive!");
+        return;
+    };
+
     let enabled = enabled != 0;
     let tcp_keepalive_interval = enabled.then(|| Duration::from_secs(delay_secs as u64));
 
@@ -500,7 +521,13 @@ pub unsafe extern "C" fn cass_cluster_set_connection_heartbeat_interval(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     interval_secs: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_connection_heartbeat_interval!"
+        );
+        return;
+    };
+
     let keepalive_interval = (interval_secs > 0).then(|| Duration::from_secs(interval_secs as u64));
 
     cluster.session_builder.config.keepalive_interval = keepalive_interval;
@@ -511,7 +538,13 @@ pub unsafe extern "C" fn cass_cluster_set_connection_idle_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_secs: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_connection_idle_timeout!"
+        );
+        return;
+    };
+
     let keepalive_timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs as u64));
 
     cluster.session_builder.config.keepalive_timeout = keepalive_timeout;
@@ -522,7 +555,11 @@ pub unsafe extern "C" fn cass_cluster_set_connect_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_ms: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_connect_timeout!");
+        return;
+    };
+
     cluster.session_builder.config.connect_timeout = Duration::from_millis(timeout_ms.into());
 }
 
@@ -618,7 +655,10 @@ pub unsafe extern "C" fn cass_cluster_set_request_timeout(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     timeout_ms: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_request_timeout!");
+        return;
+    };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
         // 0 -> no timeout
@@ -631,7 +671,10 @@ pub unsafe extern "C" fn cass_cluster_set_max_schema_wait_time(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     wait_time_ms: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_max_schema_wait_time!");
+        return;
+    };
 
     cluster.session_builder.config.schema_agreement_timeout =
         Duration::from_millis(wait_time_ms.into());
@@ -642,7 +685,12 @@ pub unsafe extern "C" fn cass_cluster_set_schema_agreement_interval(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     interval_ms: c_uint,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_schema_agreement_interval!"
+        );
+        return;
+    };
 
     cluster.session_builder.config.schema_agreement_interval =
         Duration::from_millis(interval_ms.into());
@@ -653,12 +701,16 @@ pub unsafe extern "C" fn cass_cluster_set_port(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     port: c_int,
 ) -> CassError {
-    if port <= 0 {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_port!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
+    };
+    let Ok(port): Result<u16, _> = port.try_into() else {
+        tracing::error!("Provided invalid port number to cass_cluster_set_port!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
-    cluster.port = port as u16;
+    cluster.port = port;
     CassError::CASS_OK
 }
 
@@ -774,11 +826,14 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
     password_raw: *const c_char,
     password_length: size_t,
 ) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_credentials_n!");
+        return;
+    };
     // TODO: string error handling
     let username = unsafe { ptr_to_cstr_n(username_raw, username_length) }.unwrap();
     let password = unsafe { ptr_to_cstr_n(password_raw, password_length) }.unwrap();
 
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
     cluster.auth_username = Some(username.to_string());
     cluster.auth_password = Some(password.to_string());
 }
@@ -787,7 +842,13 @@ pub unsafe extern "C" fn cass_cluster_set_credentials_n(
 pub unsafe extern "C" fn cass_cluster_set_load_balance_round_robin(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_load_balance_round_robin!"
+        );
+        return;
+    };
+
     cluster.load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::RoundRobin);
 }
 
@@ -842,7 +903,12 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_dc_aware_n(
     used_hosts_per_remote_dc: c_uint,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_load_balance_dc_aware_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     unsafe {
         set_load_balance_dc_aware_n(
@@ -880,7 +946,12 @@ pub unsafe extern "C" fn cass_cluster_set_load_balance_rack_aware_n(
     local_rack_raw: *const c_char,
     local_rack_length: size_t,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_load_balance_rack_aware_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     unsafe {
         set_load_balance_rack_aware_n(
@@ -996,7 +1067,13 @@ pub unsafe extern "C" fn cass_cluster_set_use_beta_protocol_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enable: cass_bool_t,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_use_beta_protocol_version!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     cluster.use_beta_protocol_version = enable == cass_true;
 
     CassError::CASS_OK
@@ -1007,7 +1084,10 @@ pub unsafe extern "C" fn cass_cluster_set_protocol_version(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     protocol_version: c_int,
 ) -> CassError {
-    let cluster = BoxFFI::as_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_protocol_version!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     if protocol_version == 4 && !cluster.use_beta_protocol_version {
         // Rust Driver supports only protocol version 4
@@ -1032,11 +1112,16 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
     constant_delay_ms: cass_int64_t,
     max_speculative_executions: c_int,
 ) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_constant_speculative_execution_policy!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     if constant_delay_ms < 0 || max_speculative_executions < 0 {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
-
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
 
     let policy = SimpleSpeculativeExecutionPolicy {
         max_retry_count: max_speculative_executions as usize,
@@ -1054,7 +1139,12 @@ pub unsafe extern "C" fn cass_cluster_set_constant_speculative_execution_policy(
 pub unsafe extern "C" fn cass_cluster_set_no_speculative_execution_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_no_speculative_execution_policy!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
         builder.speculative_execution_policy(None)
@@ -1068,7 +1158,11 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_token_aware_routing!");
+        return;
+    };
+
     cluster.load_balancing_config.token_awareness_enabled = enabled != 0;
 }
 
@@ -1077,7 +1171,12 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_token_aware_routing_shuffle_replicas!"
+        );
+        return;
+    };
 
     cluster
         .load_balancing_config
@@ -1089,12 +1188,19 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster_raw).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_retry_policy!");
+        return;
+    };
 
-    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy).unwrap() {
-        DefaultRetryPolicy(default) => Arc::clone(default) as _,
-        FallthroughRetryPolicy(fallthrough) => Arc::clone(fallthrough) as _,
-        DowngradingConsistencyRetryPolicy(downgrading) => Arc::clone(downgrading) as _,
+    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
+        Some(DefaultRetryPolicy(default)) => Arc::clone(default) as _,
+        Some(FallthroughRetryPolicy(fallthrough)) => Arc::clone(fallthrough) as _,
+        Some(DowngradingConsistencyRetryPolicy(downgrading)) => Arc::clone(downgrading) as _,
+        None => {
+            tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
+            return;
+        }
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
@@ -1107,8 +1213,14 @@ pub unsafe extern "C" fn cass_cluster_set_ssl(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
 ) {
-    let cluster_from_raw = BoxFFI::as_mut_ref(cluster).unwrap();
-    let cass_ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
+    let Some(cluster_from_raw) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_ssl!");
+        return;
+    };
+    let Some(cass_ssl) = ArcFFI::as_ref(ssl) else {
+        tracing::error!("Provided null ssl pointer to cass_cluster_set_ssl!");
+        return;
+    };
 
     let ssl_context_builder = unsafe { SslContextBuilder::from_ptr(cass_ssl.ssl_context) };
     // Reference count is increased as tokio_openssl will try to free `ssl_context` when calling `SSL_free`.
@@ -1122,7 +1234,11 @@ pub unsafe extern "C" fn cass_cluster_set_compression(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     compression_type: CassCompressionType,
 ) {
-    let cluster_from_raw = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster_from_raw) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_compression!");
+        return;
+    };
+
     let compression = match compression_type {
         CassCompressionType::CASS_COMPRESSION_LZ4 => Some(Compression::Lz4),
         CassCompressionType::CASS_COMPRESSION_SNAPPY => Some(Compression::Snappy),
@@ -1137,7 +1253,11 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     enabled: cass_bool_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_latency_aware_routing!");
+        return;
+    };
+
     cluster.load_balancing_config.latency_awareness_enabled = enabled != 0;
 }
 
@@ -1150,7 +1270,13 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
     update_rate_ms: cass_uint64_t,
     min_measured: cass_uint64_t,
 ) {
-    let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_latency_aware_routing_settings!"
+        );
+        return;
+    };
+
     cluster.load_balancing_config.latency_awareness_builder = LatencyAwarenessBuilder::new()
         .exclusion_threshold(exclusion_threshold)
         .scale(Duration::from_millis(scale_ms))
@@ -1164,7 +1290,11 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     consistency: CassConsistency,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_consistency!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let consistency: Consistency = match consistency.try_into() {
         Ok(c) => c,
         Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -1182,7 +1312,11 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     serial_consistency: CassConsistency,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_serial_consistency!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let serial_consistency: SerialConsistency = match serial_consistency.try_into() {
         Ok(c) => c,
         Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
@@ -1211,7 +1345,11 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
     name_length: size_t,
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
 ) -> CassError {
-    let cluster = BoxFFI::as_mut_ref(cluster).unwrap();
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_execution_profile_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let name = if let Some(name) =
         unsafe { ptr_to_cstr_n(name, name_length) }.and_then(|name| name.to_owned().try_into().ok())
     {
