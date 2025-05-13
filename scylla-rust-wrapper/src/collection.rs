@@ -160,7 +160,11 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     item_count: size_t,
 ) -> CassOwnedExclusivePtr<CassCollection, CMut> {
-    let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
+    let Some(data_type) = ArcFFI::cloned_from_ptr(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_collection_new_from_data_type!");
+        return BoxFFI::null_mut();
+    };
+
     let (capacity, collection_type) = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::List { .. } => {
             (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
@@ -187,7 +191,10 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
 unsafe extern "C" fn cass_collection_data_type(
     collection: CassBorrowedSharedPtr<CassCollection, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let collection_ref = BoxFFI::as_ref(collection).unwrap();
+    let Some(collection_ref) = BoxFFI::as_ref(collection) else {
+        tracing::error!("Provided null collection pointer to cass_collection_data_type!");
+        return ArcFFI::null();
+    };
 
     match &collection_ref.data_type {
         Some(dt) => ArcFFI::as_ptr(dt),
