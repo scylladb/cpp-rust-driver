@@ -309,10 +309,15 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     consistency: CassConsistency,
 ) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_consistency!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let consistency_opt = get_consistency_from_cass_consistency(consistency);
 
     if let Some(consistency) = consistency_opt {
-        match &mut BoxFFI::as_mut_ref(statement).unwrap().statement {
+        match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_consistency(consistency),
             BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
                 .statement
@@ -328,7 +333,11 @@ pub unsafe extern "C" fn cass_statement_set_paging_size(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     page_size: c_int,
 ) -> CassError {
-    let statement = BoxFFI::as_mut_ref(statement_raw).unwrap();
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_paging_size!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     if page_size <= 0 {
         // Cpp driver sets the page size flag only for positive page size provided by user.
         statement.paging_enabled = false;
@@ -350,8 +359,14 @@ pub unsafe extern "C" fn cass_statement_set_paging_state(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     result: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> CassError {
-    let statement = BoxFFI::as_mut_ref(statement).unwrap();
-    let result = ArcFFI::as_ref(result).unwrap();
+    let Some(statement) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_paging_state!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let Some(result) = ArcFFI::as_ref(result) else {
+        tracing::error!("Provided null result pointer to cass_statement_set_paging_state!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     match &result.paging_state_response {
         PagingStateResponse::HasMorePages { state } => statement.paging_state.clone_from(state),
@@ -366,7 +381,12 @@ pub unsafe extern "C" fn cass_statement_set_paging_state_token(
     paging_state: *const c_char,
     paging_state_size: size_t,
 ) -> CassError {
-    let statement_from_raw = BoxFFI::as_mut_ref(statement).unwrap();
+    let Some(statement_from_raw) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!(
+            "Provided null statement pointer to cass_statement_set_paging_state_token!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     if paging_state.is_null() {
         statement_from_raw.paging_state = PagingState::start();
@@ -385,7 +405,12 @@ pub unsafe extern "C" fn cass_statement_set_is_idempotent(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     is_idempotent: cass_bool_t,
 ) -> CassError {
-    match &mut BoxFFI::as_mut_ref(statement_raw).unwrap().statement {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_is_idempotent!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match &mut statement.statement {
         BoundStatement::Simple(inner) => inner.query.set_is_idempotent(is_idempotent != 0),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
@@ -400,7 +425,12 @@ pub unsafe extern "C" fn cass_statement_set_tracing(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     enabled: cass_bool_t,
 ) -> CassError {
-    match &mut BoxFFI::as_mut_ref(statement_raw).unwrap().statement {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_tracing!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match &mut statement.statement {
         BoundStatement::Simple(inner) => inner.query.set_tracing(enabled != 0),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
@@ -415,6 +445,11 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_retry_policy!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
         ArcFFI::as_ref(retry_policy).map(|policy| match policy {
             CassRetryPolicy::DefaultRetryPolicy(default) => {
@@ -424,7 +459,7 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
             CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
         });
 
-    match &mut BoxFFI::as_mut_ref(statement).unwrap().statement {
+    match &mut statement.statement {
         BoundStatement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
@@ -439,6 +474,13 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     serial_consistency: CassConsistency,
 ) -> CassError {
+    let Some(statement) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!(
+            "Provided null statement pointer to cass_statement_set_serial_consistency!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     // cpp-driver doesn't validate passed value in any way.
     // If it is an incorrect serial-consistency value then it will be set
     // and sent as-is.
@@ -453,7 +495,7 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
         _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
     };
 
-    match &mut BoxFFI::as_mut_ref(statement).unwrap().statement {
+    match &mut statement.statement {
         BoundStatement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
@@ -485,7 +527,12 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     timestamp: cass_int64_t,
 ) -> CassError {
-    match &mut BoxFFI::as_mut_ref(statement).unwrap().statement {
+    let Some(statement) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_timestamp!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match &mut statement.statement {
         BoundStatement::Simple(inner) => inner.query.set_timestamp(Some(timestamp)),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
@@ -500,6 +547,11 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
+    let Some(statement_from_raw) = BoxFFI::as_mut_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_statement_set_request_timeout!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     // The maximum duration for a sleep is 68719476734 milliseconds (approximately 2.2 years).
     // Note: this is limited by tokio::time:timout
     // https://github.com/tokio-rs/tokio/blob/4b1c4801b1383800932141d0f6508d5b3003323e/tokio/src/time/driver/wheel/mod.rs#L44-L50
@@ -508,7 +560,6 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    let statement_from_raw = BoxFFI::as_mut_ref(statement).unwrap();
     statement_from_raw.request_timeout_ms = Some(timeout_ms);
 
     CassError::CASS_OK
@@ -519,7 +570,11 @@ pub unsafe extern "C" fn cass_statement_reset_parameters(
     statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     count: size_t,
 ) -> CassError {
-    let statement = BoxFFI::as_mut_ref(statement_raw).unwrap();
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_statement_reset_parameters!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     statement.reset_bound_values(count as usize);
 
     CassError::CASS_OK
