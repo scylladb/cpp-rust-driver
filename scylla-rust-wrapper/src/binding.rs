@@ -60,8 +60,12 @@ macro_rules! make_index_binder {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
+            let Some(this) = BoxFFI::as_mut_ref(this) else {
+                tracing::error!("Provided null pointer to {}!", stringify!($fn_by_idx));
+                return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            };
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), index as usize, v),
+                Ok(v) => $consume_v(this, index as usize, v),
                 Err(e) => e,
             }
         }
@@ -80,9 +84,13 @@ macro_rules! make_name_binder {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
+            let Some(this) = BoxFFI::as_mut_ref(this) else {
+                tracing::error!("Provided null pointer to {}!", stringify!($fn_by_name));
+                return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            };
             let name = unsafe { ptr_to_cstr(name) }.unwrap();
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), name, v),
+                Ok(v) => $consume_v(this, name, v),
                 Err(e) => e,
             }
         }
@@ -102,9 +110,13 @@ macro_rules! make_name_n_binder {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
+            let Some(this) = BoxFFI::as_mut_ref(this) else {
+                tracing::error!("Provided null pointer to {}!", stringify!($fn_by_name_n));
+                return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            };
             let name = unsafe { ptr_to_cstr_n(name, name_length) }.unwrap();
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), name, v),
+                Ok(v) => $consume_v(this, name, v),
                 Err(e) => e,
             }
         }
@@ -122,8 +134,12 @@ macro_rules! make_appender {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
+            let Some(this) = BoxFFI::as_mut_ref(this) else {
+                tracing::error!("Provided null pointer to {}!", stringify!($fn_append));
+                return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            };
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this).unwrap(), v),
+                Ok(v) => $consume_v(this, v),
                 Err(e) => e,
             }
         }
