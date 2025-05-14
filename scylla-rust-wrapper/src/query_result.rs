@@ -482,11 +482,11 @@ pub unsafe extern "C" fn cass_result_free(result_raw: CassOwnedSharedPtr<CassRes
 pub unsafe extern "C" fn cass_result_has_more_pages(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> cass_bool_t {
-    unsafe { result_has_more_pages(&result) }
-}
+    let Some(result) = ArcFFI::as_ref(result.borrow()) else {
+        tracing::error!("Provided null result pointer to cass_result_has_more_pages!");
+        return cass_false;
+    };
 
-unsafe fn result_has_more_pages(result: &CassBorrowedSharedPtr<CassResult, CConst>) -> cass_bool_t {
-    let result = ArcFFI::as_ref(result.borrow()).unwrap();
     (!result.paging_state_response.finished()) as cass_bool_t
 }
 
@@ -1066,7 +1066,7 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
     paging_state: *mut *const c_char,
     paging_state_size: *mut size_t,
 ) -> CassError {
-    if unsafe { result_has_more_pages(&result) } == cass_false {
+    if unsafe { cass_result_has_more_pages(result.borrow()) } == cass_false {
         return CassError::CASS_ERROR_LIB_NO_PAGING_STATE;
     }
 
