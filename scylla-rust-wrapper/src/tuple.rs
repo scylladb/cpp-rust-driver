@@ -78,7 +78,11 @@ pub unsafe extern "C" fn cass_tuple_new(
 unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassTuple, CMut> {
-    let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
+    let Some(data_type) = ArcFFI::cloned_from_ptr(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_tuple_new_from_data_type!");
+        return BoxFFI::null_mut();
+    };
+
     let item_count = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Tuple(v) => v.len(),
         _ => return BoxFFI::null_mut(),
@@ -98,7 +102,12 @@ unsafe extern "C" fn cass_tuple_free(tuple: CassOwnedExclusivePtr<CassTuple, CMu
 unsafe extern "C" fn cass_tuple_data_type(
     tuple: CassBorrowedSharedPtr<CassTuple, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    match &BoxFFI::as_ref(tuple).unwrap().data_type {
+    let Some(tuple) = BoxFFI::as_ref(tuple) else {
+        tracing::error!("Provided null tuple pointer to cass_tuple_data_type!");
+        return ArcFFI::null();
+    };
+
+    match &tuple.data_type {
         Some(t) => ArcFFI::as_ptr(t),
         None => ArcFFI::as_ptr(&UNTYPED_TUPLE_TYPE),
     }
