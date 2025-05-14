@@ -138,7 +138,10 @@ pub unsafe extern "C" fn cass_uuid_gen_time(
     uuid_gen: CassBorrowedExclusivePtr<CassUuidGen, CMut>,
     output: *mut CassUuid,
 ) {
-    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen).unwrap();
+    let Some(uuid_gen) = BoxFFI::as_mut_ref(uuid_gen) else {
+        tracing::error!("Provided null uuid generator pointer to cass_uuid_gen_time!");
+        return;
+    };
 
     let uuid = CassUuid {
         time_and_version: set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1),
@@ -168,7 +171,10 @@ pub unsafe extern "C" fn cass_uuid_gen_from_time(
     timestamp: cass_uint64_t,
     output: *mut CassUuid,
 ) {
-    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen).unwrap();
+    let Some(uuid_gen) = BoxFFI::as_mut_ref(uuid_gen) else {
+        tracing::error!("Provided null uuid generator pointer to cass_uuid_gen_from_time!");
+        return;
+    };
 
     let uuid = CassUuid {
         time_and_version: set_version(from_unix_timestamp(timestamp), 1),
