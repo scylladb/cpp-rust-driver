@@ -495,7 +495,10 @@ pub unsafe extern "C" fn cass_row_get_column<'result>(
     row_raw: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let row: &CassRow = RefFFI::as_ref(row_raw).unwrap();
+    let Some(row) = RefFFI::as_ref(row_raw) else {
+        tracing::error!("Provided null row pointer to cass_row_get_column!");
+        return RefFFI::null();
+    };
 
     let index_usize: usize = index.try_into().unwrap();
     let column_value = match row.columns.get(index_usize) {
@@ -523,7 +526,11 @@ pub unsafe extern "C" fn cass_row_get_column_by_name_n<'result>(
     name: *const c_char,
     name_length: size_t,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let row_from_raw = RefFFI::as_ref(row).unwrap();
+    let Some(row_from_raw) = RefFFI::as_ref(row) else {
+        tracing::error!("Provided null row pointer to cass_row_get_column_by_name_n!");
+        return RefFFI::null();
+    };
+
     let mut name_str = unsafe { ptr_to_cstr_n(name, name_length).unwrap() };
     let mut is_case_sensitive = false;
 
@@ -556,7 +563,11 @@ pub unsafe extern "C" fn cass_result_column_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let result_from_raw = ArcFFI::as_ref(result).unwrap();
+    let Some(result_from_raw) = ArcFFI::as_ref(result) else {
+        tracing::error!("Provided null result pointer to cass_result_column_name!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let index_usize: usize = index.try_into().unwrap();
 
     let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result_from_raw.kind else {
@@ -596,7 +607,11 @@ pub unsafe extern "C" fn cass_result_column_data_type(
     result: CassBorrowedSharedPtr<CassResult, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let result_from_raw: &CassResult = ArcFFI::as_ref(result).unwrap();
+    let Some(result_from_raw) = ArcFFI::as_ref(result) else {
+        tracing::error!("Provided null result pointer to cass_result_column_data_type!");
+        return ArcFFI::null();
+    };
+
     let index_usize: usize = index
         .try_into()
         .expect("Provided index is out of bounds. Max possible value is usize::MAX");
@@ -617,7 +632,11 @@ pub unsafe extern "C" fn cass_result_column_data_type(
 pub unsafe extern "C" fn cass_value_type(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
-    let value_from_raw = RefFFI::as_ref(value).unwrap();
+    let Some(value_from_raw) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_value_type!");
+        return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
+    };
+
     unsafe { cass_data_type_type(ArcFFI::as_ptr(value_from_raw.value_type)) }
 }
 
@@ -625,17 +644,23 @@ pub unsafe extern "C" fn cass_value_type(
 pub unsafe extern "C" fn cass_value_data_type<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassDataType, CConst> {
-    let value_from_raw = RefFFI::as_ref(value).unwrap();
+    let Some(value_from_raw) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_value_data_type!");
+        return ArcFFI::null();
+    };
 
     ArcFFI::as_ptr(value_from_raw.value_type)
 }
 
 macro_rules! val_ptr_to_ref_ensure_non_null {
-    ($ptr:ident) => {{
+    ($ptr:ident, $fn_name:expr) => {{
         let maybe_ref = RefFFI::as_ref($ptr);
         match maybe_ref {
             Some(r) => r,
-            None => return CassError::CASS_ERROR_LIB_NULL_VALUE,
+            None => {
+                tracing::error!("Provided null value pointer to {}!", $fn_name);
+                return CassError::CASS_ERROR_LIB_NULL_VALUE;
+            }
         }
     }};
 }
@@ -645,7 +670,7 @@ pub unsafe extern "C" fn cass_value_get_float(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_float_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_float");
 
     let f: f32 = match val.get_non_null() {
         Ok(v) => v,
@@ -661,7 +686,7 @@ pub unsafe extern "C" fn cass_value_get_double(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_double_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_double");
 
     let f: f64 = match val.get_non_null() {
         Ok(v) => v,
@@ -677,7 +702,7 @@ pub unsafe extern "C" fn cass_value_get_bool(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_bool_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_bool");
 
     let b: bool = match val.get_non_null() {
         Ok(v) => v,
@@ -693,7 +718,7 @@ pub unsafe extern "C" fn cass_value_get_int8(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int8_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_int8");
 
     let i: i8 = match val.get_non_null() {
         Ok(v) => v,
@@ -709,7 +734,7 @@ pub unsafe extern "C" fn cass_value_get_int16(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int16_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_int16");
 
     let i: i16 = match val.get_non_null() {
         Ok(v) => v,
@@ -725,7 +750,7 @@ pub unsafe extern "C" fn cass_value_get_uint32(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_uint32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_uint32");
 
     let date: CqlDate = match val.get_non_null() {
         Ok(v) => v,
@@ -741,7 +766,7 @@ pub unsafe extern "C" fn cass_value_get_int32(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_int32");
 
     let i: i32 = match val.get_non_null() {
         Ok(v) => v,
@@ -757,7 +782,7 @@ pub unsafe extern "C" fn cass_value_get_int64(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut cass_int64_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_int64");
 
     let i: i64 = match val.value.typ() {
         ColumnType::Native(NativeType::BigInt) => match val.get_non_null::<i64>() {
@@ -801,7 +826,7 @@ pub unsafe extern "C" fn cass_value_get_uuid(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut CassUuid,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_uuid");
 
     let uuid: Uuid = match val.value.typ() {
         ColumnType::Native(NativeType::Uuid) => match val.get_non_null::<Uuid>() {
@@ -831,7 +856,7 @@ pub unsafe extern "C" fn cass_value_get_inet(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
     output: *mut CassInet,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_inet");
 
     let inet: IpAddr = match val.get_non_null() {
         Ok(v) => v,
@@ -849,7 +874,7 @@ pub unsafe extern "C" fn cass_value_get_decimal(
     varint_size: *mut size_t,
     scale: *mut cass_int32_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_decimal");
 
     let decimal: CqlDecimalBorrowed = match val.get_non_null() {
         Ok(v) => v,
@@ -872,7 +897,7 @@ pub unsafe extern "C" fn cass_value_get_string(
     output: *mut *const c_char,
     output_size: *mut size_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_string");
 
     // It seems that cpp driver doesn't check the type - you can call _get_string
     // on any type and get internal representation. I don't see how to do it easily in
@@ -903,7 +928,7 @@ pub unsafe extern "C" fn cass_value_get_duration(
     days: *mut cass_int32_t,
     nanos: *mut cass_int64_t,
 ) -> CassError {
-    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let val: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_duration");
 
     let duration: CqlDuration = match val.get_non_null() {
         Ok(v) => v,
@@ -925,7 +950,7 @@ pub unsafe extern "C" fn cass_value_get_bytes(
     output: *mut *const cass_byte_t,
     output_size: *mut size_t,
 ) -> CassError {
-    let value_from_raw: &CassValue = val_ptr_to_ref_ensure_non_null!(value);
+    let value_from_raw: &CassValue = val_ptr_to_ref_ensure_non_null!(value, "cass_value_get_bytes");
 
     let bytes = match value_from_raw.get_bytes_non_null() {
         Ok(s) => s,
@@ -944,7 +969,11 @@ pub unsafe extern "C" fn cass_value_get_bytes(
 pub unsafe extern "C" fn cass_value_is_null(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
-    let val: &CassValue = RefFFI::as_ref(value).unwrap();
+    let Some(val) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_value_is_null!");
+        return cass_false;
+    };
+
     val.value.slice().is_none() as cass_bool_t
 }
 
@@ -952,7 +981,10 @@ pub unsafe extern "C" fn cass_value_is_null(
 pub unsafe extern "C" fn cass_value_is_collection(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
-    let val = RefFFI::as_ref(value).unwrap();
+    let Some(val) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_value_is_collection!");
+        return cass_false;
+    };
 
     matches!(
         unsafe { val.value_type.get_unchecked() }.get_value_type(),
@@ -966,7 +998,10 @@ pub unsafe extern "C" fn cass_value_is_collection(
 pub unsafe extern "C" fn cass_value_is_duration(
     value: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> cass_bool_t {
-    let val = RefFFI::as_ref(value).unwrap();
+    let Some(val) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_value_is_duration!");
+        return cass_false;
+    };
 
     (unsafe { val.value_type.get_unchecked() }.get_value_type()
         == CassValueType::CASS_VALUE_TYPE_DURATION) as cass_bool_t
@@ -976,7 +1011,10 @@ pub unsafe extern "C" fn cass_value_is_duration(
 pub unsafe extern "C" fn cass_value_item_count(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> size_t {
-    let val = RefFFI::as_ref(collection).unwrap();
+    let Some(val) = RefFFI::as_ref(collection) else {
+        tracing::error!("Provided null value pointer to cass_value_item_count!");
+        return 0;
+    };
 
     val.value.item_count().unwrap_or(0) as size_t
 }
@@ -985,7 +1023,10 @@ pub unsafe extern "C" fn cass_value_item_count(
 pub unsafe extern "C" fn cass_value_primary_sub_type(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
-    let val = RefFFI::as_ref(collection).unwrap();
+    let Some(val) = RefFFI::as_ref(collection) else {
+        tracing::error!("Provided null value pointer to cass_value_primary_sub_type!");
+        return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
+    };
 
     match unsafe { val.value_type.get_unchecked() } {
         CassDataTypeInner::List {
@@ -1006,7 +1047,10 @@ pub unsafe extern "C" fn cass_value_primary_sub_type(
 pub unsafe extern "C" fn cass_value_secondary_sub_type(
     collection: CassBorrowedSharedPtr<CassValue, CConst>,
 ) -> CassValueType {
-    let val = RefFFI::as_ref(collection).unwrap();
+    let Some(val) = RefFFI::as_ref(collection) else {
+        tracing::error!("Provided null value pointer to cass_value_secondary_sub_type!");
+        return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
+    };
 
     match unsafe { val.value_type.get_unchecked() } {
         CassDataTypeInner::Map {
@@ -1021,7 +1065,10 @@ pub unsafe extern "C" fn cass_value_secondary_sub_type(
 pub unsafe extern "C" fn cass_result_row_count(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> size_t {
-    let result = ArcFFI::as_ref(result_raw).unwrap();
+    let Some(result) = ArcFFI::as_ref(result_raw) else {
+        tracing::error!("Provided null result pointer to cass_result_row_count!");
+        return 0;
+    };
 
     let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result.kind else {
         return 0;
@@ -1034,7 +1081,10 @@ pub unsafe extern "C" fn cass_result_row_count(
 pub unsafe extern "C" fn cass_result_column_count(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> size_t {
-    let result = ArcFFI::as_ref(result_raw).unwrap();
+    let Some(result) = ArcFFI::as_ref(result_raw) else {
+        tracing::error!("Provided null result pointer to cass_result_column_count!");
+        return 0;
+    };
 
     let CassResultKind::Rows(CassRowsResult { shared_data, .. }) = &result.kind else {
         return 0;
@@ -1047,7 +1097,10 @@ pub unsafe extern "C" fn cass_result_column_count(
 pub unsafe extern "C" fn cass_result_first_row(
     result_raw: CassBorrowedSharedPtr<CassResult, CConst>,
 ) -> CassBorrowedSharedPtr<CassRow, CConst> {
-    let result = ArcFFI::as_ref(result_raw).unwrap();
+    let Some(result) = ArcFFI::as_ref(result_raw) else {
+        tracing::error!("Provided null result pointer to cass_result_first_row!");
+        return RefFFI::null();
+    };
 
     let CassResultKind::Rows(CassRowsResult { first_row, .. }) = &result.kind else {
         return RefFFI::null();
@@ -1066,11 +1119,14 @@ pub unsafe extern "C" fn cass_result_paging_state_token(
     paging_state: *mut *const c_char,
     paging_state_size: *mut size_t,
 ) -> CassError {
+    let Some(result_from_raw) = ArcFFI::as_ref(result.borrow()) else {
+        tracing::error!("Provided null result pointer to cass_result_paging_state_token!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     if unsafe { cass_result_has_more_pages(result.borrow()) } == cass_false {
         return CassError::CASS_ERROR_LIB_NO_PAGING_STATE;
     }
-
-    let result_from_raw = ArcFFI::as_ref(result).unwrap();
 
     match &result_from_raw.paging_state_response {
         PagingStateResponse::HasMorePages { state } => match state.as_bytes_slice() {
