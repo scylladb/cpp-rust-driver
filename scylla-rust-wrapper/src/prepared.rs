@@ -88,7 +88,11 @@ pub unsafe extern "C" fn cass_prepared_free(
 pub unsafe extern "C" fn cass_prepared_bind(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
 ) -> CassOwnedExclusivePtr<CassStatement, CMut> {
-    let prepared: Arc<_> = ArcFFI::cloned_from_ptr(prepared_raw).unwrap();
+    let Some(prepared) = ArcFFI::cloned_from_ptr(prepared_raw) else {
+        tracing::error!("Provided null prepared statement pointer to cass_prepared_bind!");
+        return BoxFFI::null_mut();
+    };
+
     let bound_values_size = prepared.statement.get_variable_col_specs().len();
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
@@ -116,7 +120,12 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let prepared = ArcFFI::as_ref(prepared_raw).unwrap();
+    let Some(prepared) = ArcFFI::as_ref(prepared_raw) else {
+        tracing::error!(
+            "Provided null prepared statement pointer to cass_prepared_parameter_name!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     match prepared
         .statement
@@ -136,7 +145,12 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type(
     prepared_raw: CassBorrowedSharedPtr<CassPrepared, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let prepared = ArcFFI::as_ref(prepared_raw).unwrap();
+    let Some(prepared) = ArcFFI::as_ref(prepared_raw) else {
+        tracing::error!(
+            "Provided null prepared statement pointer to cass_prepared_parameter_data_type!"
+        );
+        return ArcFFI::null();
+    };
 
     match prepared.variable_col_data_types.get(index as usize) {
         Some(dt) => ArcFFI::as_ptr(dt),
@@ -158,7 +172,13 @@ pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
     name: *const c_char,
     name_length: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let prepared = ArcFFI::as_ref(prepared_raw).unwrap();
+    let Some(prepared) = ArcFFI::as_ref(prepared_raw) else {
+        tracing::error!(
+            "Provided null prepared statement pointer to cass_prepared_parameter_data_type_by_name!"
+        );
+        return ArcFFI::null();
+    };
+
     let parameter_name =
         unsafe { ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8") };
 

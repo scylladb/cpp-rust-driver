@@ -303,20 +303,22 @@ pub unsafe extern "C" fn cass_future_set_callback(
     callback: CassFutureCallback,
     data: *mut ::std::os::raw::c_void,
 ) -> CassError {
-    unsafe {
-        ArcFFI::as_ref(future_raw.borrow()).unwrap().set_callback(
-            future_raw.borrow(),
-            callback,
-            data,
-        )
-    }
+    let Some(future) = ArcFFI::as_ref(future_raw.borrow()) else {
+        tracing::error!("Provided null future pointer to cass_future_set_callback!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    unsafe { future.set_callback(future_raw.borrow(), callback, data) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_future_wait(future_raw: CassBorrowedSharedPtr<CassFuture, CMut>) {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
-        .with_waited_result(|_| ());
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_wait!");
+        return;
+    };
+
+    future.with_waited_result(|_| ());
 }
 
 #[unsafe(no_mangle)]
@@ -324,8 +326,12 @@ pub unsafe extern "C" fn cass_future_wait_timed(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
     timeout_us: cass_duration_t,
 ) -> cass_bool_t {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_wait_timed!");
+        return cass_false;
+    };
+
+    future
         .with_waited_result_timed(|_| (), Duration::from_micros(timeout_us))
         .is_ok() as cass_bool_t
 }
@@ -334,7 +340,12 @@ pub unsafe extern "C" fn cass_future_wait_timed(
 pub unsafe extern "C" fn cass_future_ready(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> cass_bool_t {
-    let state_guard = ArcFFI::as_ref(future_raw).unwrap().state.lock().unwrap();
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_ready!");
+        return cass_false;
+    };
+
+    let state_guard = future.state.lock().unwrap();
     match state_guard.value {
         None => cass_false,
         Some(_) => cass_true,
@@ -345,13 +356,16 @@ pub unsafe extern "C" fn cass_future_ready(
 pub unsafe extern "C" fn cass_future_error_code(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassError {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
-        .with_waited_result(|r: &mut CassFutureResult| match r {
-            Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
-            Err((err, _)) => *err,
-            _ => CassError::CASS_OK,
-        })
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_error_code!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    future.with_waited_result(|r: &mut CassFutureResult| match r {
+        Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
+        Err((err, _)) => *err,
+        _ => CassError::CASS_OK,
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -360,19 +374,22 @@ pub unsafe extern "C" fn cass_future_error_message(
     message: *mut *const ::std::os::raw::c_char,
     message_length: *mut size_t,
 ) {
-    ArcFFI::as_ref(future)
-        .unwrap()
-        .with_waited_state(|state: &mut CassFutureState| {
-            let value = &state.value;
-            let msg = state
-                .err_string
-                .get_or_insert_with(|| match value.as_ref().unwrap() {
-                    Ok(CassResultValue::QueryError(err)) => err.msg(),
-                    Err((_, s)) => s.msg(),
-                    _ => "".to_string(),
-                });
-            unsafe { write_str_to_c(msg.as_str(), message, message_length) };
-        });
+    let Some(future) = ArcFFI::as_ref(future) else {
+        tracing::error!("Provided null future pointer to cass_future_error_message!");
+        return;
+    };
+
+    future.with_waited_state(|state: &mut CassFutureState| {
+        let value = &state.value;
+        let msg = state
+            .err_string
+            .get_or_insert_with(|| match value.as_ref().unwrap() {
+                Ok(CassResultValue::QueryError(err)) => err.msg(),
+                Err((_, s)) => s.msg(),
+                _ => "".to_string(),
+            });
+        unsafe { write_str_to_c(msg.as_str(), message, message_length) };
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -384,8 +401,12 @@ pub unsafe extern "C" fn cass_future_free(future_raw: CassOwnedSharedPtr<CassFut
 pub unsafe extern "C" fn cass_future_get_result(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassResult, CConst> {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_get_result!");
+        return ArcFFI::null();
+    };
+
+    future
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(Arc::clone(qr)),
@@ -399,8 +420,12 @@ pub unsafe extern "C" fn cass_future_get_result(
 pub unsafe extern "C" fn cass_future_get_error_result(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassErrorResult, CConst> {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_get_error_result!");
+        return ArcFFI::null();
+    };
+
+    future
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryError(qr) => Some(Arc::clone(qr)),
@@ -414,8 +439,12 @@ pub unsafe extern "C" fn cass_future_get_error_result(
 pub unsafe extern "C" fn cass_future_get_prepared(
     future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
 ) -> CassOwnedSharedPtr<CassPrepared, CConst> {
-    ArcFFI::as_ref(future_raw)
-        .unwrap()
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to cass_future_get_prepared!");
+        return ArcFFI::null();
+    };
+
+    future
         .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassPrepared>> {
             match r.as_ref().ok()? {
                 CassResultValue::Prepared(p) => Some(Arc::clone(p)),
@@ -430,18 +459,21 @@ pub unsafe extern "C" fn cass_future_tracing_id(
     future: CassBorrowedSharedPtr<CassFuture, CMut>,
     tracing_id: *mut CassUuid,
 ) -> CassError {
-    ArcFFI::as_ref(future)
-        .unwrap()
-        .with_waited_result(|r: &mut CassFutureResult| match r {
-            Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
-                Some(id) => {
-                    unsafe { *tracing_id = CassUuid::from(id) };
-                    CassError::CASS_OK
-                }
-                None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
-            },
-            _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
-        })
+    let Some(future) = ArcFFI::as_ref(future) else {
+        tracing::error!("Provided null future pointer to cass_future_tracing_id!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    future.with_waited_result(|r: &mut CassFutureResult| match r {
+        Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
+            Some(id) => {
+                unsafe { *tracing_id = CassUuid::from(id) };
+                CassError::CASS_OK
+            }
+            None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
+        },
+        _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
+    })
 }
 
 #[cfg(test)]

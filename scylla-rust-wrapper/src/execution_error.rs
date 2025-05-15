@@ -68,7 +68,11 @@ pub unsafe extern "C" fn cass_error_result_free(
 pub unsafe extern "C" fn cass_error_result_code(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassError {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_code!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     error_result.to_cass_error()
 }
 
@@ -76,7 +80,11 @@ pub unsafe extern "C" fn cass_error_result_code(
 pub unsafe extern "C" fn cass_error_result_consistency(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassConsistency {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_consistency!");
+        return CassConsistency::CASS_CONSISTENCY_UNKNOWN;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::Unavailable { consistency, .. }, _)
@@ -93,7 +101,13 @@ pub unsafe extern "C" fn cass_error_result_consistency(
 pub unsafe extern "C" fn cass_error_result_responses_received(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!(
+            "Provided null error result pointer to cass_error_result_responses_received!"
+        );
+        return -1;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(attempt_error)) => {
             match attempt_error {
@@ -117,7 +131,13 @@ pub unsafe extern "C" fn cass_error_result_responses_received(
 pub unsafe extern "C" fn cass_error_result_responses_required(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!(
+            "Provided null error result pointer to cass_error_result_responses_required!"
+        );
+        return -1;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(attempt_error)) => {
             match attempt_error {
@@ -141,7 +161,11 @@ pub unsafe extern "C" fn cass_error_result_responses_required(
 pub unsafe extern "C" fn cass_error_result_num_failures(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_int32_t {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_num_failures!");
+        return -1;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::ReadFailure { numfailures, .. }, _),
@@ -157,7 +181,11 @@ pub unsafe extern "C" fn cass_error_result_num_failures(
 pub unsafe extern "C" fn cass_error_result_data_present(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> cass_bool_t {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_data_present!");
+        return cass_false;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::ReadTimeout { data_present, .. }, _),
@@ -185,7 +213,11 @@ pub unsafe extern "C" fn cass_error_result_data_present(
 pub unsafe extern "C" fn cass_error_result_write_type(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> CassWriteType {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_write_type!");
+        return CassWriteType::CASS_WRITE_TYPE_UNKNOWN;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::WriteTimeout { write_type, .. }, _),
@@ -203,7 +235,11 @@ pub unsafe extern "C" fn cass_error_result_keyspace(
     c_keyspace: *mut *const ::std::os::raw::c_char,
     c_keyspace_len: *mut size_t,
 ) -> CassError {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_keyspace!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::AlreadyExists { keyspace, .. }, _),
@@ -227,7 +263,11 @@ pub unsafe extern "C" fn cass_error_result_table(
     c_table: *mut *const ::std::os::raw::c_char,
     c_table_len: *mut size_t,
 ) -> CassError {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_table!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::AlreadyExists { table, .. }, _),
@@ -245,7 +285,11 @@ pub unsafe extern "C" fn cass_error_result_function(
     c_function: *mut *const ::std::os::raw::c_char,
     c_function_len: *mut size_t,
 ) -> CassError {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_function!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::FunctionFailure { function, .. }, _),
@@ -261,7 +305,11 @@ pub unsafe extern "C" fn cass_error_result_function(
 pub unsafe extern "C" fn cass_error_num_arg_types(
     error_result: CassBorrowedSharedPtr<CassErrorResult, CConst>,
 ) -> size_t {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_num_arg_types!");
+        return 0;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::FunctionFailure { arg_types, .. }, _),
@@ -277,7 +325,11 @@ pub unsafe extern "C" fn cass_error_result_arg_type(
     arg_type: *mut *const ::std::os::raw::c_char,
     arg_type_length: *mut size_t,
 ) -> CassError {
-    let error_result: &CassErrorResult = ArcFFI::as_ref(error_result).unwrap();
+    let Some(error_result) = ArcFFI::as_ref(error_result) else {
+        tracing::error!("Provided null error result pointer to cass_error_result_arg_type!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match error_result {
         CassErrorResult::Execution(ExecutionError::LastAttemptError(
             RequestAttemptError::DbError(DbError::FunctionFailure { arg_types, .. }, _),

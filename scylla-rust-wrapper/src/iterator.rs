@@ -15,7 +15,7 @@ use crate::query_result::{
     CassRawRow, CassResult, CassResultKind, CassResultMetadata, CassRow, CassValue,
     NonNullDeserializationError, cass_value_type,
 };
-use crate::types::{cass_bool_t, size_t};
+use crate::types::{cass_bool_t, cass_false, size_t};
 
 pub use crate::cass_iterator_types::CassIteratorType;
 
@@ -674,7 +674,11 @@ pub unsafe extern "C" fn cass_iterator_free(iterator: CassOwnedExclusivePtr<Cass
 pub unsafe extern "C" fn cass_iterator_type(
     iterator: CassBorrowedExclusivePtr<CassIterator, CMut>,
 ) -> CassIteratorType {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_type!");
+        // TYPE_RESULT corresponds to 0.
+        return CassIteratorType::CASS_ITERATOR_TYPE_RESULT;
+    };
 
     match iter {
         CassIterator::Result(_) => CassIteratorType::CASS_ITERATOR_TYPE_RESULT,
@@ -698,7 +702,10 @@ pub unsafe extern "C" fn cass_iterator_type(
 pub unsafe extern "C" fn cass_iterator_next(
     iterator: CassBorrowedExclusivePtr<CassIterator, CMut>,
 ) -> cass_bool_t {
-    let mut iter = BoxFFI::as_mut_ref(iterator).unwrap();
+    let Some(mut iter) = BoxFFI::as_mut_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_next!");
+        return cass_false;
+    };
 
     let result = match &mut iter {
         CassIterator::Result(result_iterator) => result_iterator.next(),
@@ -731,7 +738,10 @@ pub unsafe extern "C" fn cass_iterator_next(
 pub unsafe extern "C" fn cass_iterator_get_row<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassRow<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_row!");
+        return RefFFI::null();
+    };
 
     // Defined only for result iterator, for other types should return null
     let CassIterator::Result(CassResultIterator::Rows(rows_result_iterator)) = iter else {
@@ -749,7 +759,10 @@ pub unsafe extern "C" fn cass_iterator_get_row<'result>(
 pub unsafe extern "C" fn cass_iterator_get_column<'result>(
     iterator: CassBorrowedSharedPtr<CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_column!");
+        return RefFFI::null();
+    };
 
     // Defined only for row iterator, for other types should return null
     if let CassIterator::Row(row_iterator) = iter {
@@ -773,7 +786,10 @@ pub unsafe extern "C" fn cass_iterator_get_column<'result>(
 pub unsafe extern "C" fn cass_iterator_get_value<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_value!");
+        return RefFFI::null();
+    };
 
     // Defined only for collections(list, set and map) or tuple iterator, for other types should return null
     match iter {
@@ -814,7 +830,10 @@ pub unsafe extern "C" fn cass_iterator_get_value<'result>(
 pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_map_key!");
+        return RefFFI::null();
+    };
 
     let CassIterator::Map(map_iterator) = iter else {
         return RefFFI::null();
@@ -831,7 +850,10 @@ pub unsafe extern "C" fn cass_iterator_get_map_key<'result>(
 pub unsafe extern "C" fn cass_iterator_get_map_value<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_map_value!");
+        return RefFFI::null();
+    };
 
     let CassIterator::Map(map_iterator) = iter else {
         return RefFFI::null();
@@ -850,7 +872,12 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!(
+            "Provided null iterator pointer to cass_iterator_get_user_type_field_name!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
     let CassIterator::Udt(udt_iterator) = iter else {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
@@ -872,7 +899,12 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_name(
 pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
     iterator: CassBorrowedSharedPtr<'result, CassIterator<'result>, CConst>,
 ) -> CassBorrowedSharedPtr<'result, CassValue<'result>, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!(
+            "Provided null iterator pointer to cass_iterator_get_user_type_field_value!"
+        );
+        return RefFFI::null();
+    };
 
     let CassIterator::Udt(udt_iterator) = iter else {
         return RefFFI::null();
@@ -889,7 +921,10 @@ pub unsafe extern "C" fn cass_iterator_get_user_type_field_value<'result>(
 pub unsafe extern "C" fn cass_iterator_get_keyspace_meta<'schema>(
     iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
 ) -> CassBorrowedSharedPtr<'schema, CassKeyspaceMeta, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_keyspace_meta!");
+        return RefFFI::null();
+    };
 
     if let CassIterator::KeyspacesMeta(schema_meta_iterator) = iter {
         let iter_position = match schema_meta_iterator.position {
@@ -916,7 +951,10 @@ pub unsafe extern "C" fn cass_iterator_get_keyspace_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_get_table_meta<'schema>(
     iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
 ) -> CassBorrowedSharedPtr<'schema, CassTableMeta, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_table_meta!");
+        return RefFFI::null();
+    };
 
     if let CassIterator::TablesMeta(keyspace_meta_iterator) = iter {
         let iter_position = match keyspace_meta_iterator.position {
@@ -943,7 +981,10 @@ pub unsafe extern "C" fn cass_iterator_get_table_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_get_user_type<'schema>(
     iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
 ) -> CassBorrowedSharedPtr<'schema, CassDataType, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_user_type!");
+        return ArcFFI::null();
+    };
 
     if let CassIterator::UserTypes(keyspace_meta_iterator) = iter {
         let iter_position = match keyspace_meta_iterator.position {
@@ -970,7 +1011,10 @@ pub unsafe extern "C" fn cass_iterator_get_user_type<'schema>(
 pub unsafe extern "C" fn cass_iterator_get_column_meta<'schema>(
     iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
 ) -> CassBorrowedSharedPtr<'schema, CassColumnMeta, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!("Provided null iterator pointer to cass_iterator_get_column_meta!");
+        return RefFFI::null();
+    };
 
     match iter {
         CassIterator::ColumnsMeta(CassColumnsMetaIterator::FromTable(table_meta_iterator)) => {
@@ -1016,7 +1060,12 @@ pub unsafe extern "C" fn cass_iterator_get_column_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta<'schema>(
     iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
 ) -> CassBorrowedSharedPtr<'schema, CassMaterializedViewMeta, CConst> {
-    let iter = BoxFFI::as_ref(iterator).unwrap();
+    let Some(iter) = BoxFFI::as_ref(iterator) else {
+        tracing::error!(
+            "Provided null iterator pointer to cass_iterator_get_materialized_view_meta!"
+        );
+        return RefFFI::null();
+    };
 
     match iter {
         CassIterator::MaterializedViewsMeta(CassMaterializedViewsMetaIterator::FromKeyspace(
@@ -1058,7 +1107,10 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_from_result<'result>(
     result: CassBorrowedSharedPtr<'result, CassResult, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let result_from_raw = ArcFFI::as_ref(result).unwrap();
+    let Some(result_from_raw) = ArcFFI::as_ref(result) else {
+        tracing::error!("Provided null result pointer to cass_iterator_from_result!");
+        return BoxFFI::null_mut();
+    };
 
     let iterator = match &result_from_raw.kind {
         CassResultKind::NonRows => CassResultIterator::NonRows,
@@ -1084,7 +1136,10 @@ pub unsafe extern "C" fn cass_iterator_from_result<'result>(
 pub unsafe extern "C" fn cass_iterator_from_row<'result>(
     row: CassBorrowedSharedPtr<'result, CassRow<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let row_from_raw = RefFFI::as_ref(row).unwrap();
+    let Some(row_from_raw) = RefFFI::as_ref(row) else {
+        tracing::error!("Provided null row pointer to cass_iterator_from_row!");
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassRowIterator {
         row: row_from_raw,
@@ -1134,7 +1189,10 @@ pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
 pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let tuple = RefFFI::as_ref(value).unwrap();
+    let Some(tuple) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null tuple pointer to cass_iterator_from_tuple!");
+        return BoxFFI::null_mut();
+    };
 
     let iterator_result = CassTupleIterator::new_from_value(tuple);
     match iterator_result {
@@ -1151,7 +1209,10 @@ pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
 pub unsafe extern "C" fn cass_iterator_from_map<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let map = RefFFI::as_ref(value).unwrap();
+    let Some(map) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null map pointer to cass_iterator_from_map!");
+        return BoxFFI::null_mut();
+    };
 
     let iterator_result = CassMapIterator::new_from_value(map);
 
@@ -1169,7 +1230,10 @@ pub unsafe extern "C" fn cass_iterator_from_map<'result>(
 pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    let udt = RefFFI::as_ref(value).unwrap();
+    let Some(udt) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null UDT pointer to cass_iterator_fields_from_user_type!");
+        return BoxFFI::null_mut();
+    };
 
     let iterator_result = CassUdtIterator::new_from_value(udt);
     match iterator_result {
@@ -1186,7 +1250,12 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
 pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta<'schema>(
     schema_meta: CassBorrowedSharedPtr<'schema, CassSchemaMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = BoxFFI::as_ref(schema_meta).unwrap();
+    let Some(metadata) = BoxFFI::as_ref(schema_meta) else {
+        tracing::error!(
+            "Provided null schema metadata pointer to cass_iterator_keyspaces_from_schema_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassSchemaMetaIterator {
         value: metadata,
@@ -1202,7 +1271,12 @@ pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta<'schema>(
     keyspace_meta: CassBorrowedSharedPtr<'schema, CassKeyspaceMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_iterator_tables_from_keyspace_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -1218,7 +1292,12 @@ pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta<'schema>(
     keyspace_meta: CassBorrowedSharedPtr<'schema, CassKeyspaceMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_iterator_materialized_views_from_keyspace_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -1236,7 +1315,12 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta<'sc
 pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta<'schema>(
     keyspace_meta: CassBorrowedSharedPtr<'schema, CassKeyspaceMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(keyspace_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_iterator_user_types_from_keyspace_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassKeyspaceMetaIterator {
         value: metadata,
@@ -1252,7 +1336,12 @@ pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_columns_from_table_meta<'schema>(
     table_meta: CassBorrowedSharedPtr<'schema, CassTableMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(table_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_iterator_columns_from_table_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassTableMetaIterator {
         value: metadata,
@@ -1270,7 +1359,12 @@ pub unsafe extern "C" fn cass_iterator_columns_from_table_meta<'schema>(
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta<'schema>(
     table_meta: CassBorrowedSharedPtr<'schema, CassTableMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(table_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_iterator_materialized_views_from_table_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassTableMetaIterator {
         value: metadata,
@@ -1288,7 +1382,12 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta<'schem
 pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta<'schema>(
     view_meta: CassBorrowedSharedPtr<'schema, CassMaterializedViewMeta, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'schema>, CMut> {
-    let metadata = RefFFI::as_ref(view_meta).unwrap();
+    let Some(metadata) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null view metadata pointer to cass_iterator_columns_from_materialized_view_meta!"
+        );
+        return BoxFFI::null_mut();
+    };
 
     let iterator = CassViewMetaIterator {
         value: metadata,

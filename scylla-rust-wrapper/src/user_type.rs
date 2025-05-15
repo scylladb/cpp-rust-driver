@@ -87,7 +87,10 @@ impl From<&CassUserType> for CassCqlValue {
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     data_type_raw: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassUserType, CMut> {
-    let data_type = ArcFFI::cloned_from_ptr(data_type_raw).unwrap();
+    let Some(data_type) = ArcFFI::cloned_from_ptr(data_type_raw) else {
+        tracing::error!("Provided null data type pointer to cass_user_type_new_from_data_type!");
+        return BoxFFI::null_mut();
+    };
 
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
@@ -109,7 +112,12 @@ pub unsafe extern "C" fn cass_user_type_free(user_type: CassOwnedExclusivePtr<Ca
 pub unsafe extern "C" fn cass_user_type_data_type(
     user_type: CassBorrowedSharedPtr<CassUserType, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    ArcFFI::as_ptr(&BoxFFI::as_ref(user_type).unwrap().data_type)
+    let Some(user_type) = BoxFFI::as_ref(user_type) else {
+        tracing::error!("Provided null user type pointer to cass_user_type_data_type!");
+        return ArcFFI::null();
+    };
+
+    ArcFFI::as_ptr(&user_type.data_type)
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,

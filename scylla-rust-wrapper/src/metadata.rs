@@ -139,11 +139,16 @@ pub unsafe extern "C" fn cass_schema_meta_keyspace_by_name_n(
     keyspace_name: *const c_char,
     keyspace_name_length: size_t,
 ) -> CassBorrowedSharedPtr<CassKeyspaceMeta, CConst> {
+    let Some(metadata) = BoxFFI::as_ref(schema_meta) else {
+        tracing::error!(
+            "Provided null schema metadata pointer to cass_schema_meta_keyspace_by_name_n!"
+        );
+        return RefFFI::null();
+    };
     if keyspace_name.is_null() {
         return RefFFI::null();
     }
 
-    let metadata = BoxFFI::as_ref(schema_meta).unwrap();
     let keyspace = unsafe { ptr_to_cstr_n(keyspace_name, keyspace_name_length) }.unwrap();
 
     let keyspace_meta = metadata.keyspaces.get(keyspace);
@@ -160,7 +165,11 @@ pub unsafe extern "C" fn cass_keyspace_meta_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) {
-    let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
+    let Some(keyspace_meta) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!("Provided null keyspace metadata pointer to cass_keyspace_meta_name!");
+        return;
+    };
+
     unsafe { write_str_to_c(keyspace_meta.name.as_str(), name, name_length) }
 }
 
@@ -178,11 +187,16 @@ pub unsafe extern "C" fn cass_keyspace_meta_user_type_by_name_n(
     type_: *const c_char,
     type_length: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
+    let Some(keyspace_meta) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_keyspace_meta_user_type_by_name_n!"
+        );
+        return ArcFFI::null();
+    };
     if type_.is_null() {
         return ArcFFI::null();
     }
 
-    let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
     let user_type_name = unsafe { ptr_to_cstr_n(type_, type_length) }.unwrap();
 
     match keyspace_meta
@@ -208,11 +222,16 @@ pub unsafe extern "C" fn cass_keyspace_meta_table_by_name_n(
     table: *const c_char,
     table_length: size_t,
 ) -> CassBorrowedSharedPtr<CassTableMeta, CConst> {
+    let Some(keyspace_meta) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_keyspace_meta_table_by_name_n!"
+        );
+        return RefFFI::null();
+    };
     if table.is_null() {
         return RefFFI::null();
     }
 
-    let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
     let table_name = unsafe { ptr_to_cstr_n(table, table_length) }.unwrap();
 
     let table_meta = keyspace_meta.tables.get(table_name);
@@ -229,7 +248,11 @@ pub unsafe extern "C" fn cass_table_meta_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!("Provided null table metadata pointer to cass_table_meta_name!");
+        return;
+    };
+
     unsafe { write_str_to_c(table_meta.name.as_str(), name, name_length) }
 }
 
@@ -237,7 +260,11 @@ pub unsafe extern "C" fn cass_table_meta_name(
 pub unsafe extern "C" fn cass_table_meta_column_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!("Provided null table metadata pointer to cass_table_meta_column_count!");
+        return 0;
+    };
+
     table_meta.columns_metadata.len() as size_t
 }
 
@@ -264,7 +291,10 @@ pub unsafe extern "C" fn cass_table_meta_column(
     // Then cks by position: h, i
     // Then remaining columns alphabetically: b, c, f, g
 
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!("Provided null table metadata pointer to cass_table_meta_column!");
+        return RefFFI::null();
+    };
     let index = index as usize;
 
     // Check if the index lands in partition keys. If so, simply return the corresponding column.
@@ -299,7 +329,10 @@ pub unsafe extern "C" fn cass_table_meta_partition_key(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!("Provided null table metadata pointer to cass_table_meta_partition_key!");
+        return RefFFI::null();
+    };
 
     match table_meta.partition_keys.get(index as usize) {
         Some(column_name) => match table_meta.columns_metadata.get(column_name) {
@@ -314,7 +347,13 @@ pub unsafe extern "C" fn cass_table_meta_partition_key(
 pub unsafe extern "C" fn cass_table_meta_partition_key_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_partition_key_count!"
+        );
+        return 0;
+    };
+
     table_meta.partition_keys.len() as size_t
 }
 
@@ -323,7 +362,10 @@ pub unsafe extern "C" fn cass_table_meta_clustering_key(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!("Provided null table metadata pointer to cass_table_meta_clustering_key!");
+        return RefFFI::null();
+    };
 
     match table_meta.clustering_keys.get(index as usize) {
         Some(column_name) => match table_meta.columns_metadata.get(column_name) {
@@ -338,7 +380,13 @@ pub unsafe extern "C" fn cass_table_meta_clustering_key(
 pub unsafe extern "C" fn cass_table_meta_clustering_key_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_clustering_key_count!"
+        );
+        return 0;
+    };
+
     table_meta.clustering_keys.len() as size_t
 }
 
@@ -356,11 +404,16 @@ pub unsafe extern "C" fn cass_table_meta_column_by_name_n(
     column: *const c_char,
     column_length: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_column_by_name_n!"
+        );
+        return RefFFI::null();
+    };
     if column.is_null() {
         return RefFFI::null();
     }
 
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
     let column_name = unsafe { ptr_to_cstr_n(column, column_length) }.unwrap();
 
     match table_meta.columns_metadata.get(column_name) {
@@ -375,7 +428,11 @@ pub unsafe extern "C" fn cass_column_meta_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) {
-    let column_meta = RefFFI::as_ref(column_meta).unwrap();
+    let Some(column_meta) = RefFFI::as_ref(column_meta) else {
+        tracing::error!("Provided null column metadata pointer to cass_column_meta_name!");
+        return;
+    };
+
     unsafe { write_str_to_c(column_meta.name.as_str(), name, name_length) }
 }
 
@@ -383,7 +440,11 @@ pub unsafe extern "C" fn cass_column_meta_name(
 pub unsafe extern "C" fn cass_column_meta_data_type(
     column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let column_meta = RefFFI::as_ref(column_meta).unwrap();
+    let Some(column_meta) = RefFFI::as_ref(column_meta) else {
+        tracing::error!("Provided null column metadata pointer to cass_column_meta_data_type!");
+        return ArcFFI::null();
+    };
+
     ArcFFI::as_ptr(&column_meta.column_type)
 }
 
@@ -391,7 +452,11 @@ pub unsafe extern "C" fn cass_column_meta_data_type(
 pub unsafe extern "C" fn cass_column_meta_type(
     column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
 ) -> CassColumnType {
-    let column_meta = RefFFI::as_ref(column_meta).unwrap();
+    let Some(column_meta) = RefFFI::as_ref(column_meta) else {
+        tracing::error!("Provided null column metadata pointer to cass_column_meta_type!");
+        return CassColumnType::CASS_COLUMN_TYPE_REGULAR;
+    };
+
     column_meta.column_kind
 }
 
@@ -409,11 +474,16 @@ pub unsafe extern "C" fn cass_keyspace_meta_materialized_view_by_name_n(
     view: *const c_char,
     view_length: size_t,
 ) -> CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst> {
+    let Some(keyspace_meta) = RefFFI::as_ref(keyspace_meta) else {
+        tracing::error!(
+            "Provided null keyspace metadata pointer to cass_keyspace_meta_materialized_view_by_name_n!"
+        );
+        return RefFFI::null();
+    };
     if view.is_null() {
         return RefFFI::null();
     }
 
-    let keyspace_meta = RefFFI::as_ref(keyspace_meta).unwrap();
     let view_name = unsafe { ptr_to_cstr_n(view, view_length).unwrap() };
 
     match keyspace_meta.views.get(view_name) {
@@ -436,11 +506,16 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
     view: *const c_char,
     view_length: size_t,
 ) -> CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst> {
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_materialized_view_by_name_n!"
+        );
+        return RefFFI::null();
+    };
     if view.is_null() {
         return RefFFI::null();
     }
 
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
     let view_name = unsafe { ptr_to_cstr_n(view, view_length).unwrap() };
 
     match table_meta.views.get(view_name) {
@@ -453,7 +528,13 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view_by_name_n(
 pub unsafe extern "C" fn cass_table_meta_materialized_view_count(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
 ) -> size_t {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_materialized_view_count!"
+        );
+        return 0;
+    };
+
     table_meta.views.len() as size_t
 }
 
@@ -462,7 +543,12 @@ pub unsafe extern "C" fn cass_table_meta_materialized_view(
     table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst> {
-    let table_meta = RefFFI::as_ref(table_meta).unwrap();
+    let Some(table_meta) = RefFFI::as_ref(table_meta) else {
+        tracing::error!(
+            "Provided null table metadata pointer to cass_table_meta_materialized_view!"
+        );
+        return RefFFI::null();
+    };
 
     match table_meta.views.iter().nth(index as usize) {
         Some(view_meta) => RefFFI::as_ptr(view_meta.1.as_ref()),
@@ -484,11 +570,17 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column_by_name_n(
     column: *const c_char,
     column_length: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_column_by_name_n!"
+        );
+        return RefFFI::null();
+    };
+
     if column.is_null() {
         return RefFFI::null();
     }
 
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
     let column_name = unsafe { ptr_to_cstr_n(column, column_length).unwrap() };
 
     match view_meta.view_metadata.columns_metadata.get(column_name) {
@@ -503,7 +595,13 @@ pub unsafe extern "C" fn cass_materialized_view_meta_name(
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_name!"
+        );
+        return;
+    };
+
     unsafe { write_str_to_c(view_meta.name.as_str(), name, name_length) }
 }
 
@@ -511,7 +609,12 @@ pub unsafe extern "C" fn cass_materialized_view_meta_name(
 pub unsafe extern "C" fn cass_materialized_view_meta_base_table(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> CassBorrowedSharedPtr<CassTableMeta, CConst> {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_base_table!"
+        );
+        return RefFFI::null();
+    };
 
     let ptr = unsafe { RefFFI::weak_as_ptr(&view_meta.base_table) };
     if RefFFI::is_null(&ptr) {
@@ -535,7 +638,12 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_column!"
+        );
+        return RefFFI::null();
+    };
 
     match view_meta
         .view_metadata
@@ -552,7 +660,13 @@ pub unsafe extern "C" fn cass_materialized_view_meta_column(
 pub unsafe extern "C" fn cass_materialized_view_meta_partition_key_count(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> size_t {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_partition_key_count!"
+        );
+        return 0;
+    };
+
     view_meta.view_metadata.partition_keys.len() as size_t
 }
 
@@ -560,7 +674,12 @@ pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_partition_key!"
+        );
+        return RefFFI::null();
+    };
 
     match view_meta.view_metadata.partition_keys.get(index as usize) {
         Some(column_name) => match view_meta.view_metadata.columns_metadata.get(column_name) {
@@ -575,7 +694,13 @@ pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
 pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key_count(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
 ) -> size_t {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_clustering_key_count!"
+        );
+        return 0;
+    };
+
     view_meta.view_metadata.clustering_keys.len() as size_t
 }
 
@@ -583,7 +708,12 @@ pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassColumnMeta, CConst> {
-    let view_meta = RefFFI::as_ref(view_meta).unwrap();
+    let Some(view_meta) = RefFFI::as_ref(view_meta) else {
+        tracing::error!(
+            "Provided null materialized view metadata pointer to cass_materialized_view_meta_clustering_key!"
+        );
+        return RefFFI::null();
+    };
 
     match view_meta.view_metadata.clustering_keys.get(index as usize) {
         Some(column_name) => match view_meta.view_metadata.columns_metadata.get(column_name) {

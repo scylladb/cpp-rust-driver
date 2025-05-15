@@ -116,7 +116,11 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
     cert: *const c_char,
     cert_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
+    let Some(ssl) = ArcFFI::cloned_from_ptr(ssl) else {
+        tracing::error!("Provided null ssl pointer to cass_ssl_add_trusted_cert_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let bio = unsafe { BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap()) };
 
     if bio.is_null() {
@@ -151,7 +155,10 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(
     ssl: CassBorrowedSharedPtr<CassSsl, CMut>,
     flags: i32,
 ) {
-    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
+    let Some(ssl) = ArcFFI::cloned_from_ptr(ssl) else {
+        tracing::error!("Provided null ssl pointer to cass_ssl_set_verify_flags!");
+        return;
+    };
 
     match flags {
         CASS_SSL_VERIFY_NONE => unsafe {
@@ -196,7 +203,11 @@ pub unsafe extern "C" fn cass_ssl_set_cert_n(
     cert: *const c_char,
     cert_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
+    let Some(ssl) = ArcFFI::cloned_from_ptr(ssl) else {
+        tracing::error!("Provided null ssl pointer to cass_ssl_set_cert_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let bio = unsafe { BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap()) };
 
     if bio.is_null() {
@@ -295,7 +306,11 @@ pub unsafe extern "C" fn cass_ssl_set_private_key_n(
     password: *mut c_char,
     _password_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
+    let Some(ssl) = ArcFFI::cloned_from_ptr(ssl) else {
+        tracing::error!("Provided null ssl pointer to cass_ssl_set_private_key_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let bio = unsafe { BIO_new_mem_buf(key as *const c_void, key_length.try_into().unwrap()) };
 
     if bio.is_null() {

@@ -154,8 +154,14 @@ pub unsafe extern "C" fn cass_session_connect(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session_opt = ArcFFI::cloned_from_ptr(session_raw).unwrap();
-    let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw).unwrap();
+    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_connect!");
+        return ArcFFI::null();
+    };
+    let Some(cluster) = BoxFFI::as_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_session_connect!");
+        return ArcFFI::null();
+    };
 
     CassSessionInner::connect(session_opt, cluster, None)
 }
@@ -176,8 +182,14 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session_opt = ArcFFI::cloned_from_ptr(session_raw).unwrap();
-    let cluster: &CassCluster = BoxFFI::as_ref(cluster_raw).unwrap();
+    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_connect_keyspace_n!");
+        return ArcFFI::null();
+    };
+    let Some(cluster) = BoxFFI::as_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_session_connect_keyspace_n!");
+        return ArcFFI::null();
+    };
     let keyspace = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }.map(ToOwned::to_owned);
 
     CassSessionInner::connect(session_opt, cluster, keyspace)
@@ -188,8 +200,15 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session_opt = ArcFFI::cloned_from_ptr(session_raw).unwrap();
-    let batch_from_raw = BoxFFI::as_ref(batch_raw).unwrap();
+    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_execute_batch!");
+        return ArcFFI::null();
+    };
+    let Some(batch_from_raw) = BoxFFI::as_ref(batch_raw) else {
+        tracing::error!("Provided null batch pointer to cass_session_execute_batch!");
+        return ArcFFI::null();
+    };
+
     let mut state = batch_from_raw.state.clone();
     let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
 
@@ -254,10 +273,17 @@ pub unsafe extern "C" fn cass_session_execute(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     statement_raw: CassBorrowedSharedPtr<CassStatement, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session_opt = ArcFFI::cloned_from_ptr(session_raw).unwrap();
+    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_execute!");
+        return ArcFFI::null();
+    };
 
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
-    let statement_opt = BoxFFI::as_ref(statement_raw).unwrap();
+    let Some(statement_opt) = BoxFFI::as_ref(statement_raw) else {
+        tracing::error!("Provided null statement pointer to cass_session_execute!");
+        return ArcFFI::null();
+    };
+
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
     let request_timeout_ms = statement_opt.request_timeout_ms;
@@ -389,8 +415,15 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
     cass_session: CassBorrowedSharedPtr<CassSession, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session = ArcFFI::cloned_from_ptr(cass_session).unwrap();
-    let cass_statement = BoxFFI::as_ref(statement).unwrap();
+    let Some(session) = ArcFFI::cloned_from_ptr(cass_session) else {
+        tracing::error!("Provided null session pointer to cass_session_prepare_from_existing!");
+        return ArcFFI::null();
+    };
+    let Some(cass_statement) = BoxFFI::as_ref(statement) else {
+        tracing::error!("Provided null statement pointer to cass_session_prepare_from_existing!");
+        return ArcFFI::null();
+    };
+
     let statement = cass_statement.statement.clone();
 
     CassFuture::make_raw(async move {
@@ -434,6 +467,11 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     query: *const c_char,
     query_length: size_t,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
+    let Some(cass_session) = ArcFFI::cloned_from_ptr(cass_session_raw) else {
+        tracing::error!("Provided null session pointer to cass_session_prepare_n!");
+        return ArcFFI::null();
+    };
+
     let query_str = unsafe { ptr_to_cstr_n(query, query_length) }
         // Apparently nullptr denotes an empty statement string.
         // It seems to be intended (for some weird reason, why not save a round-trip???)
@@ -441,7 +479,6 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
-    let cass_session = ArcFFI::cloned_from_ptr(cass_session_raw).unwrap();
 
     CassFuture::make_raw(async move {
         let session_guard = cass_session.read().await;
@@ -476,7 +513,10 @@ pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassS
 pub unsafe extern "C" fn cass_session_close(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let session_opt = ArcFFI::cloned_from_ptr(session).unwrap();
+    let Some(session_opt) = ArcFFI::cloned_from_ptr(session) else {
+        tracing::error!("Provided null session pointer to cass_session_close!");
+        return ArcFFI::null();
+    };
 
     CassFuture::make_raw(async move {
         let mut session_guard = session_opt.write().await;
@@ -497,7 +537,10 @@ pub unsafe extern "C" fn cass_session_close(
 pub unsafe extern "C" fn cass_session_get_client_id(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
 ) -> CassUuid {
-    let cass_session = ArcFFI::as_ref(session).unwrap();
+    let Some(cass_session) = ArcFFI::as_ref(session) else {
+        tracing::error!("Provided null session pointer to cass_session_get_client_id!");
+        return uuid::Uuid::nil().into();
+    };
 
     let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
     client_id.into()

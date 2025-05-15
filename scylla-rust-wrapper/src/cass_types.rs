@@ -474,7 +474,11 @@ pub unsafe extern "C" fn cass_data_type_new(
 pub unsafe extern "C" fn cass_data_type_new_from_existing(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_new_from_existing!");
+        return ArcFFI::null();
+    };
+
     ArcFFI::into_ptr(CassDataType::new_arced(
         unsafe { data_type.get_unchecked() }.clone(),
     ))
@@ -507,7 +511,11 @@ pub unsafe extern "C" fn cass_data_type_free(data_type: CassOwnedSharedPtr<CassD
 pub unsafe extern "C" fn cass_data_type_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassValueType {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_type!");
+        return CassValueType::CASS_VALUE_TYPE_UNKNOWN;
+    };
+
     unsafe { data_type.get_unchecked() }.get_value_type()
 }
 
@@ -515,7 +523,11 @@ pub unsafe extern "C" fn cass_data_type_type(
 pub unsafe extern "C" fn cass_data_type_is_frozen(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> cass_bool_t {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_is_frozen!");
+        return cass_false;
+    };
+
     let is_frozen = match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => udt.frozen,
         CassDataTypeInner::List { frozen, .. } => *frozen,
@@ -533,7 +545,11 @@ pub unsafe extern "C" fn cass_data_type_type_name(
     type_name: *mut *const c_char,
     type_name_length: *mut size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_type_name!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
             unsafe { write_str_to_c(name, type_name, type_name_length) };
@@ -557,7 +573,11 @@ pub unsafe extern "C" fn cass_data_type_set_type_name_n(
     type_name: *const c_char,
     type_name_length: size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type_raw).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type_raw) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_set_type_name_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let type_name_string = unsafe { ptr_to_cstr_n(type_name, type_name_length) }
         .unwrap()
         .to_string();
@@ -577,7 +597,11 @@ pub unsafe extern "C" fn cass_data_type_keyspace(
     keyspace: *mut *const c_char,
     keyspace_length: *mut size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_keyspace!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
             unsafe { write_str_to_c(name, keyspace, keyspace_length) };
@@ -601,7 +625,11 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_set_keyspace_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let keyspace_string = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }
         .unwrap()
         .to_string();
@@ -621,7 +649,11 @@ pub unsafe extern "C" fn cass_data_type_class_name(
     class_name: *mut *const ::std::os::raw::c_char,
     class_name_length: *mut size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_class_name!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Custom(name) => {
             unsafe { write_str_to_c(name, class_name, class_name_length) };
@@ -645,7 +677,11 @@ pub unsafe extern "C" fn cass_data_type_set_class_name_n(
     class_name: *const ::std::os::raw::c_char,
     class_name_length: size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_set_class_name_n!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let class_string = unsafe { ptr_to_cstr_n(class_name, class_name_length) }
         .unwrap()
         .to_string();
@@ -662,7 +698,11 @@ pub unsafe extern "C" fn cass_data_type_set_class_name_n(
 pub unsafe extern "C" fn cass_data_type_sub_type_count(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> size_t {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_sub_type_count!");
+        return 0;
+    };
+
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Value(..) => 0,
         CassDataTypeInner::UDT(udt_data_type) => udt_data_type.field_types.len() as size_t,
@@ -691,7 +731,11 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     index: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_sub_data_type!");
+        return ArcFFI::null();
+    };
+
     let sub_type: Option<&Arc<CassDataType>> =
         unsafe { data_type.get_unchecked() }.get_sub_data_type(index as usize);
 
@@ -716,7 +760,13 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name_n(
     name: *const ::std::os::raw::c_char,
     name_length: size_t,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!(
+            "Provided null data type pointer to cass_data_type_sub_data_type_by_name_n!"
+        );
+        return ArcFFI::null();
+    };
+
     let name_str = unsafe { ptr_to_cstr_n(name, name_length) }.unwrap();
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => match udt.get_field_by_name(name_str) {
@@ -734,7 +784,11 @@ pub unsafe extern "C" fn cass_data_type_sub_type_name(
     name: *mut *const ::std::os::raw::c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_sub_type_name!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::UDT(udt) => match udt.field_types.get(index as usize) {
             None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
@@ -752,10 +806,16 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CMut>,
     sub_data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassError {
-    let data_type = ArcFFI::as_ref(data_type).unwrap();
-    match unsafe { data_type.get_mut_unchecked() }
-        .add_sub_data_type(ArcFFI::cloned_from_ptr(sub_data_type).unwrap())
-    {
+    let Some(data_type) = ArcFFI::as_ref(data_type) else {
+        tracing::error!("Provided null data type pointer to cass_data_type_add_sub_type!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let Some(sub_data_type) = ArcFFI::cloned_from_ptr(sub_data_type) else {
+        tracing::error!("Provided null sub data type pointer to cass_data_type_add_sub_type!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match unsafe { data_type.get_mut_unchecked() }.add_sub_data_type(sub_data_type) {
         Ok(()) => CassError::CASS_OK,
         Err(e) => e,
     }
@@ -777,12 +837,23 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
     name_length: size_t,
     sub_data_type_raw: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassError {
+    let Some(data_type) = ArcFFI::as_ref(data_type_raw) else {
+        tracing::error!(
+            "Provided null data type pointer to cass_data_type_add_sub_type_by_name_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+    let Some(sub_data_type) = ArcFFI::cloned_from_ptr(sub_data_type_raw) else {
+        tracing::error!(
+            "Provided null sub data type pointer to cass_data_type_add_sub_type_by_name_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
     let name_string = unsafe { ptr_to_cstr_n(name, name_length) }
         .unwrap()
         .to_string();
-    let sub_data_type = ArcFFI::cloned_from_ptr(sub_data_type_raw).unwrap();
 
-    let data_type = ArcFFI::as_ref(data_type_raw).unwrap();
     match unsafe { data_type.get_mut_unchecked() } {
         CassDataTypeInner::UDT(udt_data_type) => {
             // The Cpp Driver does not check whether field_types size
