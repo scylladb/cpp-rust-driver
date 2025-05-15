@@ -32,7 +32,22 @@ namespace datastax { namespace internal { namespace testing {
 using namespace core;
 
 String get_host_from_future(CassFuture* future) {
-  throw std::runtime_error("Unimplemented 'get_host_from_future'!");
+  char* host;
+  size_t host_length;
+
+  testing_future_get_host(future, &host, &host_length);
+
+  if (host == nullptr) {
+    throw std::runtime_error("CassFuture returned a null host string.");
+  }
+
+  std::string host_str(host, host_length);
+  OStringStream ss;
+  ss << host_str;
+
+  testing_free_cstring(host);
+
+  return ss.str();
 }
 
 StringVec get_attempted_hosts_from_future(CassFuture* future) {
@@ -59,7 +74,7 @@ String get_contact_points_from_cluster(CassCluster* cluster) {
   OStringStream ss;
   ss << contact_points_str;
 
-  testing_free_contact_points(contact_points);
+  testing_free_cstring(contact_points);
 
   return ss.str();
 }
