@@ -48,7 +48,6 @@ impl BoundCallback {
     }
 }
 
-#[derive(Default)]
 struct CassFutureState {
     value: Option<CassFutureResult>,
     err_string: Option<String>,
@@ -86,7 +85,12 @@ impl CassFuture {
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
-            state: Mutex::new(Default::default()),
+            state: Mutex::new(CassFutureState {
+                value: None,
+                err_string: None,
+                callback: None,
+                join_handle: None,
+            }),
             wait_for_value: Condvar::new(),
         });
         let cass_fut_clone = Arc::clone(&cass_fut);
@@ -117,7 +121,9 @@ impl CassFuture {
         Arc::new(CassFuture {
             state: Mutex::new(CassFutureState {
                 value: Some(r),
-                ..Default::default()
+                err_string: None,
+                callback: None,
+                join_handle: None,
             }),
             wait_for_value: Condvar::new(),
         })
