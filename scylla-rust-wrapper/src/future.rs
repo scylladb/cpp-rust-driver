@@ -48,6 +48,8 @@ impl BoundCallback {
     }
 }
 
+/// State of the execution of the [CassFuture],
+/// together with a join handle of the tokio task that is executing it.
 struct CassFutureState {
     value: Option<CassFutureResult>,
     err_string: Option<String>,
@@ -55,6 +57,10 @@ struct CassFutureState {
     join_handle: Option<JoinHandle<()>>,
 }
 
+/// The C-API representation of a future. Implemented as a wrapper around a Rust future
+/// that can be awaited and has a callback mechanism. It's **eager** in a way that
+/// its execution starts possibly immediately (unless the executor thread pool is nempty,
+/// which is the case for the current-thread executor).
 pub struct CassFuture {
     state: Mutex<CassFutureState>,
     wait_for_value: Condvar,
