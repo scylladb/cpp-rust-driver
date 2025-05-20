@@ -3,6 +3,7 @@ use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
+use crate::load_balancing::{CassHostFilter, LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
@@ -15,9 +16,8 @@ use scylla::client::execution_profile::ExecutionProfileBuilder;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
-use scylla::policies::load_balancing::{
-    DefaultPolicyBuilder, LatencyAwarenessBuilder, LoadBalancingPolicy,
-};
+use scylla::policies::host_filter::HostFilter;
+use scylla::policies::load_balancing::LatencyAwarenessBuilder;
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::policies::timestamp_generator::TimestampGenerator;
@@ -71,75 +71,6 @@ const DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE: ShardAwarePortRange =
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Clone, Debug)]
-pub(crate) struct LoadBalancingConfig {
-    pub(crate) token_awareness_enabled: bool,
-    pub(crate) token_aware_shuffling_replicas_enabled: bool,
-    pub(crate) load_balancing_kind: Option<LoadBalancingKind>,
-    pub(crate) latency_awareness_enabled: bool,
-    pub(crate) latency_awareness_builder: LatencyAwarenessBuilder,
-}
-impl LoadBalancingConfig {
-    // This is `async` to prevent running this function from beyond tokio context,
-    // as it results in panic due to DefaultPolicyBuilder::build() spawning a tokio task.
-    pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
-        let load_balancing_kind = self
-            .load_balancing_kind
-            // Round robin is chosen by default for cluster wide LBP.
-            .unwrap_or(LoadBalancingKind::RoundRobin);
-
-        let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
-        if self.token_awareness_enabled {
-            // Cpp-driver enables shuffling replicas only if token aware routing is enabled.
-            builder =
-                builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
-        }
-
-        match load_balancing_kind {
-            LoadBalancingKind::DcAware { local_dc } => {
-                builder = builder.prefer_datacenter(local_dc).permit_dc_failover(true)
-            }
-            LoadBalancingKind::RackAware {
-                local_dc,
-                local_rack,
-            } => {
-                builder = builder
-                    .prefer_datacenter_and_rack(local_dc, local_rack)
-                    .permit_dc_failover(true)
-            }
-            LoadBalancingKind::RoundRobin => {}
-        }
-
-        if self.latency_awareness_enabled {
-            builder = builder.latency_awareness(self.latency_awareness_builder);
-        }
-        builder.build()
-    }
-}
-impl Default for LoadBalancingConfig {
-    fn default() -> Self {
-        Self {
-            token_awareness_enabled: true,
-            token_aware_shuffling_replicas_enabled: true,
-            load_balancing_kind: None,
-            latency_awareness_enabled: false,
-            latency_awareness_builder: Default::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum LoadBalancingKind {
-    RoundRobin,
-    DcAware {
-        local_dc: String,
-    },
-    RackAware {
-        local_dc: String,
-        local_rack: String,
-    },
-}
-
 #[derive(Clone)]
 pub struct CassCluster {
     session_builder: SessionBuilder,
@@ -166,6 +97,25 @@ impl CassCluster {
     #[inline]
     pub(crate) fn get_client_id(&self) -> Option<uuid::Uuid> {
         self.client_id
+    }
+
+    pub(crate) fn build_host_filter(&self) -> Arc<dyn HostFilter> {
+        CassHostFilter::new_from_lbp_configs(
+            std::iter::once(&self.load_balancing_config).chain(
+                self.execution_profile_map
+                    .values()
+                    // Filter out the profiles that do not have specified base LBP.
+                    // If base LBP is not specified, the extensions such as filtering
+                    // are simply ignored - default (cluster) LBP is used.
+                    .filter_map(|exec_profile| {
+                        exec_profile
+                            .load_balancing_config
+                            .load_balancing_kind
+                            .as_ref()
+                            .map(|_| &exec_profile.load_balancing_config)
+                    }),
+            ),
+        )
     }
 }
 
@@ -1286,6 +1236,142 @@ pub unsafe extern "C" fn cass_cluster_set_latency_aware_routing_settings(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_whitelist_filtering(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    hosts: *const c_char,
+) {
+    unsafe { cass_cluster_set_whitelist_filtering_n(cluster_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_whitelist_filtering_n(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_whitelist_filtering_n!");
+        return;
+    };
+
+    unsafe {
+        // Ignore the result - for some reason cluster methods do not return CassError,
+        // while exec profile methods do.
+        let _ = update_comma_delimited_list(
+            &mut cluster.load_balancing_config.filtering.whitelist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        );
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_blacklist_filtering(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    hosts: *const c_char,
+) {
+    unsafe { cass_cluster_set_blacklist_filtering_n(cluster_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_blacklist_filtering_n(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_blacklist_filtering_n!");
+        return;
+    };
+
+    unsafe {
+        let _ = update_comma_delimited_list(
+            &mut cluster.load_balancing_config.filtering.blacklist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        );
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_whitelist_dc_filtering(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    dcs: *const c_char,
+) {
+    unsafe { cass_cluster_set_whitelist_dc_filtering_n(cluster_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_whitelist_dc_filtering_n(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_whitelist_dc_filtering!"
+        );
+        return;
+    };
+
+    unsafe {
+        let _ = update_comma_delimited_list(
+            &mut cluster.load_balancing_config.filtering.whitelist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        );
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_blacklist_dc_filtering(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    dcs: *const c_char,
+) {
+    unsafe { cass_cluster_set_blacklist_dc_filtering_n(cluster_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_blacklist_dc_filtering_n(
+    cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_blacklist_dc_filtering_n!"
+        );
+        return;
+    };
+
+    unsafe {
+        let _ = update_comma_delimited_list(
+            &mut cluster.load_balancing_config.filtering.blacklist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        );
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_consistency(
     cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
     consistency: CassConsistency,
@@ -1371,7 +1457,7 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::assert_cass_error_eq;
+    use crate::testing::{assert_cass_error_eq, setup_tracing};
 
     use super::*;
     use crate::{
@@ -1820,6 +1906,132 @@ mod tests {
                         CassError::CASS_ERROR_LIB_BAD_PARAMS
                     );
                 }
+            }
+
+            cass_cluster_free(cluster_raw);
+        }
+    }
+
+    #[test]
+    fn test_cluster_whitelist_blacklist_filtering_config() {
+        setup_tracing();
+
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+
+            // Check the defaults
+            {
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_dc
+                        .is_empty()
+                );
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_dc
+                        .is_empty()
+                );
+            }
+
+            // add some addresses (and some additional whitespaces)
+            {
+                cass_cluster_set_whitelist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c" 127.0.0.1 ,  127.0.0.2 ".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.whitelist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))
+                    ]
+                );
+            }
+
+            // Mixed valid and unparsable addressed.
+            // Unparsable addresses should be ignored.
+            {
+                cass_cluster_set_whitelist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c"foo, 127.0.0.3, bar,,baz".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.whitelist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))
+                    ]
+                );
+            }
+
+            // Provide empty string - this should clear the list.
+            {
+                cass_cluster_set_whitelist_filtering(cluster_raw.borrow_mut(), c"".as_ptr());
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+            }
+
+            // Populate the list again...
+            {
+                cass_cluster_set_blacklist_filtering(
+                    cluster_raw.borrow_mut(),
+                    c"1.1.1.1,2.2.2.2,foo,,,,  ,3.3.3.3,".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                        IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)),
+                        IpAddr::V4(Ipv4Addr::new(3, 3, 3, 3))
+                    ]
+                );
+            }
+
+            // ..and clear it with the null pointer
+            {
+                cass_cluster_set_blacklist_filtering(cluster_raw.borrow_mut(), std::ptr::null());
+
+                let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
+                assert!(
+                    cluster
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
             }
 
             cass_cluster_free(cluster_raw);

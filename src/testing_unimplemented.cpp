@@ -51,12 +51,6 @@ CASS_EXPORT CassError cass_cluster_set_authenticator_callbacks(
     CassAuthenticatorDataCleanupCallback cleanup_callback, void* data) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_authenticator_callbacks\n");
 }
-CASS_EXPORT void cass_cluster_set_blacklist_dc_filtering(CassCluster* cluster, const char* dcs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_blacklist_dc_filtering\n");
-}
-CASS_EXPORT void cass_cluster_set_blacklist_filtering(CassCluster* cluster, const char* hosts) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_blacklist_filtering\n");
-}
 CASS_EXPORT CassError cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init(
     CassCluster* cluster, const char* path) {
   throw std::runtime_error(
@@ -84,12 +78,6 @@ CASS_EXPORT CassError cass_cluster_set_prepare_on_up_or_add_host(CassCluster* cl
                                                                  cass_bool_t enabled) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_up_or_add_host\n");
 }
-CASS_EXPORT void cass_cluster_set_whitelist_dc_filtering(CassCluster* cluster, const char* dcs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_whitelist_dc_filtering\n");
-}
-CASS_EXPORT void cass_cluster_set_whitelist_filtering(CassCluster* cluster, const char* hosts) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_whitelist_filtering\n");
-}
 CASS_EXPORT CassError cass_collection_append_custom(CassCollection* collection,
                                                     const char* class_name,
                                                     const cass_byte_t* value, size_t value_size) {
@@ -105,22 +93,6 @@ CASS_EXPORT void cass_custom_payload_free(CassCustomPayload* payload) {
 CASS_EXPORT void cass_custom_payload_set(CassCustomPayload* payload, const char* name,
                                          const cass_byte_t* value, size_t value_size) {
   throw std::runtime_error("UNIMPLEMENTED cass_custom_payload_set\n");
-}
-CASS_EXPORT CassError cass_execution_profile_set_blacklist_dc_filtering(CassExecProfile* profile,
-                                                                        const char* dcs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_blacklist_dc_filtering\n");
-}
-CASS_EXPORT CassError cass_execution_profile_set_blacklist_filtering(CassExecProfile* profile,
-                                                                     const char* hosts) {
-  throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_blacklist_filtering\n");
-}
-CASS_EXPORT CassError cass_execution_profile_set_whitelist_dc_filtering(CassExecProfile* profile,
-                                                                        const char* dcs) {
-  throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_whitelist_dc_filtering\n");
-}
-CASS_EXPORT CassError cass_execution_profile_set_whitelist_filtering(CassExecProfile* profile,
-                                                                     const char* hosts) {
-  throw std::runtime_error("UNIMPLEMENTED cass_execution_profile_set_whitelist_filtering\n");
 }
 CASS_EXPORT CassError cass_function_meta_argument(const CassFunctionMeta* function_meta,
                                                   size_t index, const char** name,

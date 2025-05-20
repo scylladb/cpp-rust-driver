@@ -1,7 +1,9 @@
 use std::convert::{TryFrom, TryInto};
 use std::ffi::c_char;
 use std::future::Future;
+use std::net::IpAddr;
 use std::ops::Deref;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -21,9 +23,9 @@ use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cluster::{
-    LoadBalancingConfig, LoadBalancingKind, set_load_balance_dc_aware_n,
-    set_load_balance_rack_aware_n,
+    set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, update_comma_delimited_list,
 };
+use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::retry_policy::RetryPolicy::{
     DefaultRetryPolicy, DowngradingConsistencyRetryPolicy, FallthroughRetryPolicy,
@@ -37,7 +39,7 @@ use crate::types::{
 #[derive(Clone, Debug)]
 pub struct CassExecProfile {
     inner: ExecutionProfileBuilder,
-    load_balancing_config: LoadBalancingConfig,
+    pub(crate) load_balancing_config: LoadBalancingConfig,
 }
 
 impl FFI for CassExecProfile {
@@ -474,6 +476,170 @@ pub unsafe extern "C" fn cass_execution_profile_set_load_balance_round_robin(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_whitelist_filtering_n(profile_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_whitelist_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder
+                .load_balancing_config
+                .filtering
+                .whitelist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_blacklist_filtering_n(profile_raw, hosts, strlen(hosts)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    hosts: *const c_char,
+    hosts_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_blacklist_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder
+                .load_balancing_config
+                .filtering
+                .blacklist_hosts,
+            hosts,
+            hosts_size,
+            |s| match IpAddr::from_str(s) {
+                Ok(ip) => Some(ip),
+                Err(err) => {
+                    tracing::error!("Failed to parse ip address <{}>: {}", s, err);
+                    None
+                }
+            },
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_dc_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_whitelist_dc_filtering_n(profile_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_whitelist_dc_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_whitelist_dc_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder.load_balancing_config.filtering.whitelist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_dc_filtering(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+) -> CassError {
+    unsafe { cass_execution_profile_set_blacklist_dc_filtering_n(profile_raw, dcs, strlen(dcs)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_execution_profile_set_blacklist_dc_filtering_n(
+    profile_raw: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
+    dcs: *const c_char,
+    dcs_size: size_t,
+) -> CassError {
+    let Some(profile_builder) = BoxFFI::as_mut_ref(profile_raw) else {
+        tracing::error!(
+            "Provided null profile pointer to cass_execution_profile_set_blacklist_dc_filtering_n!"
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let result = unsafe {
+        update_comma_delimited_list(
+            &mut profile_builder.load_balancing_config.filtering.blacklist_dc,
+            dcs,
+            dcs_size,
+            // Filter out empty dcs.
+            |s| (!s.is_empty()).then(|| s.to_owned()),
+        )
+    };
+
+    match result {
+        Ok(()) => CassError::CASS_OK,
+        Err(e) => e,
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
     timeout_ms: cass_uint64_t,
@@ -586,9 +752,11 @@ pub unsafe extern "C" fn cass_execution_profile_set_token_aware_routing_shuffle_
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use super::*;
 
-    use crate::testing::assert_cass_error_eq;
+    use crate::testing::{assert_cass_error_eq, setup_tracing};
     use crate::{
         argconv::{make_c_str, str_to_c_str_n},
         batch::{cass_batch_add_statement, cass_batch_free, cass_batch_new},
@@ -597,6 +765,138 @@ mod tests {
     };
 
     use assert_matches::assert_matches;
+
+    #[test]
+    fn test_exec_profile_whitelist_blacklist_filtering_config() {
+        setup_tracing();
+
+        unsafe {
+            let mut profile_raw = cass_execution_profile_new();
+
+            // Check the defaults
+            {
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .whitelist_dc
+                        .is_empty()
+                );
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_dc
+                        .is_empty()
+                );
+            }
+
+            // add some addresses (and some additional whitespaces)
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c" 127.0.0.1 ,  127.0.0.2 ".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    profile.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))
+                    ]
+                );
+            }
+
+            // Mixed valid and unparsable addressed.
+            // Unparsable addresses should be ignored.
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"foo, 127.0.0.3, bar,,baz".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    profile.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)),
+                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))
+                    ]
+                );
+            }
+
+            // Provide empty string - this should clear the list.
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"".as_ptr(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+            }
+
+            // Populate the list again...
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    c"1.1.1.1,2.2.2.2,foo,,,,  ,3.3.3.3,".as_ptr(),
+                );
+
+                let cluster = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert_eq!(
+                    cluster.load_balancing_config.filtering.blacklist_hosts,
+                    vec![
+                        IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                        IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)),
+                        IpAddr::V4(Ipv4Addr::new(3, 3, 3, 3))
+                    ]
+                );
+            }
+
+            // ..and clear it with the null pointer
+            {
+                cass_execution_profile_set_blacklist_filtering(
+                    profile_raw.borrow_mut(),
+                    std::ptr::null(),
+                );
+
+                let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
+                assert!(
+                    profile
+                        .load_balancing_config
+                        .filtering
+                        .blacklist_hosts
+                        .is_empty()
+                );
+            }
+
+            cass_execution_profile_free(profile_raw);
+        }
+    }
 
     #[test]
     #[ntest::timeout(100)]
