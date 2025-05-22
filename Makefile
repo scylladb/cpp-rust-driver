@@ -181,10 +181,10 @@ install-java8-if-missing:
 	}
 
 install-build-dependencies: update-apt-cache-if-needed
-	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
+	@sudo apt-get install -y libuv1-dev libkrb5-dev libc6-dbg
 
 install-bin-dependencies: update-apt-cache-if-needed
-	@sudo apt-get install -y libssl1.1 libuv1-dev libkrb5-dev libc6-dbg
+	@sudo apt-get install -y libuv1-dev libkrb5-dev libc6-dbg
 
 build-integration-test-bin:
 	@{\
