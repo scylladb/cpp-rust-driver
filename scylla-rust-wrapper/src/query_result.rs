@@ -29,17 +29,20 @@ use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub enum CassResultKind {
     NonRows,
     Rows(CassRowsResult),
 }
 
+#[derive(Debug)]
 pub struct CassRowsResult {
     // Arc: shared with first_row (yoke).
     pub(crate) shared_data: Arc<CassRowsResultSharedData>,
     pub(crate) first_row: Option<RowWithSelfBorrowedResultData>,
 }
 
+#[derive(Debug)]
 pub(crate) struct CassRowsResultSharedData {
     pub(crate) raw_rows: DeserializedMetadataAndRawRows,
     // Arc: shared with CassPrepared
@@ -53,6 +56,7 @@ impl FFI for CassNode {
     type Origin = FromRef;
 }
 
+#[derive(Debug)]
 pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
@@ -159,6 +163,7 @@ impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame,
 
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
+#[derive(Debug)]
 pub struct CassRow<'result> {
     pub columns: Vec<CassValue<'result>>,
     pub result_metadata: &'result CassResultMetadata,
@@ -230,7 +235,7 @@ mod row_with_self_borrowed_result_data {
 
     /// A simple wrapper over CassRow.
     /// Needed, so we can implement Yokeable for it, instead of implementing it for CassRow.
-    #[derive(Yokeable)]
+    #[derive(Debug, Yokeable)]
     struct CassRowWrapper<'result>(CassRow<'result>);
 
     /// A wrapper over struct which self-borrows the metadata allocated using Arc.
@@ -243,6 +248,7 @@ mod row_with_self_borrowed_result_data {
     ///
     /// This struct is a shared owner of the row bytes and metadata, and self-borrows this data
     /// to the `CassRow` it contains.
+    #[derive(Debug)]
     pub struct RowWithSelfBorrowedResultData(
         Yoke<CassRowWrapper<'static>, Arc<CassRowsResultSharedData>>,
     );
@@ -307,6 +313,7 @@ pub(crate) mod cass_raw_value {
     use scylla::errors::{DeserializationError, TypeCheckError};
     use thiserror::Error;
 
+    #[derive(Debug)]
     pub(crate) struct CassRawValue<'frame, 'metadata> {
         typ: &'metadata ColumnType<'metadata>,
         slice: Option<FrameSlice<'frame>>,
@@ -428,6 +435,7 @@ pub(crate) mod cass_raw_value {
     }
 }
 
+#[derive(Debug)]
 pub struct CassValue<'result> {
     pub(crate) value: CassRawValue<'result, 'result>,
     pub(crate) value_type: &'result Arc<CassDataType>,

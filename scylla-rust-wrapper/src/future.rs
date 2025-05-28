@@ -17,6 +17,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
+#[derive(Debug)]
 pub enum CassResultValue {
     Empty,
     QueryResult(Arc<CassResult>),
