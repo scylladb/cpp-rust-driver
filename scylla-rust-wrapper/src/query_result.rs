@@ -61,7 +61,7 @@ impl CassResult {
         result: QueryResult,
         paging_state_response: PagingStateResponse,
         maybe_result_metadata: Option<Arc<CassResultMetadata>>,
-    ) -> Result<Self, CassErrorResult> {
+    ) -> Result<Self, Arc<CassErrorResult>> {
         match result.into_rows_result() {
             Ok(rows_result) => {
                 // maybe_result_metadata is:
@@ -73,7 +73,7 @@ impl CassResult {
                     ))
                 });
 
-                let (raw_rows, tracing_id, _) = rows_result.into_inner();
+                let (raw_rows, tracing_id, _, _coordinator) = rows_result.into_inner();
                 let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
                 let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
                     Arc::clone(&shared_data),
@@ -100,7 +100,7 @@ impl CassResult {
                 Ok(cass_result)
             }
             Err(IntoRowsResultError::ResultMetadataLazyDeserializationError(err)) => {
-                Err(err.into())
+                Err(Arc::new(err.into()))
             }
         }
     }
@@ -239,7 +239,7 @@ mod row_with_self_borrowed_result_data {
         /// Constructs [`RowWithSelfBorrowedResultData`] based on the first row from `raw_rows_and_metadata`.
         pub(super) fn first_from_raw_rows_and_metadata(
             raw_rows_and_metadata: Arc<CassRowsResultSharedData>,
-        ) -> Result<Option<Self>, CassErrorResult> {
+        ) -> Result<Option<Self>, Arc<CassErrorResult>> {
             enum AttachError {
                 CassErrorResult(CassErrorResult),
                 NoRows,
@@ -276,7 +276,7 @@ mod row_with_self_borrowed_result_data {
             match yoke_result {
                 Ok(yoke) => Ok(Some(Self(yoke))),
                 Err(AttachError::NoRows) => Ok(None),
-                Err(AttachError::CassErrorResult(err)) => Err(err),
+                Err(AttachError::CassErrorResult(err)) => Err(Arc::new(err)),
             }
         }
 

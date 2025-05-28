@@ -395,7 +395,7 @@ pub unsafe extern "C" fn cass_session_execute(
                     maybe_result_metadata,
                 ) {
                     Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
-                    Err(e) => Ok(CassResultValue::QueryError(Arc::new(e))),
+                    Err(e) => Ok(CassResultValue::QueryError(e)),
                 }
             }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
