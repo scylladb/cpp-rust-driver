@@ -55,13 +55,12 @@ public:
           ExecutionProfile::build().with_latency_aware_routing().with_load_balance_round_robin();
       profiles_["token_aware"] =
           ExecutionProfile::build().with_token_aware_routing().with_load_balance_round_robin();
-      // Host filtering is not supported in cpp-rust-driver
-      // profiles_["blacklist"] = ExecutionProfile::build()
-      //                              .with_blacklist_filtering(Options::host_prefix() + "1")
-      //                              .with_load_balance_round_robin();
-      // profiles_["whitelist"] = ExecutionProfile::build()
-      //                              .with_whitelist_filtering(Options::host_prefix() + "1")
-      //                              .with_load_balance_round_robin();
+      profiles_["blacklist"] = ExecutionProfile::build()
+                                   .with_blacklist_filtering(Options::host_prefix() + "1")
+                                   .with_load_balance_round_robin();
+      profiles_["whitelist"] = ExecutionProfile::build()
+                                   .with_whitelist_filtering(Options::host_prefix() + "1")
+                                   .with_load_balance_round_robin();
       profiles_["retry_policy"] = ExecutionProfile::build()
       // We do not implement logging retry policy in cpp-rust-driver
                                       .with_retry_policy(child_retry_policy_)
@@ -197,17 +196,16 @@ public:
   void SetUp() {
     // Create the execution profiles for the test cases
     profiles_["dc_aware"] = ExecutionProfile::build()
-                                .with_load_balance_dc_aware("dc1", 1, false)
+                                .with_load_balance_dc_aware("dc1", 0, false)
                                 .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
-    // Host filtering is not supported in cpp-rust-driver
-    // profiles_["blacklist_dc"] = ExecutionProfile::build()
-    //                                 .with_blacklist_dc_filtering("dc1")
-    //                                 .with_load_balance_dc_aware("dc1", 1, true)
-    //                                 .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
-    // profiles_["whitelist_dc"] = ExecutionProfile::build()
-    //                                 .with_whitelist_dc_filtering("dc2")
-    //                                 .with_load_balance_dc_aware("dc1", 1, true)
-    //                                 .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
+    profiles_["blacklist_dc"] = ExecutionProfile::build()
+                                    .with_blacklist_dc_filtering("dc1")
+                                    .with_load_balance_dc_aware("dc1", 0, false)
+                                    .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
+    profiles_["whitelist_dc"] = ExecutionProfile::build()
+                                    .with_whitelist_dc_filtering("dc2")
+                                    .with_load_balance_dc_aware("dc1", 0, false)
+                                    .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
 
     // Call the parent setup function
     skip_base_execution_profile_ = true;
