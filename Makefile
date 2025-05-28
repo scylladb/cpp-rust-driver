@@ -41,6 +41,10 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_Consistency\
 :ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
+:ExecutionProfileTest.Integration_Cassandra_WhitelistFiltering\
+:ExecutionProfileTest.Integration_Cassandra_BlacklistFiltering\
+:DCExecutionProfileTest.Integration_Cassandra_BlacklistDCFiltering\
+:DCExecutionProfileTest.Integration_Cassandra_WhitelistDCFiltering\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
 :SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
@@ -100,6 +104,10 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_Consistency\
 :ExecutionProfileTest.Integration_Cassandra_SerialConsistency\
 :ExecutionProfileTest.Integration_Cassandra_LatencyAwareRouting\
+:ExecutionProfileTest.Integration_Cassandra_WhitelistFiltering\
+:ExecutionProfileTest.Integration_Cassandra_BlacklistFiltering\
+:DCExecutionProfileTest.Integration_Cassandra_BlacklistDCFiltering\
+:DCExecutionProfileTest.Integration_Cassandra_WhitelistDCFiltering\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
