@@ -46,6 +46,13 @@ pub(crate) struct CassRowsResultSharedData {
     pub(crate) metadata: Arc<CassResultMetadata>,
 }
 
+pub type CassNode = Coordinator;
+
+// Borrowed from CassResult in cass_future_coordinator.
+impl FFI for CassNode {
+    type Origin = FromRef;
+}
+
 pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,

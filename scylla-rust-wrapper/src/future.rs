@@ -5,10 +5,11 @@ use crate::cass_error::CassErrorMessage;
 use crate::cass_error::ToCassError;
 use crate::execution_error::CassErrorResult;
 use crate::prepared::CassPrepared;
-use crate::query_result::CassResult;
+use crate::query_result::{CassNode, CassResult};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use futures::future;
+use scylla::response::Coordinator;
 use std::future::Future;
 use std::mem;
 use std::os::raw::c_void;
@@ -473,6 +474,38 @@ pub unsafe extern "C" fn cass_future_tracing_id(
             None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
         },
         _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_future_coordinator(
+    future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
+) -> CassBorrowedSharedPtr<CassNode, CConst> {
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future to cass_future_coordinator!");
+        return RefFFI::null();
+    };
+
+    future.with_waited_result(|r| match r {
+        Ok(CassResultValue::QueryResult(result)) => {
+            // unwrap: Coordinator is `None` only for tests.
+            let coordinator_ptr = result.coordinator.as_ref().unwrap() as *const Coordinator;
+
+            // We need to 'extend' the lifetime of returned Coordinator so safe FFI api does not complain.
+            // The lifetime of "result" reference provided to this closure is the lifetime of a mutex guard.
+            // We are guaranteed, that once the future is resolved (i.e. this closure is called), the result will not
+            // be modified in any way. Thus, we can guarantee that returned coordinator lives as long as underlying
+            // CassResult lives (i.e. longer than the lifetime of acquired mutex guard).
+            //
+            // SAFETY: Coordinator's lifetime is tied to the lifetime of underlying CassResult, thus:
+            // 1. Coordinator lives as long as the underlying CassResult lives
+            // 2. Coordinator will not be moved as long as underlying CassResult is not freed
+            // 3. Coordinator is immutable once future is resolved (because CassResult is set once)
+            let coordinator_ref = unsafe { &*coordinator_ptr };
+
+            RefFFI::as_ptr(coordinator_ref)
+        }
+        _ => RefFFI::null(),
     })
 }
 
