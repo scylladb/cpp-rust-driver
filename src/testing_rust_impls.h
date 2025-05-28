@@ -16,20 +16,18 @@ CASS_EXPORT cass_int32_t testing_cluster_get_port(CassCluster* cluster);
 // Then, the resulting pointer is set to null.
 //
 // On success, this function allocates a contact points string, which needs to be then
-// freed with `testing_free_contact_points`.
+// freed with `testing_free_cstring`.
 CASS_EXPORT void testing_cluster_get_contact_points(CassCluster* cluster, char** contact_points,
                                                     size_t* contact_points_length);
-
-CASS_EXPORT void testing_free_contact_points(char* contact_points);
 
 // Returns an ip address of request coordinator.
 //
 // This method fails if the future resolved to some error.
 //
-// On success, it allocates a host string which needs to be then freed wih `testing_free_host`.
+// On success, it allocates a host string which needs to be then freed wih `testing_free_cstring`.
 CASS_EXPORT void testing_future_get_host(const CassFuture* future, char** host, size_t* host_length);
 
-CASS_EXPORT void testing_free_host(char* host);
+CASS_EXPORT void testing_free_cstring(char *s);
 
 // Sets a sleeping history listener on the statement.
 // This can be used to enforce a sleep time during statement execution, which increases the latency.

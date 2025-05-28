@@ -63,11 +63,6 @@ pub unsafe extern "C" fn testing_cluster_get_contact_points(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn testing_free_contact_points(contact_points: *mut c_char) {
-    let _ = unsafe { CString::from_raw(contact_points) };
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_future_get_host(
     future_raw: CassBorrowedSharedPtr<CassFuture, CConst>,
     host: *mut *mut c_char,
@@ -107,8 +102,8 @@ pub unsafe extern "C" fn testing_future_get_host(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn testing_free_host(host: *mut c_char) {
-    let _ = unsafe { CString::from_raw(host) };
+pub unsafe extern "C" fn testing_free_cstring(s: *mut c_char) {
+    let _ = unsafe { CString::from_raw(s) };
 }
 
 #[derive(Debug)]
