@@ -12,6 +12,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :SerialConsistencyTests.*\
 :HeartbeatTests.*\
 :PreparedTests.*\
+:StatementNoClusterTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ControlConnectionTests.*\
@@ -69,6 +70,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :SerialConsistencyTests.*\
 :HeartbeatTests.*\
 :PreparedTests.*\
+:StatementNoClusterTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ControlConnectionTests.*\
