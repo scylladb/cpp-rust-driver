@@ -241,7 +241,7 @@ Now, use `--gtest_filter` to run certain integration tests:
 ./cassandra-integration-tests --scylla --install-dir=[PATH_TO_SCYLLA] --version=3.0.8 --category=CASSANDRA --verbose=ccm --gtest_filter="ClusterTests.*"
 ```
 
-##### Note: Tests that pass with ScyllaDB and Cassandra clusters can be found in GitHub Actions [`build.yml`](https://github.com/scylladb/cpp-rust-driver/blob/master/.github/workflows/build.yml) and [`cassandra.yml`](https://github.com/scylladb/cpp-rust-driver/blob/master/.github/workflows/cassandra.yml) workflows.
+##### Note: Tests that pass with ScyllaDB and Cassandra clusters can be found in Makefile: `SCYLLA_TEST_FILTER` and `CASSANDRA_TEST_FILTER` env variables.
 
 # Build rpm package
 ___
