@@ -9,11 +9,10 @@ use crate::query_result::{CassNode, CassResult};
 use crate::types::*;
 use crate::uuid::CassUuid;
 use futures::future;
-use scylla::response::Coordinator;
 use std::future::Future;
 use std::mem;
 use std::os::raw::c_void;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
@@ -52,7 +51,6 @@ impl BoundCallback {
 
 #[derive(Default)]
 struct CassFutureState {
-    value: Option<CassFutureResult>,
     err_string: Option<String>,
     callback: Option<BoundCallback>,
     join_handle: Option<JoinHandle<()>>,
@@ -60,6 +58,7 @@ struct CassFutureState {
 
 pub struct CassFuture {
     state: Mutex<CassFutureState>,
+    result: OnceLock<CassFutureResult>,
     wait_for_value: Condvar,
 }
 
@@ -89,6 +88,7 @@ impl CassFuture {
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
             state: Mutex::new(Default::default()),
+            result: OnceLock::new(),
             wait_for_value: Condvar::new(),
         });
         let cass_fut_clone = Arc::clone(&cass_fut);
@@ -96,7 +96,10 @@ impl CassFuture {
             let r = fut.await;
             let maybe_cb = {
                 let mut guard = cass_fut_clone.state.lock().unwrap();
-                guard.value = Some(r);
+                cass_fut_clone
+                    .result
+                    .set(r)
+                    .expect("Tried to resolve future result twice!");
                 // Take the callback and call it after releasing the lock
                 guard.callback.take()
             };
@@ -117,16 +120,17 @@ impl CassFuture {
 
     pub fn new_ready(r: CassFutureResult) -> Arc<Self> {
         Arc::new(CassFuture {
-            state: Mutex::new(CassFutureState {
-                value: Some(r),
-                ..Default::default()
-            }),
+            state: Mutex::new(CassFutureState::default()),
+            result: OnceLock::from(r),
             wait_for_value: Condvar::new(),
         })
     }
 
-    pub fn with_waited_result<T>(&self, f: impl FnOnce(&mut CassFutureResult) -> T) -> T {
-        self.with_waited_state(|s| f(s.value.as_mut().unwrap()))
+    pub fn with_waited_result<'s, T>(&'s self, f: impl FnOnce(&'s CassFutureResult) -> T) -> T
+    where
+        T: 's,
+    {
+        self.with_waited_state(|_| f(self.result.get().unwrap()))
     }
 
     /// Awaits the future until completion.
@@ -155,7 +159,7 @@ impl CassFuture {
                 guard = self
                     .wait_for_value
                     .wait_while(guard, |state| {
-                        state.value.is_none() && state.join_handle.is_none()
+                        self.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
@@ -173,10 +177,10 @@ impl CassFuture {
 
     fn with_waited_result_timed<T>(
         &self,
-        f: impl FnOnce(&mut CassFutureResult) -> T,
+        f: impl FnOnce(&CassFutureResult) -> T,
         timeout_duration: Duration,
     ) -> Result<T, FutureError> {
-        self.with_waited_state_timed(|s| f(s.value.as_mut().unwrap()), timeout_duration)
+        self.with_waited_state_timed(|_| f(self.result.get().unwrap()), timeout_duration)
     }
 
     /// Tries to await the future with a given timeout.
@@ -244,7 +248,7 @@ impl CassFuture {
                 let (guard_result, timeout_result) = self
                     .wait_for_value
                     .wait_timeout_while(guard, remaining_timeout, |state| {
-                        state.value.is_none() && state.join_handle.is_none()
+                        self.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
@@ -277,7 +281,7 @@ impl CassFuture {
             return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
         }
         let bound_cb = BoundCallback { cb, data };
-        if lock.value.is_some() {
+        if self.result.get().is_some() {
             // The value is already available, we need to call the callback ourselves
             mem::drop(lock);
             bound_cb.invoke(self_ptr);
@@ -347,8 +351,7 @@ pub unsafe extern "C" fn cass_future_ready(
         return cass_false;
     };
 
-    let state_guard = future.state.lock().unwrap();
-    match state_guard.value {
+    match future.result.get() {
         None => cass_false,
         Some(_) => cass_true,
     }
@@ -363,7 +366,7 @@ pub unsafe extern "C" fn cass_future_error_code(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    future.with_waited_result(|r: &mut CassFutureResult| match r {
+    future.with_waited_result(|r: &CassFutureResult| match r {
         Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
         Err((err, _)) => *err,
         _ => CassError::CASS_OK,
@@ -382,7 +385,7 @@ pub unsafe extern "C" fn cass_future_error_message(
     };
 
     future.with_waited_state(|state: &mut CassFutureState| {
-        let value = &state.value;
+        let value = future.result.get();
         let msg = state
             .err_string
             .get_or_insert_with(|| match value.as_ref().unwrap() {
@@ -409,7 +412,7 @@ pub unsafe extern "C" fn cass_future_get_result(
     };
 
     future
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassResult>> {
+        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryResult(qr) => Some(Arc::clone(qr)),
                 _ => None,
@@ -428,7 +431,7 @@ pub unsafe extern "C" fn cass_future_get_error_result(
     };
 
     future
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassErrorResult>> {
+        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassErrorResult>> {
             match r.as_ref().ok()? {
                 CassResultValue::QueryError(qr) => Some(Arc::clone(qr)),
                 _ => None,
@@ -447,7 +450,7 @@ pub unsafe extern "C" fn cass_future_get_prepared(
     };
 
     future
-        .with_waited_result(|r: &mut CassFutureResult| -> Option<Arc<CassPrepared>> {
+        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassPrepared>> {
             match r.as_ref().ok()? {
                 CassResultValue::Prepared(p) => Some(Arc::clone(p)),
                 _ => None,
@@ -466,7 +469,7 @@ pub unsafe extern "C" fn cass_future_tracing_id(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    future.with_waited_result(|r: &mut CassFutureResult| match r {
+    future.with_waited_result(|r: &CassFutureResult| match r {
         Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
             Some(id) => {
                 unsafe { *tracing_id = CassUuid::from(id) };
@@ -490,21 +493,7 @@ pub unsafe extern "C" fn cass_future_coordinator(
     future.with_waited_result(|r| match r {
         Ok(CassResultValue::QueryResult(result)) => {
             // unwrap: Coordinator is `None` only for tests.
-            let coordinator_ptr = result.coordinator.as_ref().unwrap() as *const Coordinator;
-
-            // We need to 'extend' the lifetime of returned Coordinator so safe FFI api does not complain.
-            // The lifetime of "result" reference provided to this closure is the lifetime of a mutex guard.
-            // We are guaranteed, that once the future is resolved (i.e. this closure is called), the result will not
-            // be modified in any way. Thus, we can guarantee that returned coordinator lives as long as underlying
-            // CassResult lives (i.e. longer than the lifetime of acquired mutex guard).
-            //
-            // SAFETY: Coordinator's lifetime is tied to the lifetime of underlying CassResult, thus:
-            // 1. Coordinator lives as long as the underlying CassResult lives
-            // 2. Coordinator will not be moved as long as underlying CassResult is not freed
-            // 3. Coordinator is immutable once future is resolved (because CassResult is set once)
-            let coordinator_ref = unsafe { &*coordinator_ptr };
-
-            RefFFI::as_ptr(coordinator_ref)
+            RefFFI::as_ptr(result.coordinator.as_ref().unwrap())
         }
         _ => RefFFI::null(),
     })
