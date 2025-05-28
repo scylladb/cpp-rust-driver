@@ -239,10 +239,11 @@ pub unsafe extern "C" fn cass_session_execute_batch(
 
         let query_res = session.batch(&state.batch, &state.bound_values).await;
         match query_res {
-            Ok(_result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
+            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
                 tracing_id: None,
                 paging_state_response: PagingStateResponse::NoMorePages,
                 kind: CassResultKind::NonRows,
+                coordinator: Some(result.request_coordinator().clone()),
             }))),
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
         }
@@ -395,7 +396,7 @@ pub unsafe extern "C" fn cass_session_execute(
                     maybe_result_metadata,
                 ) {
                     Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
-                    Err(e) => Ok(CassResultValue::QueryError(Arc::new(e))),
+                    Err(e) => Ok(CassResultValue::QueryError(e)),
                 }
             }
             Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),

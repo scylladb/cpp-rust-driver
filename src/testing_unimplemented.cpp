@@ -162,9 +162,6 @@ CASS_EXPORT const CassDataType*
 cass_function_meta_return_type(const CassFunctionMeta* function_meta) {
   throw std::runtime_error("UNIMPLEMENTED cass_function_meta_return_type\n");
 }
-CASS_EXPORT const CassNode* cass_future_coordinator(CassFuture* future) {
-  throw std::runtime_error("UNIMPLEMENTED cass_future_coordinator\n");
-}
 CASS_EXPORT const CassValue* cass_index_meta_field_by_name(const CassIndexMeta* index_meta,
                                                            const char* name) {
   throw std::runtime_error("UNIMPLEMENTED cass_index_meta_field_by_name\n");
@@ -220,19 +217,8 @@ CASS_EXPORT CassError cass_statement_set_custom_payload(CassStatement* statement
                                                         const CassCustomPayload* payload) {
   throw std::runtime_error("UNIMPLEMENTED cass_statement_set_custom_payload\n");
 }
-CASS_EXPORT CassError cass_statement_set_host(CassStatement* statement, const char* host,
-                                              int port) {
-  throw std::runtime_error("UNIMPLEMENTED cass_statement_set_host\n");
-}
-CASS_EXPORT CassError cass_statement_set_host_inet(CassStatement* statement, const CassInet* host,
-                                                   int port) {
-  throw std::runtime_error("UNIMPLEMENTED cass_statement_set_host_inet\n");
-}
 CASS_EXPORT CassError cass_statement_set_keyspace(CassStatement* statement, const char* keyspace) {
   throw std::runtime_error("UNIMPLEMENTED cass_statement_set_keyspace\n");
-}
-CASS_EXPORT CassError cass_statement_set_node(CassStatement* statement, const CassNode* node) {
-  throw std::runtime_error("UNIMPLEMENTED cass_statement_set_node\n");
 }
 CASS_EXPORT CassClusteringOrder
 cass_table_meta_clustering_key_order(const CassTableMeta* table_meta, size_t index) {

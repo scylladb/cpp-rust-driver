@@ -1112,12 +1112,11 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scylla"
-version = "1.1.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.1.0#ef5b0ada61989cedf9bcf5d715c8b36214f8b36f"
+version = "1.2.0"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.2.0#bc6b24da1b17aa4d33df6a0f0283f08937ff1a19"
 dependencies = [
  "arc-swap",
  "async-trait",
- "byteorder",
  "bytes",
  "chrono",
  "dashmap",
@@ -1125,14 +1124,11 @@ dependencies = [
  "hashbrown 0.14.5",
  "histogram",
  "itertools",
- "lazy_static",
- "lz4_flex",
  "openssl",
  "rand 0.9.0",
  "rand_pcg",
  "scylla-cql",
  "smallvec",
- "snap",
  "socket2",
  "thiserror 2.0.12",
  "tokio",
@@ -1171,10 +1167,9 @@ dependencies = [
 
 [[package]]
 name = "scylla-cql"
-version = "1.1.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.1.0#ef5b0ada61989cedf9bcf5d715c8b36214f8b36f"
+version = "1.2.0"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.2.0#bc6b24da1b17aa4d33df6a0f0283f08937ff1a19"
 dependencies = [
- "async-trait",
  "byteorder",
  "bytes",
  "chrono",
@@ -1191,8 +1186,8 @@ dependencies = [
 
 [[package]]
 name = "scylla-macros"
-version = "1.1.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.1.0#ef5b0ada61989cedf9bcf5d715c8b36214f8b36f"
+version = "1.2.0"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.2.0#bc6b24da1b17aa4d33df6a0f0283f08937ff1a19"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1202,8 +1197,8 @@ dependencies = [
 
 [[package]]
 name = "scylla-proxy"
-version = "0.0.3"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.1.0#ef5b0ada61989cedf9bcf5d715c8b36214f8b36f"
+version = "0.0.4"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v1.2.0#bc6b24da1b17aa4d33df6a0f0283f08937ff1a19"
 dependencies = [
  "bigdecimal",
  "byteorder",

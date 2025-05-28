@@ -17,8 +17,8 @@ use scylla::deserialize::row::{
 use scylla::deserialize::value::DeserializeValue;
 use scylla::errors::{DeserializationError, IntoRowsResultError, TypeCheckError};
 use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows};
-use scylla::response::PagingStateResponse;
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
+use scylla::response::{Coordinator, PagingStateResponse};
 use scylla::value::{
     Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid,
 };
@@ -29,27 +29,41 @@ use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
+#[derive(Debug)]
 pub enum CassResultKind {
     NonRows,
     Rows(CassRowsResult),
 }
 
+#[derive(Debug)]
 pub struct CassRowsResult {
     // Arc: shared with first_row (yoke).
     pub(crate) shared_data: Arc<CassRowsResultSharedData>,
     pub(crate) first_row: Option<RowWithSelfBorrowedResultData>,
 }
 
+#[derive(Debug)]
 pub(crate) struct CassRowsResultSharedData {
     pub(crate) raw_rows: DeserializedMetadataAndRawRows,
     // Arc: shared with CassPrepared
     pub(crate) metadata: Arc<CassResultMetadata>,
 }
 
+pub type CassNode = Coordinator;
+
+// Borrowed from CassResult in cass_future_coordinator.
+impl FFI for CassNode {
+    type Origin = FromRef;
+}
+
+#[derive(Debug)]
 pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
     pub kind: CassResultKind,
+    // None only for tests - currently no way to mock coordinator in rust-driver.
+    // Should be able to do so under "cpp_rust_unstable".
+    pub(crate) coordinator: Option<Coordinator>,
 }
 
 impl CassResult {
@@ -61,7 +75,7 @@ impl CassResult {
         result: QueryResult,
         paging_state_response: PagingStateResponse,
         maybe_result_metadata: Option<Arc<CassResultMetadata>>,
-    ) -> Result<Self, CassErrorResult> {
+    ) -> Result<Self, Arc<CassErrorResult>> {
         match result.into_rows_result() {
             Ok(rows_result) => {
                 // maybe_result_metadata is:
@@ -73,7 +87,7 @@ impl CassResult {
                     ))
                 });
 
-                let (raw_rows, tracing_id, _) = rows_result.into_inner();
+                let (raw_rows, tracing_id, _, coordinator) = rows_result.into_inner();
                 let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
                 let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
                     Arc::clone(&shared_data),
@@ -86,6 +100,7 @@ impl CassResult {
                         shared_data,
                         first_row,
                     }),
+                    coordinator,
                 };
 
                 Ok(cass_result)
@@ -95,12 +110,13 @@ impl CassResult {
                     tracing_id: result.tracing_id(),
                     paging_state_response,
                     kind: CassResultKind::NonRows,
+                    coordinator: Some(result.request_coordinator().clone()),
                 };
 
                 Ok(cass_result)
             }
             Err(IntoRowsResultError::ResultMetadataLazyDeserializationError(err)) => {
-                Err(err.into())
+                Err(Arc::new(err.into()))
             }
         }
     }
@@ -147,6 +163,7 @@ impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame,
 
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
+#[derive(Debug)]
 pub struct CassRow<'result> {
     pub columns: Vec<CassValue<'result>>,
     pub result_metadata: &'result CassResultMetadata,
@@ -218,7 +235,7 @@ mod row_with_self_borrowed_result_data {
 
     /// A simple wrapper over CassRow.
     /// Needed, so we can implement Yokeable for it, instead of implementing it for CassRow.
-    #[derive(Yokeable)]
+    #[derive(Debug, Yokeable)]
     struct CassRowWrapper<'result>(CassRow<'result>);
 
     /// A wrapper over struct which self-borrows the metadata allocated using Arc.
@@ -231,6 +248,7 @@ mod row_with_self_borrowed_result_data {
     ///
     /// This struct is a shared owner of the row bytes and metadata, and self-borrows this data
     /// to the `CassRow` it contains.
+    #[derive(Debug)]
     pub struct RowWithSelfBorrowedResultData(
         Yoke<CassRowWrapper<'static>, Arc<CassRowsResultSharedData>>,
     );
@@ -239,7 +257,7 @@ mod row_with_self_borrowed_result_data {
         /// Constructs [`RowWithSelfBorrowedResultData`] based on the first row from `raw_rows_and_metadata`.
         pub(super) fn first_from_raw_rows_and_metadata(
             raw_rows_and_metadata: Arc<CassRowsResultSharedData>,
-        ) -> Result<Option<Self>, CassErrorResult> {
+        ) -> Result<Option<Self>, Arc<CassErrorResult>> {
             enum AttachError {
                 CassErrorResult(CassErrorResult),
                 NoRows,
@@ -276,7 +294,7 @@ mod row_with_self_borrowed_result_data {
             match yoke_result {
                 Ok(yoke) => Ok(Some(Self(yoke))),
                 Err(AttachError::NoRows) => Ok(None),
-                Err(AttachError::CassErrorResult(err)) => Err(err),
+                Err(AttachError::CassErrorResult(err)) => Err(Arc::new(err)),
             }
         }
 
@@ -295,6 +313,7 @@ pub(crate) mod cass_raw_value {
     use scylla::errors::{DeserializationError, TypeCheckError};
     use thiserror::Error;
 
+    #[derive(Debug)]
     pub(crate) struct CassRawValue<'frame, 'metadata> {
         typ: &'metadata ColumnType<'metadata>,
         slice: Option<FrameSlice<'frame>>,
@@ -416,6 +435,7 @@ pub(crate) mod cass_raw_value {
     }
 }
 
+#[derive(Debug)]
 pub struct CassValue<'result> {
     pub(crate) value: CassRawValue<'result, 'result>,
     pub(crate) value_type: &'result Arc<CassDataType>,
@@ -1207,6 +1227,7 @@ mod tests {
                 shared_data,
                 first_row,
             }),
+            coordinator: None,
         }
     }
 
@@ -1310,6 +1331,7 @@ mod tests {
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
             kind: CassResultKind::NonRows,
+            coordinator: None,
         }
     }
 

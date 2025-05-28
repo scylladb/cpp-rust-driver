@@ -12,6 +12,8 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :SerialConsistencyTests.*\
 :HeartbeatTests.*\
 :PreparedTests.*\
+:StatementNoClusterTests.*\
+:StatementTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ControlConnectionTests.*\
@@ -27,6 +29,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :ServerSideFailureTests.*\
+:ServerSideFailureThreeNodeTests.*\
 :TimestampTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
@@ -69,6 +72,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :SerialConsistencyTests.*\
 :HeartbeatTests.*\
 :PreparedTests.*\
+:StatementNoClusterTests.*\
+:StatementTests.*\
 :NamedParametersTests.*\
 :CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
 :ControlConnectionTests.*\
@@ -83,6 +88,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :PreparedMetadataTests.*\
 :UseKeyspaceCaseSensitiveTests.*\
 :ServerSideFailureTests.*\
+:ServerSideFailureThreeNodeTests.*\
 :TimestampTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\

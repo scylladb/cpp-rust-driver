@@ -7,9 +7,12 @@ use scylla::errors::{RequestAttemptError, RequestError};
 use scylla::observability::history::{AttemptId, HistoryListener, RequestId, SpeculativeId};
 use scylla::policies::retry::RetryDecision;
 
-use crate::argconv::{BoxFFI, CMut, CassBorrowedExclusivePtr};
+use crate::argconv::{
+    ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
+};
 use crate::batch::CassBatch;
 use crate::cluster::CassCluster;
+use crate::future::{CassFuture, CassResultValue};
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
 
@@ -60,8 +63,47 @@ pub unsafe extern "C" fn testing_cluster_get_contact_points(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn testing_free_contact_points(contact_points: *mut c_char) {
-    let _ = unsafe { CString::from_raw(contact_points) };
+pub unsafe extern "C" fn testing_future_get_host(
+    future_raw: CassBorrowedSharedPtr<CassFuture, CConst>,
+    host: *mut *mut c_char,
+    host_length: *mut size_t,
+) {
+    let Some(future) = ArcFFI::as_ref(future_raw) else {
+        tracing::error!("Provided null future pointer to testing_future_get_host!");
+        unsafe {
+            *host = std::ptr::null_mut();
+            *host_length = 0;
+        };
+        return;
+    };
+
+    future.with_waited_result(|r| match r {
+        Ok(CassResultValue::QueryResult(result)) => {
+            // unwrap: Coordinator is none only for unit tests.
+            let coordinator = result.coordinator.as_ref().unwrap();
+
+            let ip_addr_str = coordinator.node().address.ip().to_string();
+            let length = ip_addr_str.len();
+
+            let ip_addr_cstr = CString::new(ip_addr_str).expect(
+                "String obtained from IpAddr::to_string() should not contain any nul bytes!",
+            );
+
+            unsafe {
+                *host = ip_addr_cstr.into_raw();
+                *host_length = length as size_t
+            };
+        }
+        _ => unsafe {
+            *host = std::ptr::null_mut();
+            *host_length = 0;
+        },
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_free_cstring(s: *mut c_char) {
+    let _ = unsafe { CString::from_raw(s) };
 }
 
 #[derive(Debug)]
