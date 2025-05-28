@@ -22,6 +22,15 @@ CASS_EXPORT void testing_cluster_get_contact_points(CassCluster* cluster, char**
 
 CASS_EXPORT void testing_free_contact_points(char* contact_points);
 
+// Returns an ip address of request coordinator.
+//
+// This method fails if the future resolved to some error.
+//
+// On success, it allocates a host string which needs to be then freed wih `testing_free_host`.
+CASS_EXPORT void testing_future_get_host(const CassFuture* future, char** host, size_t* host_length);
+
+CASS_EXPORT void testing_free_host(char* host);
+
 // Sets a sleeping history listener on the statement.
 // This can be used to enforce a sleep time during statement execution, which increases the latency.
 CASS_EXPORT void testing_statement_set_sleeping_history_listener(CassStatement *statement,
