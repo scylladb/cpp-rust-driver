@@ -4,6 +4,24 @@ Wrapper around ScyllaDB's rust-driver compatible with Datastax cpp-driver.
 
 #### Note: It is work in progress, bug reports and pull requests are welcome!
 
+# CMake options
+
+In this section we will go over most important CMake options and what each of them controls.
+- `CASS_BUILD_SHARED` - Build shared driver library (.so). `ON` by default.
+- `CASS_BUILD_STATIC` - Build static driver library (.a). `ON` by default.
+- `CASS_BUILD_INTEGRATION_TESTS` - Build integration tests (see `Testing` section below) `OFF` by default.
+- `CASS_BUILD_EXAMPLES` - Build examples (see `Examples` section below). `OFF` by default.
+- `CASS_USE_STATIC_LIBS` - Link against static libraries when building tests/examples. `OFF` by default.
+- `CMAKE_BUILD_TYPE` - Controls the cargo profile library is built with. Possible values are: `Debug`, `RelWithDebInfo` and `Release`. Default value is `Debug`. For more information, see the profiles definitions in `scylla-rust-wrapper/Cargo.toml`.
+
+For example, to build a shared driver library (no static library) in release mode and integration tests you can do:
+```shell
+mkdir build
+cd build
+cmake -DCASS_BUILD_STATIC=OFF -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release ..
+make
+```
+
 # Examples
 ___
 
