@@ -17,8 +17,8 @@ use scylla::deserialize::row::{
 use scylla::deserialize::value::DeserializeValue;
 use scylla::errors::{DeserializationError, IntoRowsResultError, TypeCheckError};
 use scylla::frame::response::result::{ColumnSpec, DeserializedMetadataAndRawRows};
-use scylla::response::PagingStateResponse;
 use scylla::response::query_result::{ColumnSpecs, QueryResult};
+use scylla::response::{Coordinator, PagingStateResponse};
 use scylla::value::{
     Counter, CqlDate, CqlDecimalBorrowed, CqlDuration, CqlTime, CqlTimestamp, CqlTimeuuid,
 };
@@ -50,6 +50,9 @@ pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
     pub kind: CassResultKind,
+    // None only for tests - currently no way to mock coordinator in rust-driver.
+    // Should be able to do so under "cpp_rust_unstable".
+    pub(crate) coordinator: Option<Coordinator>,
 }
 
 impl CassResult {
@@ -73,7 +76,7 @@ impl CassResult {
                     ))
                 });
 
-                let (raw_rows, tracing_id, _, _coordinator) = rows_result.into_inner();
+                let (raw_rows, tracing_id, _, coordinator) = rows_result.into_inner();
                 let shared_data = Arc::new(CassRowsResultSharedData { raw_rows, metadata });
                 let first_row = RowWithSelfBorrowedResultData::first_from_raw_rows_and_metadata(
                     Arc::clone(&shared_data),
@@ -86,6 +89,7 @@ impl CassResult {
                         shared_data,
                         first_row,
                     }),
+                    coordinator,
                 };
 
                 Ok(cass_result)
@@ -95,6 +99,7 @@ impl CassResult {
                     tracing_id: result.tracing_id(),
                     paging_state_response,
                     kind: CassResultKind::NonRows,
+                    coordinator: Some(result.request_coordinator().clone()),
                 };
 
                 Ok(cass_result)
@@ -1207,6 +1212,7 @@ mod tests {
                 shared_data,
                 first_row,
             }),
+            coordinator: None,
         }
     }
 
@@ -1310,6 +1316,7 @@ mod tests {
             tracing_id: None,
             paging_state_response: PagingStateResponse::NoMorePages,
             kind: CassResultKind::NonRows,
+            coordinator: None,
         }
     }
 
