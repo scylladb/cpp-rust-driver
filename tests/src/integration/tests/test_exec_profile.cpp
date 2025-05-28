@@ -196,15 +196,15 @@ public:
   void SetUp() {
     // Create the execution profiles for the test cases
     profiles_["dc_aware"] = ExecutionProfile::build()
-                                .with_load_balance_dc_aware("dc1", 1, false)
+                                .with_load_balance_dc_aware("dc1", 0, false)
                                 .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
     profiles_["blacklist_dc"] = ExecutionProfile::build()
                                     .with_blacklist_dc_filtering("dc1")
-                                    .with_load_balance_dc_aware("dc1", 1, true)
+                                    .with_load_balance_dc_aware("dc1", 0, false)
                                     .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
     profiles_["whitelist_dc"] = ExecutionProfile::build()
                                     .with_whitelist_dc_filtering("dc2")
-                                    .with_load_balance_dc_aware("dc1", 1, true)
+                                    .with_load_balance_dc_aware("dc1", 0, false)
                                     .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
 
     // Call the parent setup function
