@@ -45,7 +45,6 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :TimestampTests.Integration_Cassandra_MonotonicTimestampGenerator\
 :ExecutionProfileTest.Integration_Cassandra_RoundRobin\
 :ExecutionProfileTest.Integration_Cassandra_TokenAwareRouting\
-:ExecutionProfileTest.Integration_Cassandra_RetryPolicy\
 :ExecutionProfileTest.Integration_Cassandra_SpeculativeExecutionPolicy\
 :DCExecutionProfileTest.Integration_Cassandra_DCAware\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
@@ -107,7 +106,6 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :TimestampTests.Integration_Cassandra_MonotonicTimestampGenerator\
 :ExecutionProfileTest.Integration_Cassandra_RoundRobin\
 :ExecutionProfileTest.Integration_Cassandra_TokenAwareRouting\
-:ExecutionProfileTest.Integration_Cassandra_RetryPolicy\
 :ExecutionProfileTest.Integration_Cassandra_SpeculativeExecutionPolicy\
 :DCExecutionProfileTest.Integration_Cassandra_DCAware\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\

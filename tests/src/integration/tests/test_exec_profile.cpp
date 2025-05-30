@@ -27,8 +27,7 @@ public:
       : insert_(NULL)
       //, child_retry_policy_(IgnoreRetryPolicy::policy()) // Used for counting retry
       , child_retry_policy_(DefaultRetryPolicy())
-      // We do not implement logging retry policy in cpp-rust-driver
-      // , logging_retry_policy_(child_retry_policy_)
+      , logging_retry_policy_(child_retry_policy_)
       , skip_base_execution_profile_(false) {
     // LWTs do not work with tablets.
     disable_tablets_ = true;
@@ -62,8 +61,7 @@ public:
                                    .with_whitelist_filtering(Options::host_prefix() + "1")
                                    .with_load_balance_round_robin();
       profiles_["retry_policy"] = ExecutionProfile::build()
-      // We do not implement logging retry policy in cpp-rust-driver
-                                      .with_retry_policy(child_retry_policy_)
+                                      .with_retry_policy(logging_retry_policy_)
                                       .with_consistency(CASS_CONSISTENCY_THREE);
       profiles_["speculative_execution"] =
           ExecutionProfile::build().with_constant_speculative_execution_policy(100, 20);
@@ -104,8 +102,8 @@ protected:
   /**
    * Logging retry policy for 'retry_policy' execution profile
    */
-  // We do not implement logging retry policy in cpp-rust-driver
-  // LoggingRetryPolicy logging_retry_policy_;
+  LoggingRetryPolicy logging_retry_policy_;
+
   /**
    * Flag to determine if base execution profiles should be built or not
    */
@@ -634,7 +632,10 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
   CHECK_FAILURE;
 
   // Create a logger criteria for retry policy validation
-  logger_.add_critera("Ignoring unavailable error");
+  // Provided execution profile uses cl THREE, while we have only two nodes.
+  logger_.add_critera("Retrying on the next target; "
+                      "Error: Database returned an error: "
+                      "Not enough nodes are alive to satisfy required consistency level");
 
   // Execute a simple query without assigned profile
   Statement statement(default_select_all());
@@ -647,8 +648,9 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
 
   // Execute a simple query with assigned profile
   statement.set_execution_profile("retry_policy");
-  result = session_.execute(statement);
-  ASSERT_EQ(CASS_OK, result.error_code());
+  // Don't expect CASS_OK.
+  result = session_.execute(statement, false);
+  ASSERT_EQ(CASS_ERROR_SERVER_UNAVAILABLE, result.error_code());
   ASSERT_EQ(1u, logger_.count());
 }
 
