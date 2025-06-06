@@ -93,7 +93,7 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
     };
 
     match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(udt_data_type) => {
+        CassDataTypeInner::Udt(udt_data_type) => {
             let field_values = vec![None; udt_data_type.field_types.len()];
             BoxFFI::into_ptr(Box::new(CassUserType {
                 data_type,

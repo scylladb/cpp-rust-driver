@@ -489,7 +489,7 @@ impl<'result> CassUdtIterator<'result> {
 
         // SAFETY: `CassDataType` is obtained from `CassResultMetadata`, which is immutable.
         let metadata = match unsafe { value.value_type.get_unchecked() } {
-            CassDataTypeInner::UDT(udt) => udt.field_types.as_slice(),
+            CassDataTypeInner::Udt(udt) => udt.field_types.as_slice(),
             _ => panic!("Expected UDT type. Typecheck should have prevented such scenario!"),
         };
 
