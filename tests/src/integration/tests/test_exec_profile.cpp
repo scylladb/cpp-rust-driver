@@ -25,8 +25,7 @@ class ExecutionProfileTest : public Integration {
 public:
   ExecutionProfileTest()
       : insert_(NULL)
-      //, child_retry_policy_(IgnoreRetryPolicy::policy()) // Used for counting retry
-      , child_retry_policy_(DefaultRetryPolicy())
+      , child_retry_policy_(IgnoreRetryPolicy()) // Used for counting retry
       , logging_retry_policy_(child_retry_policy_)
       , skip_base_execution_profile_(false) {
     // LWTs do not work with tablets.
@@ -632,7 +631,7 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, RetryPolicy) {
   CHECK_FAILURE;
 
   // Create a logger criteria for retry policy validation
-  logger_.add_critera("Ignoring unavailable error");
+  logger_.add_critera("Ignoring write error");
 
   // Execute a simple query without assigned profile
   Statement statement(default_select_all());
