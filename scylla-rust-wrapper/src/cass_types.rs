@@ -16,7 +16,7 @@ pub(crate) use crate::cass_data_types::CassValueType;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-pub struct UDTDataType {
+pub struct UdtDataType {
     // Vec to preserve the order of types
     pub field_types: Vec<(String, Arc<CassDataType>)>,
 
@@ -25,9 +25,9 @@ pub struct UDTDataType {
     pub frozen: bool,
 }
 
-impl UDTDataType {
-    pub fn new() -> UDTDataType {
-        UDTDataType {
+impl UdtDataType {
+    pub fn new() -> UdtDataType {
+        UdtDataType {
             field_types: Vec::new(),
             keyspace: "".to_string(),
             name: "".to_string(),
@@ -35,8 +35,8 @@ impl UDTDataType {
         }
     }
 
-    pub fn with_capacity(capacity: usize) -> UDTDataType {
-        UDTDataType {
+    pub fn with_capacity(capacity: usize) -> UdtDataType {
+        UdtDataType {
             field_types: Vec::with_capacity(capacity),
             keyspace: "".to_string(),
             name: "".to_string(),
@@ -59,7 +59,7 @@ impl UDTDataType {
         self.field_types.get(index).map(|(_, b)| b)
     }
 
-    fn typecheck_equals(&self, other: &UDTDataType) -> bool {
+    fn typecheck_equals(&self, other: &UdtDataType) -> bool {
         // See: https://github.com/scylladb/cpp-driver/blob/master/src/data_type.hpp#L354-L386
 
         if !any_string_empty_or_both_equal(&self.keyspace, &other.keyspace) {
@@ -101,7 +101,7 @@ fn any_string_empty_or_both_equal(s1: &str, s2: &str) -> bool {
     s1.is_empty() || s2.is_empty() || s1 == s2
 }
 
-impl Default for UDTDataType {
+impl Default for UdtDataType {
     fn default() -> Self {
         Self::new()
     }
@@ -125,7 +125,7 @@ pub struct CassColumnSpec {
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum CassDataTypeInner {
     Value(CassValueType),
-    UDT(UDTDataType),
+    Udt(UdtDataType),
     List {
         // None stands for untyped list.
         typ: Option<Arc<CassDataType>>,
@@ -156,8 +156,8 @@ impl CassDataTypeInner {
     pub fn typecheck_equals(&self, other: &CassDataTypeInner) -> bool {
         match self {
             CassDataTypeInner::Value(t) => *t == other.get_value_type(),
-            CassDataTypeInner::UDT(udt) => match other {
-                CassDataTypeInner::UDT(other_udt) => udt.typecheck_equals(other_udt),
+            CassDataTypeInner::Udt(udt) => match other {
+                CassDataTypeInner::Udt(other_udt) => udt.typecheck_equals(other_udt),
                 _ => false,
             },
             CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => match other
@@ -298,7 +298,7 @@ fn native_type_to_cass_value_type(native_type: &NativeType) -> CassValueType {
 impl CassDataTypeInner {
     fn get_sub_data_type(&self, index: usize) -> Option<&Arc<CassDataType>> {
         match self {
-            CassDataTypeInner::UDT(udt_data_type) => {
+            CassDataTypeInner::Udt(udt_data_type) => {
                 udt_data_type.field_types.get(index).map(|(_, b)| b)
             }
             CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
@@ -366,9 +366,9 @@ impl CassDataTypeInner {
         }
     }
 
-    pub fn get_udt_type(&self) -> &UDTDataType {
+    pub fn get_udt_type(&self) -> &UdtDataType {
         match self {
-            CassDataTypeInner::UDT(udt) => udt,
+            CassDataTypeInner::Udt(udt) => udt,
             _ => panic!("Can get UDT out of non-UDT data type"),
         }
     }
@@ -376,7 +376,7 @@ impl CassDataTypeInner {
     pub fn get_value_type(&self) -> CassValueType {
         match &self {
             CassDataTypeInner::Value(value_data_type) => *value_data_type,
-            CassDataTypeInner::UDT { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
+            CassDataTypeInner::Udt { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
             CassDataTypeInner::List { .. } => CassValueType::CASS_VALUE_TYPE_LIST,
             CassDataTypeInner::Set { .. } => CassValueType::CASS_VALUE_TYPE_SET,
             CassDataTypeInner::Map { .. } => CassValueType::CASS_VALUE_TYPE_MAP,
@@ -415,7 +415,7 @@ pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
             typ: Some(Arc::new(get_column_type(boxed_type.as_ref()))),
             frozen: *frozen,
         },
-        UserDefinedType { definition, frozen } => CassDataTypeInner::UDT(UDTDataType {
+        UserDefinedType { definition, frozen } => CassDataTypeInner::Udt(UdtDataType {
             field_types: definition
                 .field_types
                 .iter()
@@ -461,7 +461,7 @@ pub unsafe extern "C" fn cass_data_type_new(
             typ: MapDataType::Untyped,
             frozen: false,
         },
-        CassValueType::CASS_VALUE_TYPE_UDT => CassDataTypeInner::UDT(UDTDataType::new()),
+        CassValueType::CASS_VALUE_TYPE_UDT => CassDataTypeInner::Udt(UdtDataType::new()),
         CassValueType::CASS_VALUE_TYPE_CUSTOM => CassDataTypeInner::Custom("".to_string()),
         CassValueType::CASS_VALUE_TYPE_UNKNOWN => return ArcFFI::null(),
         t if t < CassValueType::CASS_VALUE_TYPE_LAST_ENTRY => CassDataTypeInner::Value(t),
@@ -497,8 +497,8 @@ pub unsafe extern "C" fn cass_data_type_new_tuple(
 pub unsafe extern "C" fn cass_data_type_new_udt(
     field_count: size_t,
 ) -> CassOwnedSharedPtr<CassDataType, CMut> {
-    ArcFFI::into_ptr(CassDataType::new_arced(CassDataTypeInner::UDT(
-        UDTDataType::with_capacity(field_count as usize),
+    ArcFFI::into_ptr(CassDataType::new_arced(CassDataTypeInner::Udt(
+        UdtDataType::with_capacity(field_count as usize),
     )))
 }
 
@@ -529,7 +529,7 @@ pub unsafe extern "C" fn cass_data_type_is_frozen(
     };
 
     let is_frozen = match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(udt) => udt.frozen,
+        CassDataTypeInner::Udt(udt) => udt.frozen,
         CassDataTypeInner::List { frozen, .. } => *frozen,
         CassDataTypeInner::Set { frozen, .. } => *frozen,
         CassDataTypeInner::Map { frozen, .. } => *frozen,
@@ -551,7 +551,7 @@ pub unsafe extern "C" fn cass_data_type_type_name(
     };
 
     match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
+        CassDataTypeInner::Udt(UdtDataType { name, .. }) => {
             unsafe { write_str_to_c(name, type_name, type_name_length) };
             CassError::CASS_OK
         }
@@ -583,7 +583,7 @@ pub unsafe extern "C" fn cass_data_type_set_type_name_n(
         .to_string();
 
     match unsafe { data_type.get_mut_unchecked() } {
-        CassDataTypeInner::UDT(udt_data_type) => {
+        CassDataTypeInner::Udt(udt_data_type) => {
             udt_data_type.name = type_name_string;
             CassError::CASS_OK
         }
@@ -603,7 +603,7 @@ pub unsafe extern "C" fn cass_data_type_keyspace(
     };
 
     match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(UDTDataType { name, .. }) => {
+        CassDataTypeInner::Udt(UdtDataType { name, .. }) => {
             unsafe { write_str_to_c(name, keyspace, keyspace_length) };
             CassError::CASS_OK
         }
@@ -635,7 +635,7 @@ pub unsafe extern "C" fn cass_data_type_set_keyspace_n(
         .to_string();
 
     match unsafe { data_type.get_mut_unchecked() } {
-        CassDataTypeInner::UDT(udt_data_type) => {
+        CassDataTypeInner::Udt(udt_data_type) => {
             udt_data_type.keyspace = keyspace_string;
             CassError::CASS_OK
         }
@@ -705,7 +705,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_count(
 
     match unsafe { data_type.get_unchecked() } {
         CassDataTypeInner::Value(..) => 0,
-        CassDataTypeInner::UDT(udt_data_type) => udt_data_type.field_types.len() as size_t,
+        CassDataTypeInner::Udt(udt_data_type) => udt_data_type.field_types.len() as size_t,
         CassDataTypeInner::List { typ, .. } | CassDataTypeInner::Set { typ, .. } => {
             typ.is_some() as size_t
         }
@@ -769,7 +769,7 @@ pub unsafe extern "C" fn cass_data_type_sub_data_type_by_name_n(
 
     let name_str = unsafe { ptr_to_cstr_n(name, name_length) }.unwrap();
     match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(udt) => match udt.get_field_by_name(name_str) {
+        CassDataTypeInner::Udt(udt) => match udt.get_field_by_name(name_str) {
             None => ArcFFI::null(),
             Some(t) => ArcFFI::as_ptr(t),
         },
@@ -790,7 +790,7 @@ pub unsafe extern "C" fn cass_data_type_sub_type_name(
     };
 
     match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::UDT(udt) => match udt.field_types.get(index as usize) {
+        CassDataTypeInner::Udt(udt) => match udt.field_types.get(index as usize) {
             None => CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS,
             Some((field_name, _)) => {
                 unsafe { write_str_to_c(field_name, name, name_length) };
@@ -855,7 +855,7 @@ pub unsafe extern "C" fn cass_data_type_add_sub_type_by_name_n(
         .to_string();
 
     match unsafe { data_type.get_mut_unchecked() } {
-        CassDataTypeInner::UDT(udt_data_type) => {
+        CassDataTypeInner::Udt(udt_data_type) => {
             // The Cpp Driver does not check whether field_types size
             // exceeded field_count.
             udt_data_type.field_types.push((name_string, sub_data_type));
