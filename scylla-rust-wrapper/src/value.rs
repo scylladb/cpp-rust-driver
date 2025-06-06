@@ -416,7 +416,7 @@ mod tests {
     use scylla::value::{CqlDate, CqlDecimal, CqlDuration};
 
     use crate::{
-        cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType, UDTDataType},
+        cass_types::{CassDataType, CassDataTypeInner, CassValueType, MapDataType, Udt},
         value::{CassCqlValue, is_type_compatible},
     };
 
@@ -631,7 +631,7 @@ mod tests {
         let user_udt_name = "user".to_owned();
         let empty_str = "".to_owned();
 
-        let data_type_udt_simple = CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+        let data_type_udt_simple = CassDataType::new_arced(CassDataTypeInner::Udt(Udt {
             field_types: simple_fields.clone(),
             keyspace: ks_keyspace_name.clone(),
             name: user_udt_name.clone(),
@@ -770,14 +770,14 @@ mod tests {
         // UDT
         {
             let data_type_udt_simple_empty_keyspace =
-                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+                CassDataType::new_arced(CassDataTypeInner::Udt(Udt {
                     field_types: simple_fields.clone(),
                     keyspace: empty_str.to_owned(),
                     name: user_udt_name.clone(),
                     frozen: false,
                 }));
             let data_type_udt_simple_empty_name =
-                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
+                CassDataType::new_arced(CassDataTypeInner::Udt(Udt {
                     field_types: simple_fields.clone(),
                     keyspace: ks_keyspace_name.clone(),
                     name: empty_str.clone(),
@@ -789,13 +789,12 @@ mod tests {
                 ("foo".to_owned(), data_type_float.clone()),
                 ("bar".to_owned(), data_type_bool.clone()),
             ];
-            let data_type_udt_small =
-                CassDataType::new_arced(CassDataTypeInner::UDT(UDTDataType {
-                    field_types: small_fields.clone(),
-                    keyspace: ks_keyspace_name.clone(),
-                    name: user_udt_name.clone(),
-                    frozen: false,
-                }));
+            let data_type_udt_small = CassDataType::new_arced(CassDataTypeInner::Udt(Udt {
+                field_types: small_fields.clone(),
+                keyspace: ks_keyspace_name.clone(),
+                name: user_udt_name.clone(),
+                frozen: false,
+            }));
 
             let test_cases = &[TestCase {
                 value: CassCqlValue::UserDefinedType {
