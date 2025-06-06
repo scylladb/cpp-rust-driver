@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 pub struct CassBatch {
-    pub state: Arc<CassBatchState>,
-    pub batch_request_timeout_ms: Option<cass_uint64_t>,
+    pub(crate) state: Arc<CassBatchState>,
+    pub(crate) batch_request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
@@ -27,9 +27,9 @@ impl FFI for CassBatch {
 }
 
 #[derive(Clone)]
-pub struct CassBatchState {
-    pub batch: Batch,
-    pub bound_values: Vec<Vec<MaybeUnset<Option<CassCqlValue>>>>,
+pub(crate) struct CassBatchState {
+    pub(crate) batch: Batch,
+    pub(crate) bound_values: Vec<Vec<MaybeUnset<Option<CassCqlValue>>>>,
 }
 
 #[unsafe(no_mangle)]

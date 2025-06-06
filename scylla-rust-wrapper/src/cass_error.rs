@@ -5,7 +5,7 @@ pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
 use crate::execution_error::CassErrorResult;
 use crate::statement::UnknownNamedParameterError;
 
-pub trait ToCassError {
+pub(crate) trait ToCassError {
     fn to_cass_error(&self) -> CassError;
 }
 
@@ -223,7 +223,7 @@ impl ToCassError for SerializationError {
     }
 }
 
-pub trait CassErrorMessage {
+pub(crate) trait CassErrorMessage {
     fn msg(&self) -> String;
 }
 

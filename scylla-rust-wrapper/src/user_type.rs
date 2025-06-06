@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct CassUserType {
-    pub data_type: Arc<CassDataType>,
+    pub(crate) data_type: Arc<CassDataType>,
 
     // Vec to preserve the order of fields
-    pub field_values: Vec<Option<CassCqlValue>>,
+    pub(crate) field_values: Vec<Option<CassCqlValue>>,
 }
 
 impl FFI for CassUserType {

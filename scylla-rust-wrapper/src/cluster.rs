@@ -145,7 +145,7 @@ pub struct CassCustomPayload;
 
 // We want to make sure that the returned future does not depend
 // on the provided &CassCluster, hence the `static here.
-pub fn build_session_builder(
+pub(crate) fn build_session_builder(
     cluster: &CassCluster,
 ) -> impl Future<Output = SessionBuilder> + 'static {
     let known_nodes = cluster

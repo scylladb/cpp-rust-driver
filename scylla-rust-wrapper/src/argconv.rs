@@ -6,24 +6,24 @@ use std::os::raw::c_char;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
 
-pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
+pub(crate) unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
     unsafe { CStr::from_ptr(ptr) }.to_str().ok()
 }
 
-pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
+pub(crate) unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     if ptr.is_null() {
         return None;
     }
     std::str::from_utf8(unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) }).ok()
 }
 
-pub unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
+pub(crate) unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
     let null_char = '\0' as c_char;
     let end_index = arr[..N].iter().position(|c| c == &null_char).unwrap_or(N);
     unsafe { ptr_to_cstr_n(arr.as_ptr(), end_index as size_t) }
 }
 
-pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
+pub(crate) fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
     let mut result = ['\0' as c_char; N];
 
     // Max length must be null-terminated
@@ -40,14 +40,14 @@ pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
     result
 }
 
-pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
+pub(crate) unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
     unsafe {
         *c_str = s.as_ptr() as *const c_char;
         *c_strlen = s.len() as u64;
     }
 }
 
-pub unsafe fn strlen(ptr: *const c_char) -> size_t {
+pub(crate) unsafe fn strlen(ptr: *const c_char) -> size_t {
     if ptr.is_null() {
         return 0;
     }
@@ -55,7 +55,7 @@ pub unsafe fn strlen(ptr: *const c_char) -> size_t {
 }
 
 #[cfg(test)]
-pub fn str_to_c_str_n(s: &str) -> (*const c_char, size_t) {
+pub(crate) fn str_to_c_str_n(s: &str) -> (*const c_char, size_t) {
     let mut c_str = std::ptr::null();
     let mut c_strlen = size_t::default();
 
@@ -76,7 +76,7 @@ macro_rules! make_c_str {
 pub(crate) use make_c_str;
 
 mod sealed {
-    pub trait Sealed {}
+    pub(crate) trait Sealed {}
 }
 
 /// A trait representing ownership (i.e. Rust mutability) of the pointer.
@@ -97,15 +97,15 @@ mod sealed {
 ///
 /// ## Exclusive pointers
 /// Exclusive pointers can be converted to both immutable and mutable Rust referential types.
-pub trait Ownership: sealed::Sealed {}
+pub(crate) trait Ownership: sealed::Sealed {}
 
 /// Represents shared (immutable) pointer.
-pub struct Shared;
+pub(crate) struct Shared;
 impl sealed::Sealed for Shared {}
 impl Ownership for Shared {}
 
 /// Represents exclusive (mutable) pointer.
-pub struct Exclusive;
+pub(crate) struct Exclusive;
 impl sealed::Sealed for Exclusive {}
 impl Ownership for Exclusive {}
 
@@ -135,7 +135,7 @@ impl Ownership for Exclusive {}
 /// `const CassDataType*` pointer (e.g. from `cass_tuple_data_type`) and pass it to the method that expects `CassDataType*`.
 ///
 /// This property comes useful for implementing safe Rust unit tests where we play a role of C API user.
-pub trait CMutability: sealed::Sealed {}
+pub(crate) trait CMutability: sealed::Sealed {}
 
 /// Represents const C pointer.
 pub struct CConst;
@@ -148,7 +148,7 @@ impl sealed::Sealed for CMut {}
 impl CMutability for CMut {}
 
 /// Represents additional properties of the pointer.
-pub trait Properties: sealed::Sealed {
+pub(crate) trait Properties: sealed::Sealed {
     type Onwership: Ownership;
     type CMutability: CMutability;
 }
@@ -202,7 +202,7 @@ impl<O: Ownership, CM: CMutability> Properties for (O, CM) {
 /// we are guaranteed, that for `T: Sized`, our struct has the same layout
 /// and function call ABI as simply [`NonNull<T>`].
 #[repr(transparent)]
-pub struct CassPtr<'a, T: Sized, P: Properties> {
+pub(crate) struct CassPtr<'a, T: Sized, P: Properties> {
     ptr: Option<NonNull<T>>,
     _phantom: PhantomData<&'a P>,
 }
@@ -227,7 +227,7 @@ pub type CassBorrowedExclusivePtr<'a, T, CM> = CassPtr<'a, T, (Exclusive, CM)>;
 /// and then another method accepts `const T*`.
 #[cfg(test)]
 impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
-    pub fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
+    pub(crate) fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -306,7 +306,7 @@ impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
     /// Resulting pointer inherits the lifetime from the immutable borrow
     /// of original pointer.
     #[allow(clippy::needless_lifetimes)]
-    pub fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
+    pub(crate) fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -320,7 +320,7 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
     /// of original pointer. Since the method accepts a mutable reference
     /// to the original pointer, we enforce aliasing ^ mutability principle at compile time.
     #[allow(clippy::needless_lifetimes)]
-    pub fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
+    pub(crate) fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -329,9 +329,9 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
 }
 
 mod origin_sealed {
-    pub trait FromBoxSealed {}
-    pub trait FromArcSealed {}
-    pub trait FromRefSealed {}
+    pub(crate) trait FromBoxSealed {}
+    pub(crate) trait FromArcSealed {}
+    pub(crate) trait FromRefSealed {}
 }
 
 /// Defines a pointer manipulation API for non-shared heap-allocated data.
@@ -339,7 +339,7 @@ mod origin_sealed {
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
+pub(crate) trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
     /// Consumes the Box and returns a pointer with exclusive ownership.
     /// The pointer needs to be freed. See [`BoxFFI::free()`].
     fn into_ptr<CM: CMutability>(self: Box<Self>) -> CassPtr<'static, Self, (Exclusive, CM)> {
@@ -413,7 +413,7 @@ pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
+pub(crate) trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
     #[allow(clippy::needless_lifetimes)]
@@ -504,7 +504,7 @@ pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
+pub(crate) trait RefFFI: Sized + origin_sealed::FromRefSealed {
     /// Creates a borrowed pointer from a valid reference.
     #[allow(clippy::needless_lifetimes)]
     fn as_ptr<'a, CM: CMutability>(&'a self) -> CassPtr<'a, Self, (Shared, CM)> {
@@ -578,7 +578,7 @@ pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
 /// - [`FromArc`]
 /// - [`FromRef`]
 #[allow(clippy::upper_case_acronyms)]
-pub trait FFI {
+pub(crate) trait FFI {
     type Origin;
 }
 
@@ -599,7 +599,7 @@ pub trait FFI {
 /// - there is no API to increase a reference count of CassCluster object
 /// - CassCluster is mutable via some API methods (`cass_cluster_set_*`)
 /// - user is responsible for freeing the associated memory (`cass_cluster_free`)
-pub struct FromBox;
+pub(crate) struct FromBox;
 impl<T> origin_sealed::FromBoxSealed for T where T: FFI<Origin = FromBox> {}
 impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
 
@@ -618,7 +618,7 @@ impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
 /// - there are multiple owners of the shared CassDataType object
 /// - some API functions require to increase a reference count of the object
 /// - user is responsible for freeing (decreasing RC of) the associated memory (`cass_data_type_free`)
-pub struct FromArc;
+pub(crate) struct FromArc;
 impl<T> origin_sealed::FromArcSealed for T where T: FFI<Origin = FromArc> {}
 impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
 
@@ -634,7 +634,7 @@ impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
 /// An example of such implementor would be [`CassRow`](crate::query_result::CassRow):
 /// - its lifetime is tied to the lifetime of CassResult
 /// - user only "borrows" the pointer - he is not responsible for freeing the memory
-pub struct FromRef;
+pub(crate) struct FromRef;
 impl<T> origin_sealed::FromRefSealed for T where T: FFI<Origin = FromRef> {}
 impl<T> RefFFI for T where T: FFI<Origin = FromRef> {}
 
