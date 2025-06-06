@@ -54,6 +54,8 @@ CASS_EXPORT void set_sleeping_history_listener_on_statement(CassStatement* state
 
 CASS_EXPORT void set_sleeping_history_listener_on_batch(CassBatch* batch, uint64_t sleep_time_ms);
 
+CASS_EXPORT CassRetryPolicy* retry_policy_ignoring_new();
+
 }}} // namespace datastax::internal::testing
 
 #endif

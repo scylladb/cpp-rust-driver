@@ -121,4 +121,8 @@ void set_sleeping_history_listener_on_batch(CassBatch* batch, uint64_t sleep_tim
   testing_batch_set_sleeping_history_listener(batch, sleep_time_ms);
 }
 
+CassRetryPolicy* retry_policy_ignoring_new() {
+  return testing_retry_policy_ignoring_new();
+}
+
 }}} // namespace datastax::internal::testing

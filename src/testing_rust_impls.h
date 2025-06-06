@@ -40,4 +40,18 @@ CASS_EXPORT void testing_batch_set_sleeping_history_listener(CassBatch *batch,
     cass_uint64_t sleep_time_ms);
 }
 
+/**
+ * Creates a new ignoring retry policy.
+ *
+ * This policy never retries any requests, regardless of the error.
+ * It simply ignores the error.
+ *
+ * @public @memberof CassRetryPolicy
+ *
+ * @return Returns a retry policy that must be freed.
+ *
+ * @see cass_retry_policy_free()
+ */
+CASS_EXPORT CassRetryPolicy* testing_retry_policy_ignoring_new();
+
 #endif

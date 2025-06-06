@@ -17,6 +17,7 @@
 #ifndef __TEST_RETRY_POLICY_HPP__
 #define __TEST_RETRY_POLICY_HPP__
 #include "cassandra.h"
+#include "testing.hpp"
 
 #include "objects/object_base.hpp"
 
@@ -80,6 +81,19 @@ public:
    */
   FallthroughRetryPolicy()
       : RetryPolicy(cass_retry_policy_fallthrough_new()) {}
+};
+
+/**
+ * Wrapped ignoring retry policy
+ */
+class IgnoreRetryPolicy : public RetryPolicy {
+public:
+  /**
+   * Create the ignoring retry policy object from the native driver
+   * ignoring retry policy object
+   */
+  IgnoreRetryPolicy()
+      : RetryPolicy(datastax::internal::testing::retry_policy_ignoring_new()) {}
 };
 
 /**

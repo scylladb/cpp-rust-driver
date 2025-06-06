@@ -9,10 +9,12 @@ use scylla::policies::retry::RetryDecision;
 
 use crate::argconv::{
     ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
+    CassOwnedSharedPtr,
 };
 use crate::batch::CassBatch;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
 
@@ -173,4 +175,38 @@ pub unsafe extern "C" fn testing_batch_set_sleeping_history_listener(
     Arc::make_mut(&mut batch.state)
         .batch
         .set_history_listener(history_listener)
+}
+
+/// A retry policy that always ignores all errors.
+///
+/// Useful for testing purposes.
+#[derive(Debug)]
+pub struct IgnoringRetryPolicy;
+
+#[derive(Debug)]
+struct IgnoringRetrySession;
+
+impl scylla::policies::retry::RetryPolicy for IgnoringRetryPolicy {
+    fn new_session(&self) -> Box<dyn scylla::policies::retry::RetrySession> {
+        Box::new(IgnoringRetrySession)
+    }
+}
+
+impl scylla::policies::retry::RetrySession for IgnoringRetrySession {
+    fn decide_should_retry(
+        &mut self,
+        _request_info: scylla::policies::retry::RequestInfo,
+    ) -> RetryDecision {
+        RetryDecision::IgnoreWriteError
+    }
+
+    fn reset(&mut self) {}
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_retry_policy_ignoring_new()
+-> CassOwnedSharedPtr<CassRetryPolicy, CMut> {
+    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::Ignoring(Arc::new(
+        IgnoringRetryPolicy,
+    ))))
 }

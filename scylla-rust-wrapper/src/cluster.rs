@@ -5,7 +5,6 @@ use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder
 use crate::future::CassFuture;
 use crate::load_balancing::{CassHostFilter, LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
-use crate::retry_policy::RetryPolicy::*;
 use crate::ssl::CassSsl;
 use crate::timestamp_generator::CassTimestampGen;
 use crate::types::*;
@@ -1144,9 +1143,12 @@ pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     };
 
     let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(DefaultRetryPolicy(default)) => Arc::clone(default) as _,
-        Some(FallthroughRetryPolicy(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(DowngradingConsistencyRetryPolicy(downgrading)) => Arc::clone(downgrading) as _,
+        Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
+        Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
+        Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
+        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
+        #[cfg(cpp_integration_testing)]
+        Some(CassRetryPolicy::Ignoring(ignoring)) => Arc::clone(ignoring) as _,
         None => {
             tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
             return;
