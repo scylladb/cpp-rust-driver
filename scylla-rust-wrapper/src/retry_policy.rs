@@ -6,9 +6,9 @@ use std::sync::Arc;
 use crate::argconv::{ArcFFI, CMut, CassOwnedSharedPtr, FFI, FromArc};
 
 pub enum CassRetryPolicy {
-    DefaultRetryPolicy(Arc<DefaultRetryPolicy>),
-    FallthroughRetryPolicy(Arc<FallthroughRetryPolicy>),
-    DowngradingConsistencyRetryPolicy(Arc<DowngradingConsistencyRetryPolicy>),
+    Default(Arc<DefaultRetryPolicy>),
+    Fallthrough(Arc<FallthroughRetryPolicy>),
+    DowngradingConsistency(Arc<DowngradingConsistencyRetryPolicy>),
 }
 
 impl FFI for CassRetryPolicy {
@@ -17,7 +17,7 @@ impl FFI for CassRetryPolicy {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cass_retry_policy_default_new() -> CassOwnedSharedPtr<CassRetryPolicy, CMut> {
-    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::DefaultRetryPolicy(Arc::new(
+    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::Default(Arc::new(
         DefaultRetryPolicy,
     ))))
 }
@@ -25,16 +25,14 @@ pub extern "C" fn cass_retry_policy_default_new() -> CassOwnedSharedPtr<CassRetr
 #[unsafe(no_mangle)]
 pub extern "C" fn cass_retry_policy_downgrading_consistency_new()
 -> CassOwnedSharedPtr<CassRetryPolicy, CMut> {
-    ArcFFI::into_ptr(Arc::new(
-        CassRetryPolicy::DowngradingConsistencyRetryPolicy(Arc::new(
-            DowngradingConsistencyRetryPolicy,
-        )),
-    ))
+    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::DowngradingConsistency(Arc::new(
+        DowngradingConsistencyRetryPolicy,
+    ))))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn cass_retry_policy_fallthrough_new() -> CassOwnedSharedPtr<CassRetryPolicy, CMut> {
-    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::FallthroughRetryPolicy(Arc::new(
+    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::Fallthrough(Arc::new(
         FallthroughRetryPolicy,
     ))))
 }

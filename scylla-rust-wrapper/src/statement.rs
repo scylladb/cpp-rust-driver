@@ -582,11 +582,11 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
 
     let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
         ArcFFI::as_ref(retry_policy).map(|policy| match policy {
-            CassRetryPolicy::DefaultRetryPolicy(default) => {
+            CassRetryPolicy::Default(default) => {
                 default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
             }
-            CassRetryPolicy::FallthroughRetryPolicy(fallthrough) => fallthrough.clone(),
-            CassRetryPolicy::DowngradingConsistencyRetryPolicy(downgrading) => downgrading.clone(),
+            CassRetryPolicy::Fallthrough(fallthrough) => fallthrough.clone(),
+            CassRetryPolicy::DowngradingConsistency(downgrading) => downgrading.clone(),
         });
 
     match &mut statement.statement {
