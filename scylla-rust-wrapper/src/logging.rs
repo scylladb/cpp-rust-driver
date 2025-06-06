@@ -30,9 +30,9 @@ unsafe extern "C" fn noop_log_callback(
 ) {
 }
 
-pub struct Logger {
-    pub cb: CassLogCallback,
-    pub data: *mut c_void,
+pub(crate) struct Logger {
+    pub(crate) cb: CassLogCallback,
+    pub(crate) data: *mut c_void,
 }
 
 // The field `data` in the struct `Logger` is neither Send nor Sync.
@@ -71,7 +71,7 @@ impl TryFrom<CassLogLevel> for Level {
     }
 }
 
-pub const CASS_LOG_MAX_MESSAGE_SIZE: usize = 1024;
+pub(crate) const CASS_LOG_MAX_MESSAGE_SIZE: usize = 1024;
 
 pub unsafe extern "C" fn stderr_log_callback(
     message: CassBorrowedSharedPtr<CassLogMessage, CConst>,
@@ -89,9 +89,9 @@ pub unsafe extern "C" fn stderr_log_callback(
     )
 }
 
-pub struct CustomLayer;
+pub(crate) struct CustomLayer;
 
-pub struct PrintlnVisitor {
+pub(crate) struct PrintlnVisitor {
     log_message: String,
 }
 
@@ -152,7 +152,7 @@ where
 
 // Sets tracing subscriber with specified `level`.
 // The subscriber is valid for the duration of the entire program.
-pub fn set_tracing_subscriber_with_level(level: Level) {
+pub(crate) fn set_tracing_subscriber_with_level(level: Level) {
     tracing::subscriber::set_global_default(
         tracing_subscriber::registry()
             .with(

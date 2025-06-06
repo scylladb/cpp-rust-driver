@@ -30,9 +30,9 @@ static UNTYPED_MAP_TYPE: LazyLock<Arc<CassDataType>> = LazyLock::new(|| {
 
 #[derive(Clone)]
 pub struct CassCollection {
-    pub collection_type: CassCollectionType,
-    pub data_type: Option<Arc<CassDataType>>,
-    pub items: Vec<CassCqlValue>,
+    pub(crate) collection_type: CassCollectionType,
+    pub(crate) data_type: Option<Arc<CassDataType>>,
+    pub(crate) items: Vec<CassCqlValue>,
 }
 
 impl FFI for CassCollection {
@@ -89,7 +89,7 @@ impl CassCollection {
         CassError::CASS_OK
     }
 
-    pub fn append_cql_value(&mut self, value: Option<CassCqlValue>) -> CassError {
+    pub(crate) fn append_cql_value(&mut self, value: Option<CassCqlValue>) -> CassError {
         let err = self.typecheck_on_append(&value);
         if err != CassError::CASS_OK {
             return err;

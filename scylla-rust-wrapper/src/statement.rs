@@ -36,10 +36,10 @@ pub enum BoundStatement {
 }
 
 #[derive(Clone)]
-pub struct BoundPreparedStatement {
+pub(crate) struct BoundPreparedStatement {
     // Arc is needed, because PreparedStatement is passed by reference to session.execute
-    pub statement: Arc<CassPrepared>,
-    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub(crate) statement: Arc<CassPrepared>,
+    pub(crate) bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
 }
 
 impl BoundPreparedStatement {
@@ -111,10 +111,10 @@ impl BoundPreparedStatement {
 }
 
 #[derive(Clone)]
-pub struct BoundSimpleQuery {
-    pub query: Statement,
-    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
-    pub name_to_bound_index: HashMap<String, usize>,
+pub(crate) struct BoundSimpleQuery {
+    pub(crate) query: Statement,
+    pub(crate) bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub(crate) name_to_bound_index: HashMap<String, usize>,
 }
 
 impl BoundSimpleQuery {
@@ -166,14 +166,14 @@ impl BoundSimpleQuery {
 /// but we also store the name-to-index mapping in `name_to_bound_index` map.
 /// Having this information, and prepared metadata provided in serialization context,
 /// we can build a resulting vector of bound values.
-pub struct SimpleQueryRowSerializer {
-    pub bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
-    pub name_to_bound_index: HashMap<String, usize>,
+pub(crate) struct SimpleQueryRowSerializer {
+    pub(crate) bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
+    pub(crate) name_to_bound_index: HashMap<String, usize>,
 }
 
 #[derive(Debug, Error)]
 #[error("Unknown named parameter \"{0}\"")]
-pub struct UnknownNamedParameterError(String);
+pub(crate) struct UnknownNamedParameterError(String);
 
 impl SerializeRow for SimpleQueryRowSerializer {
     fn serialize(
@@ -212,10 +212,10 @@ impl SerializeRow for SimpleQueryRowSerializer {
 }
 
 pub struct CassStatement {
-    pub statement: BoundStatement,
-    pub paging_state: PagingState,
-    pub paging_enabled: bool,
-    pub request_timeout_ms: Option<cass_uint64_t>,
+    pub(crate) statement: BoundStatement,
+    pub(crate) paging_state: PagingState,
+    pub(crate) paging_enabled: bool,
+    pub(crate) request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }

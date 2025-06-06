@@ -16,17 +16,17 @@ pub(crate) use crate::cass_data_types::CassValueType;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-pub struct UdtDataType {
+pub(crate) struct UdtDataType {
     // Vec to preserve the order of types
-    pub field_types: Vec<(String, Arc<CassDataType>)>,
+    pub(crate) field_types: Vec<(String, Arc<CassDataType>)>,
 
-    pub keyspace: String,
-    pub name: String,
-    pub frozen: bool,
+    pub(crate) keyspace: String,
+    pub(crate) name: String,
+    pub(crate) frozen: bool,
 }
 
 impl UdtDataType {
-    pub fn new() -> UdtDataType {
+    pub(crate) fn new() -> UdtDataType {
         UdtDataType {
             field_types: Vec::new(),
             keyspace: "".to_string(),
@@ -35,7 +35,7 @@ impl UdtDataType {
         }
     }
 
-    pub fn with_capacity(capacity: usize) -> UdtDataType {
+    pub(crate) fn with_capacity(capacity: usize) -> UdtDataType {
         UdtDataType {
             field_types: Vec::with_capacity(capacity),
             keyspace: "".to_string(),
@@ -44,7 +44,7 @@ impl UdtDataType {
         }
     }
 
-    pub fn get_field_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
+    pub(crate) fn get_field_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
         self.field_types
             .iter()
             .find(|(field_name, _)| field_name == name)
@@ -101,21 +101,21 @@ impl Default for UdtDataType {
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-pub enum MapDataType {
+pub(crate) enum MapDataType {
     Untyped,
     Key(Arc<CassDataType>),
     KeyAndValue(Arc<CassDataType>, Arc<CassDataType>),
 }
 
 #[derive(Debug)]
-pub struct CassColumnSpec {
-    pub name: String,
-    pub data_type: Arc<CassDataType>,
+pub(crate) struct CassColumnSpec {
+    pub(crate) name: String,
+    pub(crate) data_type: Arc<CassDataType>,
 }
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-pub enum CassDataTypeInner {
+pub(crate) enum CassDataTypeInner {
     Value(CassValueType),
     Udt(UdtDataType),
     List {
@@ -145,7 +145,7 @@ impl CassDataTypeInner {
     /// Checks for equality during typechecks.
     ///
     /// This takes into account the fact that tuples/collections may be untyped.
-    pub fn typecheck_equals(&self, other: &CassDataTypeInner) -> bool {
+    pub(crate) fn typecheck_equals(&self, other: &CassDataTypeInner) -> bool {
         match self {
             CassDataTypeInner::Value(t) => *t == other.get_value_type(),
             CassDataTypeInner::Udt(udt) => match other {
@@ -240,20 +240,20 @@ impl Eq for CassDataType {}
 unsafe impl Sync for CassDataType {}
 
 impl CassDataType {
-    pub unsafe fn get_unchecked(&self) -> &CassDataTypeInner {
+    pub(crate) unsafe fn get_unchecked(&self) -> &CassDataTypeInner {
         unsafe { &*self.0.get() }
     }
 
     #[allow(clippy::mut_from_ref)]
-    pub unsafe fn get_mut_unchecked(&self) -> &mut CassDataTypeInner {
+    pub(crate) unsafe fn get_mut_unchecked(&self) -> &mut CassDataTypeInner {
         unsafe { &mut *self.0.get() }
     }
 
-    pub const fn new(inner: CassDataTypeInner) -> CassDataType {
+    pub(crate) const fn new(inner: CassDataTypeInner) -> CassDataType {
         CassDataType(UnsafeCell::new(inner))
     }
 
-    pub fn new_arced(inner: CassDataTypeInner) -> Arc<CassDataType> {
+    pub(crate) fn new_arced(inner: CassDataTypeInner) -> Arc<CassDataType> {
         Arc::new(CassDataType(UnsafeCell::new(inner)))
     }
 }
@@ -358,14 +358,14 @@ impl CassDataTypeInner {
         }
     }
 
-    pub fn get_udt_type(&self) -> &UdtDataType {
+    pub(crate) fn get_udt_type(&self) -> &UdtDataType {
         match self {
             CassDataTypeInner::Udt(udt) => udt,
             _ => panic!("Can get UDT out of non-UDT data type"),
         }
     }
 
-    pub fn get_value_type(&self) -> CassValueType {
+    pub(crate) fn get_value_type(&self) -> CassValueType {
         match &self {
             CassDataTypeInner::Value(value_data_type) => *value_data_type,
             CassDataTypeInner::Udt { .. } => CassValueType::CASS_VALUE_TYPE_UDT,
@@ -378,7 +378,7 @@ impl CassDataTypeInner {
     }
 }
 
-pub fn get_column_type(column_type: &ColumnType) -> CassDataType {
+pub(crate) fn get_column_type(column_type: &ColumnType) -> CassDataType {
     use CollectionType::*;
     use ColumnType::*;
     let inner = match column_type {
@@ -927,7 +927,7 @@ impl TryFrom<CassConsistency> for SerialConsistency {
     }
 }
 
-pub fn make_batch_type(type_: CassBatchType) -> Option<BatchType> {
+pub(crate) fn make_batch_type(type_: CassBatchType) -> Option<BatchType> {
     match type_ {
         CassBatchType::CASS_BATCH_TYPE_LOGGED => Some(BatchType::Logged),
         CassBatchType::CASS_BATCH_TYPE_UNLOGGED => Some(BatchType::Unlogged),

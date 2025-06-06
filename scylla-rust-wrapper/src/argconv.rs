@@ -6,24 +6,24 @@ use std::os::raw::c_char;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
 
-pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
+pub(crate) unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
     unsafe { CStr::from_ptr(ptr) }.to_str().ok()
 }
 
-pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
+pub(crate) unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     if ptr.is_null() {
         return None;
     }
     std::str::from_utf8(unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) }).ok()
 }
 
-pub unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
+pub(crate) unsafe fn arr_to_cstr<const N: usize>(arr: &[c_char]) -> Option<&'static str> {
     let null_char = '\0' as c_char;
     let end_index = arr[..N].iter().position(|c| c == &null_char).unwrap_or(N);
     unsafe { ptr_to_cstr_n(arr.as_ptr(), end_index as size_t) }
 }
 
-pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
+pub(crate) fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
     let mut result = ['\0' as c_char; N];
 
     // Max length must be null-terminated
@@ -40,14 +40,14 @@ pub fn str_to_arr<const N: usize>(s: &str) -> [c_char; N] {
     result
 }
 
-pub unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
+pub(crate) unsafe fn write_str_to_c(s: &str, c_str: *mut *const c_char, c_strlen: *mut size_t) {
     unsafe {
         *c_str = s.as_ptr() as *const c_char;
         *c_strlen = s.len() as u64;
     }
 }
 
-pub unsafe fn strlen(ptr: *const c_char) -> size_t {
+pub(crate) unsafe fn strlen(ptr: *const c_char) -> size_t {
     if ptr.is_null() {
         return 0;
     }
@@ -55,7 +55,7 @@ pub unsafe fn strlen(ptr: *const c_char) -> size_t {
 }
 
 #[cfg(test)]
-pub fn str_to_c_str_n(s: &str) -> (*const c_char, size_t) {
+pub(crate) fn str_to_c_str_n(s: &str) -> (*const c_char, size_t) {
     let mut c_str = std::ptr::null();
     let mut c_strlen = size_t::default();
 
@@ -227,7 +227,7 @@ pub type CassBorrowedExclusivePtr<'a, T, CM> = CassPtr<'a, T, (Exclusive, CM)>;
 /// and then another method accepts `const T*`.
 #[cfg(test)]
 impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
-    pub fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
+    pub(crate) fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -306,7 +306,7 @@ impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
     /// Resulting pointer inherits the lifetime from the immutable borrow
     /// of original pointer.
     #[allow(clippy::needless_lifetimes)]
-    pub fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
+    pub(crate) fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -320,7 +320,8 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
     /// of original pointer. Since the method accepts a mutable reference
     /// to the original pointer, we enforce aliasing ^ mutability principle at compile time.
     #[allow(clippy::needless_lifetimes)]
-    pub fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
+    #[cfg_attr(not(test), expect(unused))]
+    pub(crate) fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -413,7 +414,7 @@ pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
+pub(crate) trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
     #[allow(clippy::needless_lifetimes)]

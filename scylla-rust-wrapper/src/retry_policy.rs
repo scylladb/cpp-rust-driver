@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::argconv::{ArcFFI, CMut, CassBorrowedSharedPtr, CassOwnedSharedPtr, FFI, FromArc};
 
 #[derive(Debug)]
-pub struct CassLoggingRetryPolicy {
+pub(crate) struct CassLoggingRetryPolicy {
     child_policy: Arc<CassRetryPolicy>,
 }
 
