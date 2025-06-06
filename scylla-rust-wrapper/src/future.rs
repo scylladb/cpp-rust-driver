@@ -118,6 +118,8 @@ impl CassFuture {
         cass_fut
     }
 
+    // This is left just because it might be useful in tests.
+    #[expect(unused)]
     pub(crate) fn new_ready(r: CassFutureResult) -> Arc<Self> {
         Arc::new(CassFuture {
             state: Mutex::new(CassFutureState::default()),
