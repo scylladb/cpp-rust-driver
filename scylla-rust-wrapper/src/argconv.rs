@@ -320,6 +320,7 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
     /// of original pointer. Since the method accepts a mutable reference
     /// to the original pointer, we enforce aliasing ^ mutability principle at compile time.
     #[allow(clippy::needless_lifetimes)]
+    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
         CassPtr {
             ptr: self.ptr,
