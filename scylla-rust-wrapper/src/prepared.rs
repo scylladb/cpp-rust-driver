@@ -15,16 +15,16 @@ use scylla::statement::prepared::PreparedStatement;
 #[derive(Debug, Clone)]
 pub struct CassPrepared {
     // Data types of columns from PreparedMetadata.
-    pub variable_col_data_types: Vec<Arc<CassDataType>>,
+    pub(crate) variable_col_data_types: Vec<Arc<CassDataType>>,
 
     // Cached result metadata. Arc'ed since we want to share it
     // with result metadata after execution.
-    pub result_metadata: Arc<CassResultMetadata>,
-    pub statement: PreparedStatement,
+    pub(crate) result_metadata: Arc<CassResultMetadata>,
+    pub(crate) statement: PreparedStatement,
 }
 
 impl CassPrepared {
-    pub fn new_from_prepared_statement(mut statement: PreparedStatement) -> Self {
+    pub(crate) fn new_from_prepared_statement(mut statement: PreparedStatement) -> Self {
         // We already cache the metadata on cpp-rust-driver side (see CassPrepared::result_metadata field),
         // thus we can enable the optimization on rust-driver side as well. This will prevent the server
         // from sending redundant bytes representing a result metadata during EXECUTE.
@@ -52,7 +52,7 @@ impl CassPrepared {
         }
     }
 
-    pub fn get_variable_data_type_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
+    pub(crate) fn get_variable_data_type_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
         let index = self
             .statement
             .get_variable_col_specs()

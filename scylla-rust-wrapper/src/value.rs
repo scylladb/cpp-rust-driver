@@ -27,7 +27,7 @@ use crate::cass_types::{CassDataType, CassValueType};
 /// we need to serialize the counter value using `CassCqlValue::BigInt`.
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq))]
-pub enum CassCqlValue {
+pub(crate) enum CassCqlValue {
     TinyInt(i8),
     SmallInt(i16),
     Int(i32),
@@ -68,7 +68,7 @@ pub enum CassCqlValue {
     // TODO: custom (?), duration and decimal
 }
 
-pub fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> bool {
+pub(crate) fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> bool {
     match value {
         Some(v) => v.is_type_compatible(typ),
         None => true,
@@ -76,7 +76,7 @@ pub fn is_type_compatible(value: &Option<CassCqlValue>, typ: &CassDataType) -> b
 }
 
 impl CassCqlValue {
-    pub fn is_type_compatible(&self, typ: &CassDataType) -> bool {
+    pub(crate) fn is_type_compatible(&self, typ: &CassDataType) -> bool {
         match self {
             CassCqlValue::TinyInt(_) => unsafe {
                 typ.get_unchecked().get_value_type() == CassValueType::CASS_VALUE_TYPE_TINY_INT
@@ -267,12 +267,12 @@ impl CassCqlValue {
 
 /// Serialization of one of the built-in types failed.
 #[derive(Debug, Clone)]
-pub struct CassSerializationError {
+pub(crate) struct CassSerializationError {
     /// Name of the Rust type being serialized.
-    pub rust_name: &'static str,
+    pub(crate) rust_name: &'static str,
 
     /// Detailed information about the failure.
-    pub kind: BuiltinSerializationErrorKind,
+    pub(crate) kind: BuiltinSerializationErrorKind,
 }
 
 impl std::fmt::Display for CassSerializationError {

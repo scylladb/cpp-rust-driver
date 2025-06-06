@@ -33,8 +33,8 @@ pub type CassFutureCallback = Option<
 >;
 
 struct BoundCallback {
-    pub cb: CassFutureCallback,
-    pub data: *mut c_void,
+    cb: CassFutureCallback,
+    data: *mut c_void,
 }
 
 // *mut c_void is not Send, so Rust will have to take our word
@@ -77,13 +77,13 @@ enum FutureError {
 struct JoinHandleTimeout(JoinHandle<()>);
 
 impl CassFuture {
-    pub fn make_raw(
+    pub(crate) fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
         Self::new_from_future(fut).into_raw()
     }
 
-    pub fn new_from_future(
+    pub(crate) fn new_from_future(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
@@ -118,7 +118,9 @@ impl CassFuture {
         cass_fut
     }
 
-    pub fn new_ready(r: CassFutureResult) -> Arc<Self> {
+    // This is left just because it might be useful in tests.
+    #[expect(unused)]
+    pub(crate) fn new_ready(r: CassFutureResult) -> Arc<Self> {
         Arc::new(CassFuture {
             state: Mutex::new(CassFutureState::default()),
             result: OnceLock::from(r),
@@ -126,7 +128,10 @@ impl CassFuture {
         })
     }
 
-    pub fn with_waited_result<'s, T>(&'s self, f: impl FnOnce(&'s CassFutureResult) -> T) -> T
+    pub(crate) fn with_waited_result<'s, T>(
+        &'s self,
+        f: impl FnOnce(&'s CassFutureResult) -> T,
+    ) -> T
     where
         T: 's,
     {
@@ -269,7 +274,7 @@ impl CassFuture {
         }
     }
 
-    pub unsafe fn set_callback(
+    pub(crate) unsafe fn set_callback(
         &self,
         self_ptr: CassBorrowedSharedPtr<CassFuture, CMut>,
         cb: CassFutureCallback,

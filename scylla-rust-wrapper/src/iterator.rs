@@ -17,18 +17,18 @@ use crate::query_result::{
 };
 use crate::types::{cass_bool_t, cass_false, size_t};
 
-pub use crate::cass_iterator_types::CassIteratorType;
+pub(crate) use crate::cass_iterator_types::CassIteratorType;
 
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-pub struct CassRowsResultIterator<'result> {
+pub(crate) struct CassRowsResultIterator<'result> {
     iterator: TypedRowIterator<'result, 'result, CassRawRow<'result, 'result>>,
     result_metadata: &'result CassResultMetadata,
     current_row: Option<CassRow<'result>>,
 }
 
-pub enum CassResultIterator<'result> {
+pub(crate) enum CassResultIterator<'result> {
     NonRows,
     Rows(CassRowsResultIterator<'result>),
 }
@@ -65,7 +65,7 @@ impl CassResultIterator<'_> {
     }
 }
 
-pub struct CassRowIterator<'result> {
+pub(crate) struct CassRowIterator<'result> {
     row: &'result CassRow<'result>,
     position: Option<usize>,
 }
@@ -81,7 +81,7 @@ impl CassRowIterator<'_> {
 }
 
 /// An iterator created from [`cass_iterator_from_collection()`] with list or set provided as a value.
-pub struct CassListlikeIterator<'result> {
+pub(crate) struct CassListlikeIterator<'result> {
     iterator: ListlikeIterator<'result, 'result, CassRawValue<'result, 'result>>,
     value_data_type: &'result Arc<CassDataType>,
     current_value: Option<CassValue<'result>>,
@@ -133,7 +133,7 @@ impl<'result> CassListlikeIterator<'result> {
 
 /// Iterator created from [`cass_iterator_from_collection()`] with map provided as a collection.
 /// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next value (either key or value).
-pub struct CassMapCollectionIterator<'result> {
+pub(crate) struct CassMapCollectionIterator<'result> {
     iterator: CassMapIterator<'result>,
     state: Option<CassMapCollectionIteratorState>,
 }
@@ -180,7 +180,7 @@ impl<'result> CassMapCollectionIterator<'result> {
 }
 
 /// Iterator created from [`cass_iterator_from_collection()`] with list, set or map provided as a collection.
-pub enum CassCollectionIterator<'result> {
+pub(crate) enum CassCollectionIterator<'result> {
     /// Listlike iterator for list or set.
     Listlike(CassListlikeIterator<'result>),
     /// Map iterator.
@@ -330,13 +330,13 @@ mod tuple_iterator {
 }
 
 /// Iterator created from [`cass_iterator_from_tuple()`].
-pub struct CassTupleIterator<'result> {
+pub(crate) struct CassTupleIterator<'result> {
     iterator: tuple_iterator::TupleIterator<'result, 'result>,
     metadata: &'result [Arc<CassDataType>],
     current_entry: Option<CassTupleIteratorEntry<'result>>,
 }
 
-pub struct CassTupleIteratorEntry<'result> {
+pub(crate) struct CassTupleIteratorEntry<'result> {
     field_value: CassValue<'result>,
     metadata_types_index: usize,
 }
@@ -405,7 +405,7 @@ impl<'result> CassTupleIterator<'result> {
 
 /// Iterator created from [`cass_iterator_from_map()`].
 /// Single iteration (call to [`cass_iterator_next()`]) moves the iterator to the next entry (key-value pair).
-pub struct CassMapIterator<'result> {
+pub(crate) struct CassMapIterator<'result> {
     iterator: MapIterator<
         'result,
         'result,
@@ -470,7 +470,7 @@ impl<'result> CassMapIterator<'result> {
     }
 }
 
-pub struct CassUdtIterator<'result> {
+pub(crate) struct CassUdtIterator<'result> {
     iterator: UdtIterator<'result, 'result>,
     metadata: &'result [(String, Arc<CassDataType>)],
     current_entry: Option<CassUdtIteratorEntry<'result>>,
@@ -549,7 +549,7 @@ impl<'result> CassUdtIterator<'result> {
     }
 }
 
-pub struct CassSchemaMetaIterator<'schema> {
+pub(crate) struct CassSchemaMetaIterator<'schema> {
     value: &'schema CassSchemaMeta,
     count: usize,
     position: Option<usize>,
@@ -565,7 +565,7 @@ impl CassSchemaMetaIterator<'_> {
     }
 }
 
-pub struct CassKeyspaceMetaIterator<'schema> {
+pub(crate) struct CassKeyspaceMetaIterator<'schema> {
     value: &'schema CassKeyspaceMeta,
     count: usize,
     position: Option<usize>,
@@ -581,7 +581,7 @@ impl CassKeyspaceMetaIterator<'_> {
     }
 }
 
-pub struct CassTableMetaIterator<'schema> {
+pub(crate) struct CassTableMetaIterator<'schema> {
     value: &'schema CassTableMeta,
     count: usize,
     position: Option<usize>,
@@ -597,7 +597,7 @@ impl CassTableMetaIterator<'_> {
     }
 }
 
-pub struct CassViewMetaIterator<'schema> {
+pub(crate) struct CassViewMetaIterator<'schema> {
     value: &'schema CassMaterializedViewMeta,
     count: usize,
     position: Option<usize>,
@@ -617,7 +617,7 @@ impl CassViewMetaIterator<'_> {
 /// Can be constructed from either table ([`cass_iterator_columns_from_table_meta()`])
 /// or view metadata ([`cass_iterator_columns_from_materialized_view_meta()`]).
 /// To be used by [`cass_iterator_get_column_meta()`].
-pub enum CassColumnsMetaIterator<'schema> {
+pub(crate) enum CassColumnsMetaIterator<'schema> {
     FromTable(CassTableMetaIterator<'schema>),
     FromView(CassViewMetaIterator<'schema>),
 }
@@ -626,7 +626,7 @@ pub enum CassColumnsMetaIterator<'schema> {
 /// Can be constructed from either keyspace ([`cass_iterator_materialized_views_from_keyspace_meta()`])
 /// or table ([`cass_iterator_materialized_views_from_table_meta()`]) metadata.
 /// To be used by [`cass_iterator_get_materialized_view_meta()`].
-pub enum CassMaterializedViewsMetaIterator<'schema> {
+pub(crate) enum CassMaterializedViewsMetaIterator<'schema> {
     FromKeyspace(CassKeyspaceMetaIterator<'schema>),
     FromTable(CassTableMetaIterator<'schema>),
 }
