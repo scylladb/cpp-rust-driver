@@ -44,19 +44,11 @@ impl UdtDataType {
         }
     }
 
-    pub fn add_field(&mut self, name: String, field_type: Arc<CassDataType>) {
-        self.field_types.push((name, field_type));
-    }
-
     pub fn get_field_by_name(&self, name: &str) -> Option<&Arc<CassDataType>> {
         self.field_types
             .iter()
             .find(|(field_name, _)| field_name == name)
             .map(|(_, t)| t)
-    }
-
-    pub fn get_field_by_index(&self, index: usize) -> Option<&Arc<CassDataType>> {
-        self.field_types.get(index).map(|(_, b)| b)
     }
 
     fn typecheck_equals(&self, other: &UdtDataType) -> bool {
