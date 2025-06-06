@@ -9,10 +9,12 @@ use scylla::policies::retry::RetryDecision;
 
 use crate::argconv::{
     ArcFFI, BoxFFI, CConst, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr,
+    CassOwnedSharedPtr,
 };
 use crate::batch::CassBatch;
 use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
+use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
 
@@ -199,4 +201,12 @@ impl scylla::policies::retry::RetrySession for IgnoringRetrySession {
     }
 
     fn reset(&mut self) {}
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_retry_policy_ignoring_new()
+-> CassOwnedSharedPtr<CassRetryPolicy, CMut> {
+    ArcFFI::into_ptr(Arc::new(CassRetryPolicy::Ignoring(Arc::new(
+        IgnoringRetryPolicy,
+    ))))
 }
