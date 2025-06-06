@@ -174,3 +174,29 @@ pub unsafe extern "C" fn testing_batch_set_sleeping_history_listener(
         .batch
         .set_history_listener(history_listener)
 }
+
+/// A retry policy that always ignores all errors.
+///
+/// Useful for testing purposes.
+#[derive(Debug)]
+pub struct IgnoringRetryPolicy;
+
+#[derive(Debug)]
+struct IgnoringRetrySession;
+
+impl scylla::policies::retry::RetryPolicy for IgnoringRetryPolicy {
+    fn new_session(&self) -> Box<dyn scylla::policies::retry::RetrySession> {
+        Box::new(IgnoringRetrySession)
+    }
+}
+
+impl scylla::policies::retry::RetrySession for IgnoringRetrySession {
+    fn decide_should_retry(
+        &mut self,
+        _request_info: scylla::policies::retry::RequestInfo,
+    ) -> RetryDecision {
+        RetryDecision::IgnoreWriteError
+    }
+
+    fn reset(&mut self) {}
+}

@@ -588,6 +588,8 @@ pub unsafe extern "C" fn cass_statement_set_retry_policy(
             CassRetryPolicy::Fallthrough(fallthrough) => fallthrough.clone(),
             CassRetryPolicy::DowngradingConsistency(downgrading) => downgrading.clone(),
             CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
+            #[cfg(cpp_integration_testing)]
+            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
         });
 
     match &mut statement.statement {

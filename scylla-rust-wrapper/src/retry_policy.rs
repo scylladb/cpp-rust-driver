@@ -63,6 +63,8 @@ pub enum CassRetryPolicy {
     Fallthrough(Arc<FallthroughRetryPolicy>),
     DowngradingConsistency(Arc<DowngradingConsistencyRetryPolicy>),
     Logging(Arc<CassLoggingRetryPolicy>),
+    #[cfg(cpp_integration_testing)]
+    Ignoring(Arc<crate::integration_testing::IgnoringRetryPolicy>),
 }
 
 impl RetryPolicy for CassRetryPolicy {
@@ -72,6 +74,8 @@ impl RetryPolicy for CassRetryPolicy {
             Self::Fallthrough(policy) => policy.new_session(),
             Self::DowngradingConsistency(policy) => policy.new_session(),
             Self::Logging(policy) => policy.new_session(),
+            #[cfg(cpp_integration_testing)]
+            Self::Ignoring(policy) => policy.new_session(),
         }
     }
 }
