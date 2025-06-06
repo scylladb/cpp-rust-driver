@@ -670,6 +670,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_partition_key_count(
     view_meta.view_metadata.partition_keys.len() as size_t
 }
 
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
@@ -704,6 +705,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key_count(
     view_meta.view_metadata.clustering_keys.len() as size_t
 }
 
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
