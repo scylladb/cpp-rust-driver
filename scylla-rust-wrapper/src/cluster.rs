@@ -1194,7 +1194,7 @@ pub unsafe extern "C" fn cass_cluster_set_compression(
     let compression = match compression_type {
         CassCompressionType::CASS_COMPRESSION_LZ4 => Some(Compression::Lz4),
         CassCompressionType::CASS_COMPRESSION_SNAPPY => Some(Compression::Snappy),
-        _ => None,
+        CassCompressionType::CASS_COMPRESSION_NONE | _ => None,
     };
 
     cluster_from_raw.session_builder.config.compression = compression;
