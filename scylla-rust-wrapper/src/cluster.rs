@@ -838,8 +838,19 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    if used_hosts_per_remote_dc != 0 || allow_remote_dcs_for_local_cl != 0 {
-        // TODO: Add warning that the parameters are deprecated and not supported in the driver.
+    if used_hosts_per_remote_dc != 0 {
+        tracing::error!(
+            "cass_*_set_load_balance_dc_aware(_n): `used_hosts_per_remote_dc` parameter is no longer \
+            supported in the driver. Set it to 0 to avoid this error."
+        );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    }
+
+    if allow_remote_dcs_for_local_cl != 0 {
+        tracing::error!(
+            "cass_*_set_load_balance_dc_aware(_n): `allow_remote_dcs_for_local_cl` parameter is no longer \
+            supported in the driver. Set it to 0 to avoid this error."
+        );
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
