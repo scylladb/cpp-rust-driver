@@ -827,6 +827,9 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
     if local_dc_raw.is_null() || local_dc_length == 0 {
+        tracing::error!(
+            "Provided null or empty local DC name to cass_*_set_load_balance_dc_aware(_n)!"
+        );
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
