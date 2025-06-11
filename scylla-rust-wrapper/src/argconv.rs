@@ -198,7 +198,7 @@ impl<O: Ownership, CM: CMutability> Properties for (O, CM) {
 ///
 /// ## Memory layout
 /// We use repr(transparent), so the struct has the same layout as underlying [`Option<NonNull<T>>`].
-/// Thanks to https://doc.rust-lang.org/std/option/#representation optimization,
+/// Thanks to <https://doc.rust-lang.org/std/option/#representation optimization>,
 /// we are guaranteed, that for `T: Sized`, our struct has the same layout
 /// and function call ABI as simply [`NonNull<T>`].
 #[repr(transparent)]
