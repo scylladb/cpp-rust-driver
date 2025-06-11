@@ -23,10 +23,10 @@ impl FFI for CassSsl {
     type Origin = FromArc;
 }
 
-pub const CASS_SSL_VERIFY_NONE: i32 = 0x00;
-pub const CASS_SSL_VERIFY_PEER_CERT: i32 = 0x01;
-pub const CASS_SSL_VERIFY_PEER_IDENTITY: i32 = 0x02;
-pub const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
+pub(crate) const CASS_SSL_VERIFY_NONE: i32 = 0x00;
+pub(crate) const CASS_SSL_VERIFY_PEER_CERT: i32 = 0x01;
+pub(crate) const CASS_SSL_VERIFY_PEER_IDENTITY: i32 = 0x02;
+pub(crate) const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_ssl_new() -> CassOwnedSharedPtr<CassSsl, CMut> {

@@ -69,10 +69,10 @@ impl CassExecProfile {
 
 /// Represents a non-empty execution profile name.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ExecProfileName(String);
+pub(crate) struct ExecProfileName(String);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct EmptyProfileName;
+pub(crate) struct EmptyProfileName;
 
 impl TryFrom<String> for ExecProfileName {
     type Error = EmptyProfileName;

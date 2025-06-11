@@ -145,7 +145,7 @@ pub struct CassCustomPayload;
 
 // We want to make sure that the returned future does not depend
 // on the provided &CassCluster, hence the `static here.
-pub fn build_session_builder(
+pub(crate) fn build_session_builder(
     cluster: &CassCluster,
 ) -> impl Future<Output = SessionBuilder> + 'static {
     let known_nodes = cluster
@@ -1194,6 +1194,7 @@ pub unsafe extern "C" fn cass_cluster_set_compression(
     let compression = match compression_type {
         CassCompressionType::CASS_COMPRESSION_LZ4 => Some(Compression::Lz4),
         CassCompressionType::CASS_COMPRESSION_SNAPPY => Some(Compression::Snappy),
+        CassCompressionType::CASS_COMPRESSION_NONE => None,
         _ => None,
     };
 

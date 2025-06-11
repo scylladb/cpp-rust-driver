@@ -13,8 +13,8 @@ static UNTYPED_TUPLE_TYPE: LazyLock<Arc<CassDataType>> =
 
 #[derive(Clone)]
 pub struct CassTuple {
-    pub data_type: Option<Arc<CassDataType>>,
-    pub items: Vec<Option<CassCqlValue>>,
+    pub(crate) data_type: Option<Arc<CassDataType>>,
+    pub(crate) items: Vec<Option<CassCqlValue>>,
 }
 
 impl FFI for CassTuple {

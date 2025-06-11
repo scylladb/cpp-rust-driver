@@ -181,7 +181,7 @@ pub unsafe extern "C" fn testing_batch_set_sleeping_history_listener(
 ///
 /// Useful for testing purposes.
 #[derive(Debug)]
-pub struct IgnoringRetryPolicy;
+pub(crate) struct IgnoringRetryPolicy;
 
 #[derive(Debug)]
 struct IgnoringRetrySession;

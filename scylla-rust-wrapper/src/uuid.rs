@@ -13,8 +13,8 @@ use uuid::Uuid;
 pub(crate) use crate::cass_uuid_types::CassUuid;
 
 pub struct CassUuidGen {
-    pub clock_seq_and_node: cass_uint64_t,
-    pub last_timestamp: AtomicU64,
+    pub(crate) clock_seq_and_node: cass_uint64_t,
+    pub(crate) last_timestamp: AtomicU64,
 }
 
 impl FFI for CassUuidGen {

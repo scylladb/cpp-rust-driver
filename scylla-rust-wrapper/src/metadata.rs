@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 
 pub struct CassSchemaMeta {
-    pub keyspaces: HashMap<String, CassKeyspaceMeta>,
+    pub(crate) keyspaces: HashMap<String, CassKeyspaceMeta>,
 }
 
 impl FFI for CassSchemaMeta {
@@ -18,12 +18,12 @@ impl FFI for CassSchemaMeta {
 }
 
 pub struct CassKeyspaceMeta {
-    pub name: String,
+    pub(crate) name: String,
 
     // User defined type name to type
-    pub user_defined_type_data_type: HashMap<String, Arc<CassDataType>>,
-    pub tables: HashMap<String, Arc<CassTableMeta>>,
-    pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
+    pub(crate) user_defined_type_data_type: HashMap<String, Arc<CassDataType>>,
+    pub(crate) tables: HashMap<String, Arc<CassTableMeta>>,
+    pub(crate) views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
 
 // Owned by CassSchemaMeta
@@ -32,13 +32,13 @@ impl FFI for CassKeyspaceMeta {
 }
 
 pub struct CassTableMeta {
-    pub name: String,
-    pub columns_metadata: HashMap<String, CassColumnMeta>,
-    pub partition_keys: Vec<String>,
-    pub clustering_keys: Vec<String>,
+    pub(crate) name: String,
+    pub(crate) columns_metadata: HashMap<String, CassColumnMeta>,
+    pub(crate) partition_keys: Vec<String>,
+    pub(crate) clustering_keys: Vec<String>,
     /// Non-key columns sorted alphabetically by name.
-    pub non_key_sorted_columns: Vec<String>,
-    pub views: HashMap<String, Arc<CassMaterializedViewMeta>>,
+    pub(crate) non_key_sorted_columns: Vec<String>,
+    pub(crate) views: HashMap<String, Arc<CassMaterializedViewMeta>>,
 }
 
 // Either:
@@ -49,9 +49,9 @@ impl FFI for CassTableMeta {
 }
 
 pub struct CassMaterializedViewMeta {
-    pub name: String,
-    pub view_metadata: CassTableMeta,
-    pub base_table: Weak<CassTableMeta>,
+    pub(crate) name: String,
+    pub(crate) view_metadata: CassTableMeta,
+    pub(crate) base_table: Weak<CassTableMeta>,
 }
 
 // Shared ownership by CassKeyspaceMeta and CassTableMeta
@@ -60,9 +60,9 @@ impl FFI for CassMaterializedViewMeta {
 }
 
 pub struct CassColumnMeta {
-    pub name: String,
-    pub column_type: Arc<CassDataType>,
-    pub column_kind: CassColumnType,
+    pub(crate) name: String,
+    pub(crate) column_type: Arc<CassDataType>,
+    pub(crate) column_kind: CassColumnType,
 }
 
 // Owned by CassTableMeta
@@ -70,7 +70,7 @@ impl FFI for CassColumnMeta {
     type Origin = FromRef;
 }
 
-pub fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTableMeta {
+pub(crate) fn create_table_metadata(table_name: &str, table_metadata: &Table) -> CassTableMeta {
     let mut columns_metadata = HashMap::new();
     table_metadata
         .columns
@@ -670,6 +670,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_partition_key_count(
     view_meta.view_metadata.partition_keys.len() as size_t
 }
 
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_partition_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,
@@ -704,6 +705,7 @@ pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key_count(
     view_meta.view_metadata.clustering_keys.len() as size_t
 }
 
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_materialized_view_meta_clustering_key(
     view_meta: CassBorrowedSharedPtr<CassMaterializedViewMeta, CConst>,
     index: size_t,

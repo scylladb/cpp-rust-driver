@@ -30,13 +30,13 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug)]
-pub enum CassResultKind {
+pub(crate) enum CassResultKind {
     NonRows,
     Rows(CassRowsResult),
 }
 
 #[derive(Debug)]
-pub struct CassRowsResult {
+pub(crate) struct CassRowsResult {
     // Arc: shared with first_row (yoke).
     pub(crate) shared_data: Arc<CassRowsResultSharedData>,
     pub(crate) first_row: Option<RowWithSelfBorrowedResultData>,
@@ -58,9 +58,9 @@ impl FFI for CassNode {
 
 #[derive(Debug)]
 pub struct CassResult {
-    pub tracing_id: Option<Uuid>,
-    pub paging_state_response: PagingStateResponse,
-    pub kind: CassResultKind,
+    pub(crate) tracing_id: Option<Uuid>,
+    pub(crate) paging_state_response: PagingStateResponse,
+    pub(crate) kind: CassResultKind,
     // None only for tests - currently no way to mock coordinator in rust-driver.
     // Should be able to do so under "cpp_rust_unstable".
     pub(crate) coordinator: Option<Coordinator>,
@@ -71,7 +71,7 @@ impl CassResult {
     /// - query result
     /// - paging state response
     /// - optional cached result metadata - it's provided for prepared statements
-    pub fn from_result_payload(
+    pub(crate) fn from_result_payload(
         result: QueryResult,
         paging_state_response: PagingStateResponse,
         maybe_result_metadata: Option<Arc<CassResultMetadata>>,
@@ -127,12 +127,12 @@ impl FFI for CassResult {
 }
 
 #[derive(Debug)]
-pub struct CassResultMetadata {
-    pub col_specs: Vec<CassColumnSpec>,
+pub(crate) struct CassResultMetadata {
+    pub(crate) col_specs: Vec<CassColumnSpec>,
 }
 
 impl CassResultMetadata {
-    pub fn from_column_specs(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
+    pub(crate) fn from_column_specs(col_specs: ColumnSpecs<'_, '_>) -> CassResultMetadata {
         let col_specs = col_specs
             .iter()
             .map(|col_spec| {
@@ -165,8 +165,8 @@ impl<'frame, 'metadata> DeserializeRow<'frame, 'metadata> for CassRawRow<'frame,
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
 #[derive(Debug)]
 pub struct CassRow<'result> {
-    pub columns: Vec<CassValue<'result>>,
-    pub result_metadata: &'result CassResultMetadata,
+    pub(crate) columns: Vec<CassValue<'result>>,
+    pub(crate) result_metadata: &'result CassResultMetadata,
 }
 
 impl FFI for CassRow<'_> {
@@ -249,7 +249,7 @@ mod row_with_self_borrowed_result_data {
     /// This struct is a shared owner of the row bytes and metadata, and self-borrows this data
     /// to the `CassRow` it contains.
     #[derive(Debug)]
-    pub struct RowWithSelfBorrowedResultData(
+    pub(crate) struct RowWithSelfBorrowedResultData(
         Yoke<CassRowWrapper<'static>, Arc<CassRowsResultSharedData>>,
     );
 
@@ -446,7 +446,7 @@ impl FFI for CassValue<'_> {
 }
 
 impl<'result> CassValue<'result> {
-    pub fn get_non_null<T>(&'result self) -> Result<T, NonNullDeserializationError>
+    pub(crate) fn get_non_null<T>(&'result self) -> Result<T, NonNullDeserializationError>
     where
         T: DeserializeValue<'result, 'result>,
     {
@@ -460,7 +460,7 @@ impl<'result> CassValue<'result> {
         Ok(v)
     }
 
-    pub fn get_bytes_non_null(&self) -> Result<&'result [u8], NonNullDeserializationError> {
+    pub(crate) fn get_bytes_non_null(&self) -> Result<&'result [u8], NonNullDeserializationError> {
         let Some(slice) = self.value.slice() else {
             return Err(NonNullDeserializationError::IsNull);
         };
@@ -470,7 +470,7 @@ impl<'result> CassValue<'result> {
 }
 
 #[derive(Debug, Error)]
-pub enum NonNullDeserializationError {
+pub(crate) enum NonNullDeserializationError {
     #[error("Value is null")]
     IsNull,
     #[error("Typecheck failed: {0}")]
