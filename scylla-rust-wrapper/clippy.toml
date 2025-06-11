@@ -17,5 +17,6 @@ disallowed-methods = [
     "std::rc::Rc::into_raw",
 
     "const_ptr::as_ref",
-    "mut_ptr::as_mut"
+    "mut_ptr::as_mut",
 ]
+avoid-breaking-exported-api = false
