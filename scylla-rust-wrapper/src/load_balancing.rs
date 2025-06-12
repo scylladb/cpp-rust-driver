@@ -10,12 +10,26 @@ use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, FallbackPlan, LatencyAwarenessBuilder, LoadBalancingPolicy, RoutingInfo,
 };
 
+/// Whether the LBP allows contacting any hosts in remote datacenters.
+/// It strictly corresponds to `allow_hosts_per_remote_dcs` argument of
+/// `cass_{cluster,exec_profile}_set_load_balancing_dc_aware()`:
+/// - `allow_hosts_per_remote_dcs = 0` <-> `dc_restriction = Local(local_dc)`,
+/// - `allow_hosts_per_remote_dcs > 0` <-> `dc_restriction = None`.
+#[derive(Clone, Debug)]
+pub(crate) enum DcRestriction {
+    /// No restriction on datacenters.
+    None,
+    /// Only the specified local datacenter is allowed.
+    Local(String),
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct FilteringConfig {
     pub(crate) whitelist_hosts: Vec<IpAddr>,
     pub(crate) blacklist_hosts: Vec<IpAddr>,
     pub(crate) whitelist_dc: Vec<String>,
     pub(crate) blacklist_dc: Vec<String>,
+    pub(crate) dc_restriction: DcRestriction,
 }
 
 impl FilteringConfig {
@@ -27,8 +41,21 @@ impl FilteringConfig {
             blacklist_hosts: (!self.blacklist_hosts.is_empty()).then_some(self.blacklist_hosts),
             whitelist_dc: (!self.whitelist_dc.is_empty()).then_some(self.whitelist_dc),
             blacklist_dc: (!self.blacklist_dc.is_empty()).then_some(self.blacklist_dc),
+            allowed_dcs: match self.dc_restriction {
+                DcRestriction::None => AllowedDcs::All,
+                DcRestriction::Local(local_dc) => AllowedDcs::Whitelist(vec![local_dc]),
+            },
         }
     }
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub(crate) enum AllowedDcs {
+    /// All datacenters are allowed, including remote ones.
+    All,
+    /// Only the specified datacenters are allowed (the local DCs of DC-aware policies).
+    Whitelist(Vec<String>),
 }
 
 #[derive(Debug)]
@@ -37,6 +64,12 @@ pub(crate) struct FilteringInfo {
     pub(crate) blacklist_hosts: Option<Vec<IpAddr>>,
     pub(crate) whitelist_dc: Option<Vec<String>>,
     pub(crate) blacklist_dc: Option<Vec<String>>,
+    /// This is different from `whitelist_dc` in its origin:
+    /// - `whitelist_dc` is a user-provided list of datacenters that are allowed,
+    /// - `allowed_dcs` is a set built from the load balancing policies, based
+    ///   on their allowance of remote datacenters or lack thereof (in case of
+    ///   the DC-aware policy with `used_hosts_per_remote_dc=0`).
+    pub(crate) allowed_dcs: AllowedDcs,
 }
 
 impl FilteringInfo {
@@ -48,6 +81,16 @@ impl FilteringInfo {
     pub(crate) fn is_host_allowed(&self, ip: &IpAddr, dc: Option<&str>) -> bool {
         // Treat missing dc as empty string.
         let dc = dc.unwrap_or_default();
+
+        if let AllowedDcs::Whitelist(ref allowed_dcs) = self.allowed_dcs {
+            // If the host's DC is not in the whitelist of DCs, reject it.
+            if !allowed_dcs
+                .iter()
+                .any(|allowed_dc| allowed_dc.as_str() == dc)
+            {
+                return false;
+            }
+        }
 
         if self
             .whitelist_hosts
@@ -112,8 +155,13 @@ impl LoadBalancingConfig {
         }
 
         match load_balancing_kind {
-            LoadBalancingKind::DcAware { local_dc } => {
-                builder = builder.prefer_datacenter(local_dc).permit_dc_failover(true)
+            LoadBalancingKind::DcAware {
+                local_dc,
+                permit_dc_failover,
+            } => {
+                builder = builder
+                    .prefer_datacenter(local_dc)
+                    .permit_dc_failover(permit_dc_failover)
             }
             LoadBalancingKind::RackAware {
                 local_dc,
@@ -151,6 +199,7 @@ impl Default for LoadBalancingConfig {
                 blacklist_hosts: Vec::new(),
                 whitelist_dc: Vec::new(),
                 blacklist_dc: Vec::new(),
+                dc_restriction: DcRestriction::None, // Round-robin policy, which is the default, allows contacting remote DCs.
             },
         }
     }
@@ -161,6 +210,7 @@ pub(crate) enum LoadBalancingKind {
     RoundRobin,
     DcAware {
         local_dc: String,
+        permit_dc_failover: bool,
     },
     RackAware {
         local_dc: String,
@@ -296,9 +346,25 @@ impl CassHostFilter {
     ///
     /// Now, if a host is not in the union of whitelists, it is rejected.
     /// If a host is in the intersection of blacklists, it is rejected.
+    ///
+    /// Apart from black- and whitelists, we also compute the allowed datacenters,
+    /// which are based on the `used_hosts_per_remote_dc` parameter of the
+    /// DC-aware load balancing policy. We only correctly handle the case
+    /// where 0 is passed, which means that the policy does not allow contacting
+    /// remote datacenters.
+    /// If all policies forbid contacting remote datacenters, we prevent
+    /// opening connections to hosts in remote datacenters.
     pub(crate) fn new_from_lbp_configs<'a>(
         configs: impl Iterator<Item = &'a LoadBalancingConfig> + Clone,
     ) -> Arc<dyn HostFilter> {
+        Arc::new(Self::new_from_lbp_configs_inner(configs))
+    }
+
+    /// This is the inner implementation of `new_from_lbp_configs`,
+    /// extracted in order to allow testing.
+    fn new_from_lbp_configs_inner<'a>(
+        configs: impl Iterator<Item = &'a LoadBalancingConfig> + Clone,
+    ) -> Self {
         let whitelist_hosts = nonempty_union(
             configs
                 .clone()
@@ -317,22 +383,51 @@ impl CassHostFilter {
                 .map(|lbp_config| &lbp_config.filtering.whitelist_dc),
         );
 
-        let blacklist_dc =
-            nonempty_intersection(configs.map(|lbp_config| &lbp_config.filtering.blacklist_dc));
+        let blacklist_dc = nonempty_intersection(
+            configs
+                .clone()
+                .map(|lbp_config| &lbp_config.filtering.blacklist_dc),
+        );
 
-        Arc::new(Self {
+        let allowed_dcs = configs
+            .fold(None, |allowed_dcs, lbp_config| {
+                match (allowed_dcs, &lbp_config.filtering.dc_restriction) {
+                    (None, DcRestriction::None) => Some(AllowedDcs::All),
+                    (None, DcRestriction::Local(local_dc)) => {
+                        Some(AllowedDcs::Whitelist(vec![local_dc.clone()]))
+                    }
+                    // If this policy allows only a specified DC, add it to the allowed DCs.
+                    (Some(AllowedDcs::Whitelist(mut dcs)), DcRestriction::Local(local_dc)) => {
+                        dcs.push(local_dc.clone());
+                        Some(AllowedDcs::Whitelist(dcs))
+                    }
+                    // If some policy allowed all DCs, allow all DCs globally.
+                    (Some(AllowedDcs::All), _) => Some(AllowedDcs::All),
+                    // If this policy allows all DCs, allow all DCs globally.
+                    (_, DcRestriction::None) => Some(AllowedDcs::All),
+                }
+            })
+            // Note: this should never happen, as at least one (cluster-level) policy should be present.
+            .unwrap_or(AllowedDcs::All);
+
+        Self {
             filtering: FilteringInfo {
                 whitelist_hosts,
                 blacklist_hosts,
                 whitelist_dc,
                 blacklist_dc,
+                allowed_dcs,
             },
-        })
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::load_balancing::LoadBalancingConfig;
+
+    use super::{AllowedDcs, CassHostFilter, DcRestriction, FilteringConfig};
+
     #[test]
     fn test_union_and_intersection() {
         struct TestCase {
@@ -400,6 +495,78 @@ mod tests {
 
             assert_eq!(union, test.expected_union);
             assert_eq!(intersection, test.expected_intersection);
+        }
+    }
+
+    #[test]
+    fn test_allowed_dcs() {
+        struct TestCase {
+            input: Vec<DcRestriction>,
+            merged: AllowedDcs,
+        }
+
+        let test_cases = &[
+            TestCase {
+                input: vec![DcRestriction::None],
+                merged: AllowedDcs::All,
+            },
+            TestCase {
+                input: vec![DcRestriction::Local("dc1".to_owned())],
+                merged: AllowedDcs::Whitelist(vec!["dc1".to_owned()]),
+            },
+            TestCase {
+                input: vec![
+                    DcRestriction::Local("dc1".to_owned()),
+                    DcRestriction::Local("dc2".to_owned()),
+                ],
+                merged: AllowedDcs::Whitelist(vec!["dc1".to_owned(), "dc2".to_owned()]),
+            },
+            TestCase {
+                input: vec![DcRestriction::Local("dc1".to_owned()), DcRestriction::None],
+                merged: AllowedDcs::All,
+            },
+            TestCase {
+                input: vec![DcRestriction::None, DcRestriction::Local("dc1".to_owned())],
+                merged: AllowedDcs::All,
+            },
+            TestCase {
+                input: vec![
+                    DcRestriction::Local("dc1".to_owned()),
+                    DcRestriction::None,
+                    DcRestriction::Local("dc1".to_owned()),
+                ],
+                merged: AllowedDcs::All,
+            },
+            // Non-mandatory case. Should never happen in practice, as at least one (cluster-level) policy should be present.
+            TestCase {
+                input: vec![],
+                merged: AllowedDcs::All,
+            },
+        ];
+
+        for TestCase { input, merged } in test_cases {
+            let filtering_configs = input.iter().map(|dc_restriction| FilteringConfig {
+                whitelist_hosts: Vec::new(),
+                blacklist_hosts: Vec::new(),
+                whitelist_dc: Vec::new(),
+                blacklist_dc: Vec::new(),
+                dc_restriction: dc_restriction.clone(),
+            });
+            let load_balancing_configs = filtering_configs
+                .map(|filtering| LoadBalancingConfig {
+                    token_awareness_enabled: false,
+                    token_aware_shuffling_replicas_enabled: false,
+                    load_balancing_kind: None,
+                    latency_awareness_enabled: false,
+                    latency_awareness_builder: Default::default(),
+                    filtering,
+                })
+                .collect::<Vec<_>>();
+
+            let cass_filter =
+                CassHostFilter::new_from_lbp_configs_inner(load_balancing_configs.iter());
+
+            assert_eq!(&cass_filter.filtering.allowed_dcs, merged);
         }
     }
 }

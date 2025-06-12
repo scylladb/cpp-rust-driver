@@ -3,7 +3,9 @@ use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
-use crate::load_balancing::{CassHostFilter, LoadBalancingConfig, LoadBalancingKind};
+use crate::load_balancing::{
+    CassHostFilter, DcRestriction, LoadBalancingConfig, LoadBalancingKind,
+};
 use crate::retry_policy::CassRetryPolicy;
 use crate::ssl::CassSsl;
 use crate::timestamp_generator::CassTimestampGen;
@@ -864,6 +866,11 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         local_dc: local_dc.to_owned(),
         permit_dc_failover,
     });
+    load_balancing_config.filtering.dc_restriction = if permit_dc_failover {
+        DcRestriction::None
+    } else {
+        DcRestriction::Local(local_dc.to_owned())
+    };
 
     CassError::CASS_OK
 }
