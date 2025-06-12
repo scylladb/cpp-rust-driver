@@ -933,7 +933,7 @@ mod tests {
                         cass_execution_profile_set_load_balance_dc_aware(
                             profile_raw.borrow_mut(),
                             c"eu".as_ptr(),
-                            0,
+                            0, // forbid DC failover
                             0
                         ),
                         CassError::CASS_OK
@@ -953,8 +953,12 @@ mod tests {
                     let profile = BoxFFI::as_ref(profile_raw.borrow()).unwrap();
                     let load_balancing_kind = &profile.load_balancing_config.load_balancing_kind;
                     match load_balancing_kind {
-                        Some(LoadBalancingKind::DcAware { local_dc }) => {
-                            assert_eq!(local_dc, "eu")
+                        Some(LoadBalancingKind::DcAware {
+                            local_dc,
+                            permit_dc_failover,
+                        }) => {
+                            assert_eq!(local_dc, "eu");
+                            assert!(!permit_dc_failover);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
@@ -963,16 +967,7 @@ mod tests {
                 }
                 /* Test invalid configurations */
                 {
-                    // Nonzero deprecated parameters
-                    assert_cass_error_eq!(
-                        cass_execution_profile_set_load_balance_dc_aware(
-                            profile_raw.borrow_mut(),
-                            c"eu".as_ptr(),
-                            1,
-                            0
-                        ),
-                        CassError::CASS_ERROR_LIB_BAD_PARAMS
-                    );
+                    // Nonzero (deprecated and unsupported) parameter
                     assert_cass_error_eq!(
                         cass_execution_profile_set_load_balance_dc_aware(
                             profile_raw.borrow_mut(),
