@@ -838,13 +838,19 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    if used_hosts_per_remote_dc != 0 {
-        tracing::error!(
-            "cass_*_set_load_balance_dc_aware(_n): `used_hosts_per_remote_dc` parameter is no longer \
-            supported in the driver. Set it to 0 to avoid this error."
+    let permit_dc_failover = if used_hosts_per_remote_dc > 0 {
+        // TODO: update cassandra.h documentation to reflect this behaviour.
+        tracing::warn!(
+            "cass_*_set_load_balance_dc_aware(_n): `used_hosts_per_remote_dc` parameter is only partially \
+            supported in the driver: `0` is supported correctly, and any value `>0` has the semantics of \"+inf\", \
+            which means no limit on the number of hosts per remote DC. This is different from the original cpp-driver! \
+            To clarify, you can understand this parameter as \"permit_dc_failover\", with `0` being `false` and `>0` \
+            being `true`."
         );
-        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
+        true
+    } else {
+        false
+    };
 
     if allow_remote_dcs_for_local_cl != 0 {
         tracing::error!(
@@ -856,6 +862,7 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
 
     load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::DcAware {
         local_dc: local_dc.to_owned(),
+        permit_dc_failover,
     });
 
     CassError::CASS_OK
@@ -1774,7 +1781,7 @@ mod tests {
                         cass_cluster_set_load_balance_dc_aware(
                             cluster_raw.borrow_mut(),
                             c"eu".as_ptr(),
-                            0,
+                            0, // forbid DC failover
                             0
                         ),
                         CassError::CASS_OK
@@ -1794,8 +1801,12 @@ mod tests {
                     let cluster = BoxFFI::as_ref(cluster_raw.borrow()).unwrap();
                     let load_balancing_kind = &cluster.load_balancing_config.load_balancing_kind;
                     match load_balancing_kind {
-                        Some(LoadBalancingKind::DcAware { local_dc }) => {
-                            assert_eq!(local_dc, "eu")
+                        Some(LoadBalancingKind::DcAware {
+                            local_dc,
+                            permit_dc_failover,
+                        }) => {
+                            assert_eq!(local_dc, "eu");
+                            assert!(!permit_dc_failover);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
@@ -1831,7 +1842,7 @@ mod tests {
                         cass_cluster_set_load_balance_dc_aware(
                             cluster_raw.borrow_mut(),
                             c"eu".as_ptr(),
-                            0,
+                            42, // allow DC failover
                             0
                         ),
                         CassError::CASS_OK
@@ -1841,24 +1852,19 @@ mod tests {
                     let node_location_preference =
                         &cluster.load_balancing_config.load_balancing_kind;
                     match node_location_preference {
-                        Some(LoadBalancingKind::DcAware { local_dc }) => {
-                            assert_eq!(local_dc, "eu")
+                        Some(LoadBalancingKind::DcAware {
+                            local_dc,
+                            permit_dc_failover,
+                        }) => {
+                            assert_eq!(local_dc, "eu");
+                            assert!(permit_dc_failover);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
                 }
                 /* Test invalid configurations */
                 {
-                    // Nonzero deprecated parameters
-                    assert_cass_error_eq!(
-                        cass_cluster_set_load_balance_dc_aware(
-                            cluster_raw.borrow_mut(),
-                            c"eu".as_ptr(),
-                            1,
-                            0
-                        ),
-                        CassError::CASS_ERROR_LIB_BAD_PARAMS
-                    );
+                    // Nonzero (deprecated and unsupported) parameter
                     assert_cass_error_eq!(
                         cass_cluster_set_load_balance_dc_aware(
                             cluster_raw.borrow_mut(),
