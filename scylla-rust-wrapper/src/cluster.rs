@@ -826,10 +826,15 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
     used_hosts_per_remote_dc: c_uint,
     allow_remote_dcs_for_local_cl: cass_bool_t,
 ) -> CassError {
-    if local_dc_raw.is_null() || local_dc_length == 0 {
+    let Some(local_dc) = (unsafe { ptr_to_cstr_n(local_dc_raw, local_dc_length) }) else {
         tracing::error!(
-            "Provided null or empty local DC name to cass_*_set_load_balance_dc_aware(_n)!"
+            "Provided null or non-UTF-8 local DC name to cass_*_set_load_balance_dc_aware(_n)!"
         );
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    if local_dc_length == 0 {
+        tracing::error!("Provided empty local DC name to cass_*_set_load_balance_dc_aware(_n)!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
@@ -838,11 +843,9 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     }
 
-    let local_dc = unsafe { ptr_to_cstr_n(local_dc_raw, local_dc_length) }
-        .unwrap()
-        .to_string();
-
-    load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::DcAware { local_dc });
+    load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::DcAware {
+        local_dc: local_dc.to_owned(),
+    });
 
     CassError::CASS_OK
 }
