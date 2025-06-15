@@ -31,7 +31,7 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub enum BoundStatement {
-    Simple(BoundSimpleQuery),
+    Simple(BoundSimpleStatement),
     Prepared(BoundPreparedStatement),
 }
 
@@ -111,13 +111,13 @@ impl BoundPreparedStatement {
 }
 
 #[derive(Clone)]
-pub(crate) struct BoundSimpleQuery {
+pub(crate) struct BoundSimpleStatement {
     pub(crate) query: Statement,
     pub(crate) bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
     pub(crate) name_to_bound_index: HashMap<String, usize>,
 }
 
-impl BoundSimpleQuery {
+impl BoundSimpleStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         match self.bound_values.get_mut(index) {
             Some(v) => {
@@ -236,7 +236,7 @@ impl CassStatement {
         }
     }
 
-    pub(crate) fn new_unprepared(statement: BoundSimpleQuery) -> Self {
+    pub(crate) fn new_unprepared(statement: BoundSimpleStatement) -> Self {
         Self::new(BoundStatement::Simple(statement))
     }
 
@@ -304,7 +304,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     let query = Statement::new(query_str.to_string());
 
-    let simple_query = BoundSimpleQuery {
+    let simple_query = BoundSimpleStatement {
         query,
         bound_values: vec![Unset; parameter_count as usize],
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
