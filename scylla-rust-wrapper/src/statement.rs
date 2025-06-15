@@ -225,6 +225,25 @@ impl FFI for CassStatement {
 }
 
 impl CassStatement {
+    fn new(statement: BoundStatement) -> Self {
+        Self {
+            statement,
+            paging_state: PagingState::start(),
+            // Cpp driver disables paging by default.
+            paging_enabled: false,
+            request_timeout_ms: None,
+            exec_profile: None,
+        }
+    }
+
+    pub(crate) fn new_unprepared(statement: BoundSimpleQuery) -> Self {
+        Self::new(BoundStatement::Simple(statement))
+    }
+
+    pub(crate) fn new_prepared(statement: BoundPreparedStatement) -> Self {
+        Self::new(BoundStatement::Prepared(statement))
+    }
+
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         match &mut self.statement {
             BoundStatement::Simple(simple) => simple.bind_cql_value(index, value),
@@ -291,14 +310,7 @@ pub unsafe extern "C" fn cass_statement_new_n(
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
     };
 
-    BoxFFI::into_ptr(Box::new(CassStatement {
-        statement: BoundStatement::Simple(simple_query),
-        paging_state: PagingState::start(),
-        // Cpp driver disables paging by default.
-        paging_enabled: false,
-        request_timeout_ms: None,
-        exec_profile: None,
-    }))
+    BoxFFI::into_ptr(Box::new(CassStatement::new_unprepared(simple_query)))
 }
 
 #[unsafe(no_mangle)]
