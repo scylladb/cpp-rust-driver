@@ -16,7 +16,7 @@ use crate::cluster::CassCluster;
 use crate::future::{CassFuture, CassResultValue};
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
-use crate::types::{cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
+use crate::types::{cass_bool_t, cass_int32_t, cass_uint16_t, cass_uint64_t, size_t};
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn testing_cluster_get_connect_timeout(
@@ -175,6 +175,78 @@ pub unsafe extern "C" fn testing_batch_set_sleeping_history_listener(
     Arc::make_mut(&mut batch.state)
         .batch
         .set_history_listener(history_listener)
+}
+
+/// Used to record attempted hosts during a request.
+/// This is useful for testing purposes and is used in integration tests.
+/// This is enabled by `testing_statement_set_recording_history_listener`
+/// and can be queried using `testing_future_get_attempted_hosts`.
+#[derive(Debug)]
+pub(crate) struct RecordingHistoryListener {
+    attempted_hosts: std::sync::Mutex<Vec<SocketAddr>>,
+}
+
+impl RecordingHistoryListener {
+    pub(crate) fn new() -> Self {
+        RecordingHistoryListener {
+            attempted_hosts: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    #[expect(unused)] // <- next commit removes this
+    pub(crate) fn get_attempted_hosts(&self) -> Vec<SocketAddr> {
+        self.attempted_hosts.lock().unwrap().clone()
+    }
+}
+
+impl HistoryListener for RecordingHistoryListener {
+    fn log_request_start(&self) -> RequestId {
+        RequestId(0)
+    }
+
+    fn log_request_success(&self, _request_id: RequestId) {}
+
+    fn log_request_error(&self, _request_id: RequestId, _error: &RequestError) {}
+
+    fn log_new_speculative_fiber(&self, _request_id: RequestId) -> SpeculativeId {
+        SpeculativeId(0)
+    }
+
+    fn log_attempt_start(
+        &self,
+        _request_id: RequestId,
+        _speculative_id: Option<SpeculativeId>,
+        node_addr: SocketAddr,
+    ) -> AttemptId {
+        // Record the host that was attempted.
+        self.attempted_hosts.lock().unwrap().push(node_addr);
+
+        AttemptId(0)
+    }
+
+    fn log_attempt_success(&self, _attempt_id: AttemptId) {}
+
+    fn log_attempt_error(
+        &self,
+        _attempt_id: AttemptId,
+        _error: &RequestAttemptError,
+        _retry_decision: &RetryDecision,
+    ) {
+    }
+}
+
+/// Enables recording of attempted hosts in the statement's history listener.
+/// This is useful for testing purposes, allowing us to verify which hosts were attempted
+/// during a request.
+/// Later, `testing_future_get_attempted_hosts` can be used to retrieve this information.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_statement_set_recording_history_listener(
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    enable: cass_bool_t,
+) {
+    let statement = &mut BoxFFI::as_mut_ref(statement_raw).unwrap();
+
+    statement.record_hosts = enable != 0;
 }
 
 /// A retry policy that always ignores all errors.

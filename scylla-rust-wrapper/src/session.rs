@@ -295,6 +295,23 @@ pub unsafe extern "C" fn cass_session_execute(
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
     let mut statement = statement_opt.statement.clone();
+
+    #[cfg(cpp_integration_testing)]
+    statement_opt.record_hosts.then(|| {
+        let recording_listener =
+            Arc::new(crate::integration_testing::RecordingHistoryListener::new());
+        match statement {
+            BoundStatement::Simple(ref mut unprepared) => {
+                unprepared.query.set_history_listener(recording_listener);
+            }
+            BoundStatement::Prepared(ref mut prepared) => {
+                Arc::make_mut(&mut prepared.statement)
+                    .statement
+                    .set_history_listener(recording_listener);
+            }
+        };
+    });
+
     let statement_exec_profile = statement_opt.exec_profile.clone();
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.

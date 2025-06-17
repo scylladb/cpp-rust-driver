@@ -218,6 +218,8 @@ pub struct CassStatement {
     pub(crate) request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
+    #[cfg(cpp_integration_testing)]
+    pub(crate) record_hosts: bool,
 }
 
 impl FFI for CassStatement {
@@ -233,6 +235,8 @@ impl CassStatement {
             paging_enabled: false,
             request_timeout_ms: None,
             exec_profile: None,
+            #[cfg(cpp_integration_testing)]
+            record_hosts: false,
         }
     }
 
