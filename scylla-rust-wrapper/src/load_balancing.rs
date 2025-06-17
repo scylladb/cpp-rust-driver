@@ -296,7 +296,9 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
     ) -> Option<(scylla::cluster::NodeRef<'a>, Option<scylla::routing::Shard>)> {
         let picked = self.child_policy.pick(request, cluster);
 
-        picked.and_then(|target| {
+        tracing::trace!("Child policy pick'd {:?}", picked);
+
+        let our_pick = picked.and_then(|target| {
             let node = target.0;
             let dc = node.datacenter.as_deref();
             (self.filtering.is_host_allowed(&node.address.ip(), dc)
@@ -304,7 +306,9 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
                     .dc_local_cl_allowance
                     .is_dc_allowed(dc, request.consistency))
             .then_some(target)
-        })
+        });
+        tracing::trace!("Filtering policy pick'd {:?}", our_pick);
+        our_pick
     }
 
     fn fallback<'a>(
@@ -317,10 +321,21 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
                 .fallback(request, cluster)
                 .filter(|(node, _shard)| {
                     let dc = node.datacenter.as_deref();
-                    self.filtering.is_host_allowed(&node.address.ip(), dc)
-                        && self
-                            .dc_local_cl_allowance
-                            .is_dc_allowed(dc, request.consistency)
+                    let is_host_allowed = self.filtering.is_host_allowed(&node.address.ip(), dc);
+                    let is_dc_allowed = self
+                        .dc_local_cl_allowance
+                        .is_dc_allowed(dc, request.consistency);
+                    tracing::trace!(
+                        "Filtering policy got {:?} in fallback and decided to {}.",
+                        node,
+                        match (is_host_allowed, is_dc_allowed) {
+                            (false, false) => "DROP it because neither host nor DC are not allowed",
+                            (false, true) => "DROP it because host is not allowed",
+                            (true, false) => "DROP it because DC is not allowed",
+                            (true, true) => "KEEP it because both host and DC are allowed",
+                        }
+                    );
+                    is_host_allowed && is_dc_allowed
                 }),
         )
     }
