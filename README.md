@@ -153,7 +153,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 
 # Limitations
 
-##### Note: This section may be incomplete, so not everything that is unimplemented is mentioned here.
+##### Note: This section may be incomplete, so not everything that is not fully supported is mentioned here.
 
 <table>
     <thead>
@@ -211,6 +211,179 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
         </tr>
     </tbody>
 </table>
+
+## Unimplemented functions from `cassandra.h`
+
+#### CassAggregate:
+- cass_aggregate_meta_argument_count
+- cass_aggregate_meta_argument_type
+- cass_aggregate_meta_field_by_name
+- cass_aggregate_meta_field_by_name_n
+- cass_aggregate_meta_final_func
+- cass_aggregate_meta_full_name
+- cass_aggregate_meta_init_cond
+- cass_aggregate_meta_name
+- cass_aggregate_meta_return_type
+- cass_aggregate_meta_state_func
+- cass_aggregate_meta_state_type
+
+#### CassAlloc:
+- cass_alloc_set_functions
+
+#### CassAuthenticator:
+- cass_authenticator_address
+- cass_authenticator_class_name
+- cass_authenticator_exchange_data
+- cass_authenticator_hostname
+- cass_authenticator_response
+- cass_authenticator_set_error
+- cass_authenticator_set_error_n
+- cass_authenticator_set_exchange_data
+- cass_authenticator_set_response
+
+#### CassBatch:
+- cass_batch_set_custom_payload
+- cass_batch_set_keyspace
+- cass_batch_set_keyspace_n
+
+#### CassCluster:
+- cass_cluster_set_authenticator_callbacks
+- cass_cluster_set_cloud_secure_connection_bundle
+- cass_cluster_set_cloud_secure_connection_bundle_n
+- cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init
+- cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init_n
+- cass_cluster_set_constant_reconnect
+- cass_cluster_set_exponential_reconnect
+- cass_cluster_set_host_listener_callback
+- cass_cluster_set_max_concurrent_creation
+- cass_cluster_set_max_concurrent_requests_threshold
+- cass_cluster_set_max_requests_per_flush
+- cass_cluster_set_max_reusable_write_objects
+- cass_cluster_set_monitor_reporting_interval
+- cass_cluster_set_new_request_ratio
+- cass_cluster_set_no_compact
+- cass_cluster_set_num_threads_io
+- cass_cluster_set_pending_requests_high_water_mark
+- cass_cluster_set_pending_requests_low_water_mark
+- cass_cluster_set_prepare_on_all_hosts
+- cass_cluster_set_prepare_on_up_or_add_host
+- cass_cluster_set_queue_size_event
+- cass_cluster_set_queue_size_io
+- cass_cluster_set_reconnect_wait_time
+- cass_cluster_set_resolve_timeout
+- cass_cluster_set_tracing_consistency
+- cass_cluster_set_tracing_max_wait_time
+- cass_cluster_set_tracing_retry_wait_time
+- cass_cluster_set_use_hostname_resolution
+- cass_cluster_set_use_randomized_contact_points
+- cass_cluster_set_write_bytes_high_water_mark
+- cass_cluster_set_write_bytes_low_water_mark
+
+#### CassCollection:
+- cass_collection_append_custom
+- cass_collection_append_custom_n
+
+#### CassColumn
+- cass_column_meta_field_by_name
+- cass_column_meta_field_by_name_n
+
+#### CassCustomPayload:
+- cass_custom_payload_free
+- cass_custom_payload_new
+- cass_custom_payload_remove
+- cass_custom_payload_remove_n
+- cass_custom_payload_set
+- cass_custom_payload_set_n
+
+#### CassFunctionMeta:
+- cass_function_meta_argument
+- cass_function_meta_argument_count
+- cass_function_meta_argument_type_by_name
+- cass_function_meta_argument_type_by_name_n
+- cass_function_meta_body
+- cass_function_meta_body
+- cass_function_meta_called_on_null_input
+- cass_function_meta_field_by_name
+- cass_function_meta_field_by_name_n
+- cass_function_meta_full_name
+- cass_function_meta_language
+- cass_function_meta_name
+- cass_function_meta_return_type
+
+#### CassFuture:
+- cass_future_custom_payload_item
+- cass_future_custom_payload_item_count
+
+#### CassIndexMeta:
+- cass_index_meta_field_by_name
+- cass_index_meta_field_by_name_n
+- cass_index_meta_name
+- cass_index_meta_options
+- cass_index_meta_target
+- cass_index_meta_type
+
+#### CassIterator:
+- cass_iterator_aggregates_from_keyspace_meta
+- cass_iterator_fields_from_aggregate_meta
+- cass_iterator_fields_from_column_meta
+- cass_iterator_fields_from_function_meta
+- cass_iterator_fields_from_index_meta
+- cass_iterator_fields_from_keyspace_meta
+- cass_iterator_fields_from_materialized_view_meta
+- cass_iterator_fields_from_table_meta
+- cass_iterator_functions_from_keyspace_meta
+- cass_iterator_get_aggregate_meta
+- cass_iterator_get_function_meta
+- cass_iterator_get_index_meta
+- cass_iterator_get_meta_field_name
+- cass_iterator_get_meta_field_value
+- cass_iterator_indexes_from_table_meta
+
+#### CassKeyspaceMeta:
+- cass_keyspace_meta_aggregate_by_name
+- cass_keyspace_meta_aggregate_by_name_n
+- cass_keyspace_meta_field_by_name
+- cass_keyspace_meta_field_by_name_n
+- cass_keyspace_meta_function_by_name
+- cass_keyspace_meta_function_by_name_n
+- cass_keyspace_meta_is_virtual
+
+#### CassMaterializedViewMeta:
+- cass_materialized_view_meta_clustering_key_order
+- cass_materialized_view_meta_field_by_name
+- cass_materialized_view_meta_field_by_name_n
+
+#### CassSchemaMeta:
+- cass_schema_meta_snapshot_version
+- cass_schema_meta_version
+
+#### CassSession:
+- cass_session_get_speculative_execution_metrics
+
+#### CassStatement:
+- cass_statement_add_key_index
+- cass_statement_bind_custom
+- cass_statement_bind_custom_by_name
+- cass_statement_bind_custom_by_name_n
+- cass_statement_bind_custom_n
+- cass_statement_set_custom_payload
+- cass_statement_set_keyspace
+- cass_statement_set_keyspace_n
+
+#### CassTableMeta:
+- cass_table_meta_clustering_key_order
+- cass_table_meta_field_by_name
+- cass_table_meta_field_by_name_n
+- cass_table_meta_index
+- cass_table_meta_index_by_name
+- cass_table_meta_index_by_name_n
+- cass_table_meta_index_count
+- cass_table_meta_is_virtual
+
+#### CassTuple:
+- cass_tuple_set_custom
+- cass_tuple_set_custom_n
+
 
 # Testing
 ___
