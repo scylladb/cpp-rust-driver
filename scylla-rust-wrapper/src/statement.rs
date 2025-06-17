@@ -31,7 +31,7 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub enum BoundStatement {
-    Simple(BoundSimpleQuery),
+    Simple(BoundSimpleStatement),
     Prepared(BoundPreparedStatement),
 }
 
@@ -111,13 +111,13 @@ impl BoundPreparedStatement {
 }
 
 #[derive(Clone)]
-pub(crate) struct BoundSimpleQuery {
+pub(crate) struct BoundSimpleStatement {
     pub(crate) query: Statement,
     pub(crate) bound_values: Vec<MaybeUnset<Option<CassCqlValue>>>,
     pub(crate) name_to_bound_index: HashMap<String, usize>,
 }
 
-impl BoundSimpleQuery {
+impl BoundSimpleStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         match self.bound_values.get_mut(index) {
             Some(v) => {
@@ -218,6 +218,8 @@ pub struct CassStatement {
     pub(crate) request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
+    #[cfg(cpp_integration_testing)]
+    pub(crate) record_hosts: bool,
 }
 
 impl FFI for CassStatement {
@@ -225,6 +227,27 @@ impl FFI for CassStatement {
 }
 
 impl CassStatement {
+    fn new(statement: BoundStatement) -> Self {
+        Self {
+            statement,
+            paging_state: PagingState::start(),
+            // Cpp driver disables paging by default.
+            paging_enabled: false,
+            request_timeout_ms: None,
+            exec_profile: None,
+            #[cfg(cpp_integration_testing)]
+            record_hosts: false,
+        }
+    }
+
+    pub(crate) fn new_unprepared(statement: BoundSimpleStatement) -> Self {
+        Self::new(BoundStatement::Simple(statement))
+    }
+
+    pub(crate) fn new_prepared(statement: BoundPreparedStatement) -> Self {
+        Self::new(BoundStatement::Prepared(statement))
+    }
+
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
         match &mut self.statement {
             BoundStatement::Simple(simple) => simple.bind_cql_value(index, value),
@@ -285,20 +308,13 @@ pub unsafe extern "C" fn cass_statement_new_n(
 
     let query = Statement::new(query_str.to_string());
 
-    let simple_query = BoundSimpleQuery {
+    let simple_query = BoundSimpleStatement {
         query,
         bound_values: vec![Unset; parameter_count as usize],
         name_to_bound_index: HashMap::with_capacity(parameter_count as usize),
     };
 
-    BoxFFI::into_ptr(Box::new(CassStatement {
-        statement: BoundStatement::Simple(simple_query),
-        paging_state: PagingState::start(),
-        // Cpp driver disables paging by default.
-        paging_enabled: false,
-        request_timeout_ms: None,
-        exec_profile: None,
-    }))
+    BoxFFI::into_ptr(Box::new(CassStatement::new_unprepared(simple_query)))
 }
 
 #[unsafe(no_mangle)]

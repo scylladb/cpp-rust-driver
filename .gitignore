@@ -1,4 +1,5 @@
 .vscode/
+.zed
 build/
 scylla-rust-wrapper/target/
 .idea/

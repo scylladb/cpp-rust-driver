@@ -1,4 +1,3 @@
-use scylla::response::PagingState;
 use scylla::value::MaybeUnset::Unset;
 use std::{os::raw::c_char, sync::Arc};
 
@@ -7,7 +6,7 @@ use crate::{
     cass_error::CassError,
     cass_types::{CassDataType, get_column_type},
     query_result::CassResultMetadata,
-    statement::{BoundPreparedStatement, BoundStatement, CassStatement},
+    statement::{BoundPreparedStatement, CassStatement},
     types::size_t,
 };
 use scylla::statement::prepared::PreparedStatement;
@@ -98,19 +97,12 @@ pub unsafe extern "C" fn cass_prepared_bind(
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
     // the CassPrepared argument
 
-    let statement = BoundStatement::Prepared(BoundPreparedStatement {
+    let statement = BoundPreparedStatement {
         statement: prepared,
         bound_values: vec![Unset; bound_values_size],
-    });
+    };
 
-    BoxFFI::into_ptr(Box::new(CassStatement {
-        statement,
-        paging_state: PagingState::start(),
-        // Cpp driver disables paging by default.
-        paging_enabled: false,
-        request_timeout_ms: None,
-        exec_profile: None,
-    }))
+    BoxFFI::into_ptr(Box::new(CassStatement::new_prepared(statement)))
 }
 
 #[unsafe(no_mangle)]

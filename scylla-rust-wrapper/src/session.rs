@@ -81,7 +81,7 @@ impl CassSessionInner {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
-        CassFuture::make_raw(Self::connect_fut(
+        let fut = Self::connect_fut(
             session_opt,
             session_builder,
             exec_profile_map,
@@ -91,7 +91,13 @@ impl CassSessionInner {
                 // If user did not set a client id, generate a random uuid v4.
                 .unwrap_or_else(uuid::Uuid::new_v4),
             keyspace,
-        ))
+        );
+
+        CassFuture::make_raw(
+            fut,
+            #[cfg(cpp_integration_testing)]
+            None,
+        )
     }
 
     async fn connect_fut(
@@ -255,10 +261,16 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     };
 
     match request_timeout_ms {
-        Some(timeout_ms) => {
-            CassFuture::make_raw(async move { request_with_timeout(timeout_ms, future).await })
-        }
-        None => CassFuture::make_raw(future),
+        Some(timeout_ms) => CassFuture::make_raw(
+            async move { request_with_timeout(timeout_ms, future).await },
+            #[cfg(cpp_integration_testing)]
+            None,
+        ),
+        None => CassFuture::make_raw(
+            future,
+            #[cfg(cpp_integration_testing)]
+            None,
+        ),
     }
 }
 
@@ -295,6 +307,28 @@ pub unsafe extern "C" fn cass_session_execute(
     let request_timeout_ms = statement_opt.request_timeout_ms;
 
     let mut statement = statement_opt.statement.clone();
+
+    #[cfg(cpp_integration_testing)]
+    let recording_listener = statement_opt.record_hosts.then(|| {
+        let recording_listener =
+            Arc::new(crate::integration_testing::RecordingHistoryListener::new());
+        match statement {
+            BoundStatement::Simple(ref mut unprepared) => {
+                unprepared
+                    .query
+                    .set_history_listener(Arc::clone(&recording_listener) as _);
+            }
+            BoundStatement::Prepared(ref mut prepared) => {
+                // It's extremely interesting to me that this `as _` cast is required
+                // for the type checker to accept this code.
+                Arc::make_mut(&mut prepared.statement)
+                    .statement
+                    .set_history_listener(Arc::clone(&recording_listener) as _);
+            }
+        };
+        recording_listener
+    });
+
     let statement_exec_profile = statement_opt.exec_profile.clone();
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
@@ -409,10 +443,16 @@ pub unsafe extern "C" fn cass_session_execute(
     };
 
     match request_timeout_ms {
-        Some(timeout_ms) => {
-            CassFuture::make_raw(async move { request_with_timeout(timeout_ms, future).await })
-        }
-        None => CassFuture::make_raw(future),
+        Some(timeout_ms) => CassFuture::make_raw(
+            async move { request_with_timeout(timeout_ms, future).await },
+            #[cfg(cpp_integration_testing)]
+            recording_listener,
+        ),
+        None => CassFuture::make_raw(
+            future,
+            #[cfg(cpp_integration_testing)]
+            recording_listener,
+        ),
     }
 }
 
@@ -432,31 +472,35 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     let statement = cass_statement.statement.clone();
 
-    CassFuture::make_raw(async move {
-        let query = match &statement {
-            BoundStatement::Simple(q) => q,
-            BoundStatement::Prepared(ps) => {
-                return Ok(CassResultValue::Prepared(ps.statement.clone()));
+    CassFuture::make_raw(
+        async move {
+            let query = match &statement {
+                BoundStatement::Simple(q) => q,
+                BoundStatement::Prepared(ps) => {
+                    return Ok(CassResultValue::Prepared(Arc::clone(&ps.statement)));
+                }
+            };
+
+            let session_guard = session.read().await;
+            if session_guard.is_none() {
+                return Err((
+                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                    "Session is not connected".msg(),
+                ));
             }
-        };
+            let session = &session_guard.as_ref().unwrap().session;
+            let prepared = session
+                .prepare(query.query.clone())
+                .await
+                .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
-        let session_guard = session.read().await;
-        if session_guard.is_none() {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        }
-        let session = &session_guard.as_ref().unwrap().session;
-        let prepared = session
-            .prepare(query.query.clone())
-            .await
-            .map_err(|err| (err.to_cass_error(), err.msg()))?;
-
-        Ok(CassResultValue::Prepared(Arc::new(
-            CassPrepared::new_from_prepared_statement(prepared),
-        )))
-    })
+            Ok(CassResultValue::Prepared(Arc::new(
+                CassPrepared::new_from_prepared_statement(prepared),
+            )))
+        },
+        #[cfg(cpp_integration_testing)]
+        None,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -486,7 +530,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
 
-    CassFuture::make_raw(async move {
+    let fut = async move {
         let session_guard = cass_session.read().await;
         if session_guard.is_none() {
             return Err((
@@ -507,7 +551,13 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         Ok(CassResultValue::Prepared(Arc::new(
             CassPrepared::new_from_prepared_statement(prepared),
         )))
-    })
+    };
+
+    CassFuture::make_raw(
+        fut,
+        #[cfg(cpp_integration_testing)]
+        None,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -524,19 +574,23 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(async move {
-        let mut session_guard = session_opt.write().await;
-        if session_guard.is_none() {
-            return Err((
-                CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                "Already closing or closed".msg(),
-            ));
-        }
+    CassFuture::make_raw(
+        async move {
+            let mut session_guard = session_opt.write().await;
+            if session_guard.is_none() {
+                return Err((
+                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                    "Already closing or closed".msg(),
+                ));
+            }
 
-        *session_guard = None;
+            *session_guard = None;
 
-        Ok(CassResultValue::Empty)
-    })
+            Ok(CassResultValue::Empty)
+        },
+        #[cfg(cpp_integration_testing)]
+        None,
+    )
 }
 
 #[unsafe(no_mangle)]

@@ -60,6 +60,8 @@ pub struct CassFuture {
     state: Mutex<CassFutureState>,
     result: OnceLock<CassFutureResult>,
     wait_for_value: Condvar,
+    #[cfg(cpp_integration_testing)]
+    recording_listener: Option<Arc<crate::integration_testing::RecordingHistoryListener>>,
 }
 
 impl FFI for CassFuture {
@@ -79,17 +81,30 @@ struct JoinHandleTimeout(JoinHandle<()>);
 impl CassFuture {
     pub(crate) fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
+        #[cfg(cpp_integration_testing)] recording_listener: Option<
+            Arc<crate::integration_testing::RecordingHistoryListener>,
+        >,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-        Self::new_from_future(fut).into_raw()
+        Self::new_from_future(
+            fut,
+            #[cfg(cpp_integration_testing)]
+            recording_listener,
+        )
+        .into_raw()
     }
 
     pub(crate) fn new_from_future(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
+        #[cfg(cpp_integration_testing)] recording_listener: Option<
+            Arc<crate::integration_testing::RecordingHistoryListener>,
+        >,
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
             state: Mutex::new(Default::default()),
             result: OnceLock::new(),
             wait_for_value: Condvar::new(),
+            #[cfg(cpp_integration_testing)]
+            recording_listener,
         });
         let cass_fut_clone = Arc::clone(&cass_fut);
         let join_handle = RUNTIME.spawn(async move {
@@ -125,6 +140,8 @@ impl CassFuture {
             state: Mutex::new(CassFutureState::default()),
             result: OnceLock::from(r),
             wait_for_value: Condvar::new(),
+            #[cfg(cpp_integration_testing)]
+            recording_listener: None,
         })
     }
 
@@ -299,6 +316,15 @@ impl CassFuture {
 
     fn into_raw(self: Arc<Self>) -> CassOwnedSharedPtr<Self, CMut> {
         ArcFFI::into_ptr(self)
+    }
+
+    #[cfg(cpp_integration_testing)]
+    pub(crate) fn attempted_hosts(&self) -> Vec<std::net::SocketAddr> {
+        if let Some(listener) = &self.recording_listener {
+            listener.get_attempted_hosts()
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -527,7 +553,11 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
             Err((CassError::CASS_OK, ERROR_MSG.into()))
         };
-        let cass_fut = CassFuture::make_raw(fut);
+        let cass_fut = CassFuture::make_raw(
+            fut,
+            #[cfg(cpp_integration_testing)]
+            None,
+        );
 
         struct PtrWrapper(CassBorrowedSharedPtr<'static, CassFuture, CMut>);
         unsafe impl Send for PtrWrapper {}
@@ -562,7 +592,11 @@ mod tests {
             tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
             Err((CassError::CASS_OK, ERROR_MSG.into()))
         };
-        let cass_fut = CassFuture::make_raw(fut);
+        let cass_fut = CassFuture::make_raw(
+            fut,
+            #[cfg(cpp_integration_testing)]
+            None,
+        );
 
         unsafe {
             // This should timeout on tokio::time::timeout.
@@ -609,7 +643,11 @@ mod tests {
                 tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
                 Err((CassError::CASS_OK, ERROR_MSG.into()))
             };
-            let cass_fut = CassFuture::make_raw(fut);
+            let cass_fut = CassFuture::make_raw(
+                fut,
+                #[cfg(cpp_integration_testing)]
+                None,
+            );
             let flag = Box::new(false);
             let flag_ptr = Box::into_raw(flag);
 
