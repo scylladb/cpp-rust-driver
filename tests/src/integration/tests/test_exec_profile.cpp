@@ -193,15 +193,15 @@ public:
   void SetUp() {
     // Create the execution profiles for the test cases
     profiles_["dc_aware"] = ExecutionProfile::build()
-                                .with_load_balance_dc_aware("dc1", 0, false)
+                                .with_load_balance_dc_aware("dc1", 1, false)
                                 .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
     profiles_["blacklist_dc"] = ExecutionProfile::build()
                                     .with_blacklist_dc_filtering("dc1")
-                                    .with_load_balance_dc_aware("dc1", 0, false)
+                                    .with_load_balance_dc_aware("dc1", 1, true)
                                     .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
     profiles_["whitelist_dc"] = ExecutionProfile::build()
                                     .with_whitelist_dc_filtering("dc2")
-                                    .with_load_balance_dc_aware("dc1", 0, false)
+                                    .with_load_balance_dc_aware("dc1", 1, true)
                                     .with_consistency(CASS_CONSISTENCY_LOCAL_ONE);
 
     // Call the parent setup function
@@ -715,6 +715,11 @@ CASSANDRA_INTEGRATION_TEST_F(ExecutionProfileTest, SpeculativeExecutionPolicy) {
 CASSANDRA_INTEGRATION_TEST_F(DCExecutionProfileTest, DCAware) {
   CHECK_FAILURE;
 
+  // Determine the disallowed IP address for the statement DC-aware execution
+  int const unexpected_node = 3; // The node in DC2.
+  std::stringstream unexpected_ip_address;
+  unexpected_ip_address << ccm_->get_ip_prefix() << unexpected_node;
+
   // Execute statements over all the nodes in the cluster twice
   for (size_t i = 0; i < total_nodes_ * 2; ++i) {
     // Execute the same query with the cluster default profile
@@ -722,28 +727,19 @@ CASSANDRA_INTEGRATION_TEST_F(DCExecutionProfileTest, DCAware) {
     Result result = session_.execute(insert_);
     ASSERT_EQ(CASS_OK, result.error_code());
 
-    // Determine the expected IP address for the statement execution
-    int expected_node = ((i * 2) % number_dc1_nodes_) + 1;
-    std::stringstream expected_ip_address;
-    expected_ip_address << ccm_->get_ip_prefix() << expected_node;
-
     // Execute a batched query with assigned profile
     Batch batch;
     batch.add(insert_);
     batch.set_execution_profile("dc_aware");
     result = session_.execute(batch);
     ASSERT_EQ(CASS_OK, result.error_code());
-    ASSERT_STREQ(expected_ip_address.str().c_str(), result.host().c_str());
-
-    // Increment the expected round robin IP address
-    expected_ip_address.str("");
-    expected_ip_address << ccm_->get_ip_prefix() << expected_node + 1;
+    ASSERT_STRNE(unexpected_ip_address.str().c_str(), result.host().c_str());
 
     // Execute a simple query with assigned profile
     insert_.set_execution_profile("dc_aware");
     result = session_.execute(insert_);
     ASSERT_EQ(CASS_OK, result.error_code());
-    ASSERT_STREQ(expected_ip_address.str().c_str(), result.host().c_str());
+    ASSERT_STRNE(unexpected_ip_address.str().c_str(), result.host().c_str());
   }
 }
 

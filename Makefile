@@ -38,6 +38,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
+:DcAwarePolicyTest.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
 :SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
@@ -46,7 +47,6 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_RoundRobin\
 :ExecutionProfileTest.Integration_Cassandra_TokenAwareRouting\
 :ExecutionProfileTest.Integration_Cassandra_SpeculativeExecutionPolicy\
-:DCExecutionProfileTest.Integration_Cassandra_DCAware\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
@@ -98,6 +98,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
+:DcAwarePolicyTest.*\
 :-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
 :PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
@@ -107,7 +108,6 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.Integration_Cassandra_RoundRobin\
 :ExecutionProfileTest.Integration_Cassandra_TokenAwareRouting\
 :ExecutionProfileTest.Integration_Cassandra_SpeculativeExecutionPolicy\
-:DCExecutionProfileTest.Integration_Cassandra_DCAware\
 :ControlConnectionTests.Integration_Cassandra_TopologyChange\
 :ControlConnectionTests.Integration_Cassandra_FullOutage\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
