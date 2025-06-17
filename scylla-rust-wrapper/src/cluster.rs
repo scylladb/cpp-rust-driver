@@ -854,17 +854,12 @@ pub(crate) unsafe fn set_load_balance_dc_aware_n(
         false
     };
 
-    if allow_remote_dcs_for_local_cl != 0 {
-        tracing::error!(
-            "cass_*_set_load_balance_dc_aware(_n): `allow_remote_dcs_for_local_cl` parameter is no longer \
-            supported in the driver. Set it to 0 to avoid this error."
-        );
-        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
+    let allow_remote_dcs_for_local_cl = allow_remote_dcs_for_local_cl != 0;
 
     load_balancing_config.load_balancing_kind = Some(LoadBalancingKind::DcAware {
         local_dc: local_dc.to_owned(),
         permit_dc_failover,
+        allow_remote_dcs_for_local_cl,
     });
     load_balancing_config.filtering.dc_restriction = if permit_dc_failover {
         DcRestriction::None
@@ -1811,9 +1806,11 @@ mod tests {
                         Some(LoadBalancingKind::DcAware {
                             local_dc,
                             permit_dc_failover,
+                            allow_remote_dcs_for_local_cl,
                         }) => {
                             assert_eq!(local_dc, "eu");
                             assert!(!permit_dc_failover);
+                            assert!(!allow_remote_dcs_for_local_cl);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
@@ -1849,8 +1846,8 @@ mod tests {
                         cass_cluster_set_load_balance_dc_aware(
                             cluster_raw.borrow_mut(),
                             c"eu".as_ptr(),
-                            42, // allow DC failover
-                            0
+                            42,        // allow DC failover
+                            cass_true  // allow remote DCs for local CL
                         ),
                         CassError::CASS_OK
                     );
@@ -1862,26 +1859,17 @@ mod tests {
                         Some(LoadBalancingKind::DcAware {
                             local_dc,
                             permit_dc_failover,
+                            allow_remote_dcs_for_local_cl,
                         }) => {
                             assert_eq!(local_dc, "eu");
                             assert!(permit_dc_failover);
+                            assert!(allow_remote_dcs_for_local_cl);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
                 }
                 /* Test invalid configurations */
                 {
-                    // Nonzero (deprecated and unsupported) parameter
-                    assert_cass_error_eq!(
-                        cass_cluster_set_load_balance_dc_aware(
-                            cluster_raw.borrow_mut(),
-                            c"eu".as_ptr(),
-                            0,
-                            1
-                        ),
-                        CassError::CASS_ERROR_LIB_BAD_PARAMS
-                    );
-
                     // null pointers
                     assert_cass_error_eq!(
                         cass_cluster_set_load_balance_dc_aware(

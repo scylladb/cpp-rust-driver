@@ -956,27 +956,16 @@ mod tests {
                         Some(LoadBalancingKind::DcAware {
                             local_dc,
                             permit_dc_failover,
+                            allow_remote_dcs_for_local_cl,
                         }) => {
                             assert_eq!(local_dc, "eu");
                             assert!(!permit_dc_failover);
+                            assert!(!allow_remote_dcs_for_local_cl);
                         }
                         _ => panic!("Expected preferred dc"),
                     }
                     assert!(!profile.load_balancing_config.token_awareness_enabled);
                     assert!(profile.load_balancing_config.latency_awareness_enabled);
-                }
-                /* Test invalid configurations */
-                {
-                    // Nonzero (deprecated and unsupported) parameter
-                    assert_cass_error_eq!(
-                        cass_execution_profile_set_load_balance_dc_aware(
-                            profile_raw.borrow_mut(),
-                            c"eu".as_ptr(),
-                            0,
-                            1
-                        ),
-                        CassError::CASS_ERROR_LIB_BAD_PARAMS
-                    );
                 }
             }
 

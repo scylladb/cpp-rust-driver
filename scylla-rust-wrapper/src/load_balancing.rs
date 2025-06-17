@@ -9,6 +9,7 @@ use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::{
     DefaultPolicyBuilder, FallbackPlan, LatencyAwarenessBuilder, LoadBalancingPolicy, RoutingInfo,
 };
+use scylla::statement::Consistency;
 
 /// Whether the LBP allows contacting any hosts in remote datacenters.
 /// It strictly corresponds to `allow_hosts_per_remote_dcs` argument of
@@ -154,14 +155,28 @@ impl LoadBalancingConfig {
                 builder.enable_shuffling_replicas(self.token_aware_shuffling_replicas_enabled);
         }
 
-        match load_balancing_kind {
+        // Configure DC-related settings.
+        // This includes:
+        // - local DC-awareness,
+        // - DC failover,
+        // - remote DCs allowance for local consistency levels.
+        let dc_local_cl_allowance = match load_balancing_kind {
             LoadBalancingKind::DcAware {
                 local_dc,
                 permit_dc_failover,
+                allow_remote_dcs_for_local_cl,
             } => {
+                let dc_local_cl_allowance = if allow_remote_dcs_for_local_cl {
+                    DcLocalConsistencyAllowance::AllowAll
+                } else {
+                    DcLocalConsistencyAllowance::DisallowRemotes {
+                        local_dc: local_dc.clone(),
+                    }
+                };
                 builder = builder
                     .prefer_datacenter(local_dc)
-                    .permit_dc_failover(permit_dc_failover)
+                    .permit_dc_failover(permit_dc_failover);
+                dc_local_cl_allowance
             }
             LoadBalancingKind::RackAware {
                 local_dc,
@@ -169,10 +184,11 @@ impl LoadBalancingConfig {
             } => {
                 builder = builder
                     .prefer_datacenter_and_rack(local_dc, local_rack)
-                    .permit_dc_failover(true)
+                    .permit_dc_failover(true);
+                DcLocalConsistencyAllowance::AllowAll
             }
-            LoadBalancingKind::RoundRobin => {}
-        }
+            LoadBalancingKind::RoundRobin => DcLocalConsistencyAllowance::AllowAll,
+        };
 
         if self.latency_awareness_enabled {
             builder = builder.latency_awareness(self.latency_awareness_builder);
@@ -182,6 +198,7 @@ impl LoadBalancingConfig {
         Arc::new(FilteringLoadBalancingPolicy {
             filtering: self.filtering.into_filtering_info(),
             child_policy,
+            dc_local_cl_allowance,
         })
     }
 }
@@ -211,6 +228,7 @@ pub(crate) enum LoadBalancingKind {
     DcAware {
         local_dc: String,
         permit_dc_failover: bool,
+        allow_remote_dcs_for_local_cl: bool,
     },
     RackAware {
         local_dc: String,
@@ -265,8 +283,9 @@ impl DcLocalConsistencyAllowance {
 
 #[derive(Debug)]
 pub(crate) struct FilteringLoadBalancingPolicy {
-    pub(crate) filtering: FilteringInfo,
-    pub(crate) child_policy: Arc<dyn LoadBalancingPolicy>,
+    filtering: FilteringInfo,
+    dc_local_cl_allowance: DcLocalConsistencyAllowance,
+    child_policy: Arc<dyn LoadBalancingPolicy>,
 }
 
 impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
@@ -279,9 +298,12 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
 
         picked.and_then(|target| {
             let node = target.0;
-            self.filtering
-                .is_host_allowed(&node.address.ip(), node.datacenter.as_deref())
-                .then_some(target)
+            let dc = node.datacenter.as_deref();
+            (self.filtering.is_host_allowed(&node.address.ip(), dc)
+                && self
+                    .dc_local_cl_allowance
+                    .is_dc_allowed(dc, request.consistency))
+            .then_some(target)
         })
     }
 
@@ -294,8 +316,11 @@ impl LoadBalancingPolicy for FilteringLoadBalancingPolicy {
             self.child_policy
                 .fallback(request, cluster)
                 .filter(|(node, _shard)| {
-                    self.filtering
-                        .is_host_allowed(&node.address.ip(), node.datacenter.as_deref())
+                    let dc = node.datacenter.as_deref();
+                    self.filtering.is_host_allowed(&node.address.ip(), dc)
+                        && self
+                            .dc_local_cl_allowance
+                            .is_dc_allowed(dc, request.consistency)
                 }),
         )
     }
