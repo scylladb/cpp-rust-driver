@@ -193,7 +193,6 @@ impl RecordingHistoryListener {
         }
     }
 
-    #[expect(unused)] // <- next commit removes this
     pub(crate) fn get_attempted_hosts(&self) -> Vec<SocketAddr> {
         self.attempted_hosts.lock().unwrap().clone()
     }
