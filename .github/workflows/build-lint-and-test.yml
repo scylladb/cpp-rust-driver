@@ -2,16 +2,16 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
   # Should include `INTEGRATION_TEST_BIN` from the `Makefile`
   # TODO: Remove `build/libscylla-cpp-driver.*` after https://github.com/scylladb/cpp-rust-driver/issues/164 is fixed.
   INTEGRATION_TEST_BIN: |
-    build/cassandra-integration-tests 
+    build/cassandra-integration-tests
     build/libscylla-cpp-driver.*
   INTEGRATION_TEST_BIN_CACHE_KEY: integration-test-bin-${{ github.sha }}
   # Goes to `Makefile` to let it pickup cached binary
@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Update apt cache
         run: sudo apt-get update -y
 
@@ -57,7 +57,13 @@ jobs:
 
     strategy:
       matrix:
-        scylla-version: [ENTERPRISE-RELEASE, ENTERPRISE-PRIOR-RELEASE, OSS-RELEASE, OSS-PRIOR-RELEASE, 5.4.8]
+        scylla-version:
+          [
+            ENTERPRISE-RELEASE,
+            ENTERPRISE-PRIOR-RELEASE,
+            OSS-RELEASE,
+            OSS-PRIOR-RELEASE,
+          ]
       fail-fast: false
 
     steps:
@@ -67,7 +73,7 @@ jobs:
       - name: Setup Python 3
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Update apt cache
         run: sudo apt-get update -y
@@ -165,13 +171,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: 'adopt'
+          distribution: "adopt"
 
       - name: Setup Python 3
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          
+          python-version: "3.11"
+
       - name: Update apt cache
         run: sudo apt-get update -y
 
