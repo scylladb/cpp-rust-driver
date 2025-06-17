@@ -292,4 +292,4 @@ endif
 	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_NO_VALGRIND_TEST_FILTER}"
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
-	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo test
+	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="--cfg cpp_rust_unstable --cfg cpp_integration_testing" cargo test

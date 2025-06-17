@@ -1,4 +1,5 @@
 use std::ffi::{CString, c_char};
+use std::fmt::Write as _;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -246,6 +247,85 @@ pub unsafe extern "C" fn testing_statement_set_recording_history_listener(
     let statement = &mut BoxFFI::as_mut_ref(statement_raw).unwrap();
 
     statement.record_hosts = enable != 0;
+}
+
+/// Retrieves hosts that were attempted during the execution of a future.
+/// In order for this to work, the statement must have been configured with
+/// `testing_statement_set_recording_history_listener`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn testing_future_get_attempted_hosts(
+    future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
+) -> *mut c_char {
+    // This function should return a list of attempted hosts.
+    // Care should be taken to ensure that the list is properly allocated and freed.
+    // The problem is that the return type must be understandable by C code.
+    // See testing.cpp:53 (get_attempted_hosts_from_future()) for an example of how
+    // this is done in C++.
+    //
+    // Idea: Create a concatenated string of attempted hosts.
+    // Return a pointer to that string. Caller is responsible for freeing it.
+
+    let future: &CassFuture = ArcFFI::as_ref(future_raw).unwrap();
+
+    let attempted_hosts = future.attempted_hosts();
+    let concatenated_hosts = attempted_hosts.iter().fold(String::new(), |mut acc, host| {
+        // Convert the SocketAddr to a string.
+        // Delimit address strings with '\n' to enable easy parsing in C.
+
+        write!(&mut acc, "{}\n", host.ip()).unwrap();
+        acc
+    });
+
+    // The caller is responsible for freeing this memory, by calling `testing_free_cstring`.
+    unsafe { CString::from_vec_unchecked(concatenated_hosts.into_bytes()) }.into_raw()
+}
+
+/// Ensures that the `testing_future_get_attempted_hosts` function
+/// behaves correctly, i.e., it returns a list of attempted hosts as a concatenated string.
+#[test]
+fn test_future_get_attempted_hosts() {
+    use scylla::observability::history::HistoryListener as _;
+
+    let listener = Arc::new(RecordingHistoryListener::new());
+    let future = CassFuture::new_from_future(std::future::pending(), Some(listener.clone()));
+
+    fn assert_attempted_hosts_eq(future: &Arc<CassFuture>, hosts: &[String]) {
+        let hosts_str = unsafe { testing_future_get_attempted_hosts(ArcFFI::as_ptr(future)) };
+        let hosts_cstr = unsafe { CString::from_raw(hosts_str) };
+        let hosts_string = hosts_cstr.to_str().unwrap();
+
+        // Split the string by '\n' and collect into a Vec<&str>.
+        let attempted_hosts: Vec<&str> =
+            hosts_string.split('\n').filter(|s| !s.is_empty()).collect();
+
+        assert_eq!(attempted_hosts, hosts);
+    }
+
+    // 1. Test with no attempted hosts.
+    {
+        assert_attempted_hosts_eq(&future, &[]);
+    }
+
+    let addr1: SocketAddr = SocketAddr::from(([127, 0, 0, 1], 9042));
+    let addr2: SocketAddr = SocketAddr::from(([127, 0, 0, 2], 9042));
+
+    // 2. Attempt two hosts and see if they are recorded correctly, in order.
+    {
+        listener.log_attempt_start(RequestId(0), None, addr1);
+        listener.log_attempt_start(RequestId(0), None, addr2);
+        assert_attempted_hosts_eq(&future, &[addr1, addr2].map(|addr| addr.ip().to_string()))
+    }
+
+    let addr3: SocketAddr = SocketAddr::from(([127, 0, 0, 3], 9042));
+
+    // 3. Attempt one more host and see if all hosts are present, in order.
+    {
+        listener.log_attempt_start(RequestId(0), None, addr3);
+        assert_attempted_hosts_eq(
+            &future,
+            &[addr1, addr2, addr3].map(|addr| addr.ip().to_string()),
+        )
+    }
 }
 
 /// A retry policy that always ignores all errors.
