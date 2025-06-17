@@ -218,6 +218,51 @@ pub(crate) enum LoadBalancingKind {
     },
 }
 
+/// Determines whether remote DCs are allowed to be contacted when a local consistency
+/// level is used.
+#[derive(Debug)]
+enum DcLocalConsistencyAllowance {
+    /// The policy allows contacting hosts in all datacenters: the local one and remote ones.
+    AllowAll,
+    /// The policy does not allow contacting hosts in remote datacenters
+    /// if a local consistency level is used.
+    DisallowRemotes {
+        /// The local datacenter, which is the only one that is allowed to be contacted
+        /// when a local consistency level is used.
+        local_dc: String,
+    },
+}
+
+impl DcLocalConsistencyAllowance {
+    fn is_consistency_local(cl: Consistency) -> bool {
+        match cl {
+            Consistency::Any
+            | Consistency::One
+            | Consistency::Two
+            | Consistency::Three
+            | Consistency::Quorum
+            | Consistency::All
+            | Consistency::EachQuorum
+            | Consistency::Serial => false,
+            Consistency::LocalQuorum | Consistency::LocalOne | Consistency::LocalSerial => true,
+        }
+    }
+
+    fn is_dc_allowed(&self, dc: Option<&str>, cl: Consistency) -> bool {
+        match self {
+            DcLocalConsistencyAllowance::AllowAll => true,
+            DcLocalConsistencyAllowance::DisallowRemotes { local_dc }
+                if Self::is_consistency_local(cl) =>
+            {
+                // If the DC is not the one that is allowed - the local one, return false.
+                dc.is_some_and(|dc| local_dc == dc)
+            }
+            // Consistency is not local, so we allow all datacenters.
+            DcLocalConsistencyAllowance::DisallowRemotes { .. } => true,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct FilteringLoadBalancingPolicy {
     pub(crate) filtering: FilteringInfo,
@@ -567,6 +612,84 @@ mod tests {
                 CassHostFilter::new_from_lbp_configs_inner(load_balancing_configs.iter());
 
             assert_eq!(&cass_filter.filtering.allowed_dcs, merged);
+        }
+    }
+
+    #[test]
+    fn test_dc_local_cl_allowance() {
+        use super::DcLocalConsistencyAllowance;
+        use scylla::statement::Consistency;
+
+        struct TestCase {
+            allowance: DcLocalConsistencyAllowance,
+            dc: Option<&'static str>,
+            cl: Consistency,
+            expected: bool,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::AllowAll,
+                dc: Some("dc1"),
+                cl: Consistency::LocalQuorum,
+                expected: true,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::AllowAll,
+                dc: Some("dc1"),
+                cl: Consistency::Quorum,
+                expected: true,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::DisallowRemotes {
+                    local_dc: "dc1".to_owned(),
+                },
+                dc: Some("dc1"),
+                cl: Consistency::LocalQuorum,
+                expected: true,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::DisallowRemotes {
+                    local_dc: "dc1".to_owned(),
+                },
+                dc: Some("dc2"),
+                cl: Consistency::LocalQuorum,
+                expected: false,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::DisallowRemotes {
+                    local_dc: "dc1".to_owned(),
+                },
+                dc: None,
+                cl: Consistency::LocalQuorum,
+                expected: false,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::DisallowRemotes {
+                    local_dc: "dc1".to_owned(),
+                },
+                dc: Some("dc1"),
+                cl: Consistency::Quorum,
+                expected: true,
+            },
+            TestCase {
+                allowance: DcLocalConsistencyAllowance::DisallowRemotes {
+                    local_dc: "dc1".to_owned(),
+                },
+                dc: Some("dc2"),
+                cl: Consistency::Quorum,
+                expected: true,
+            },
+        ];
+
+        for TestCase {
+            allowance,
+            dc,
+            cl,
+            expected,
+        } in test_cases
+        {
+            assert_eq!(allowance.is_dc_allowed(dc, cl), expected);
         }
     }
 }
