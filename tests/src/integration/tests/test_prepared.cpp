@@ -100,7 +100,7 @@ CASSANDRA_INTEGRATION_TEST_F(PreparedTests, PreparedIDUnchangedDuringReprepare) 
       format_string(CASSANDRA_KEY_VALUE_TABLE_FORMAT, table_name_.c_str(), "int", "int"));
 
   // Execute the insert statement and validate success
-  logger_.add_critera("Prepared query with ID");
+  logger_.add_critera("repreparing statement with id");
   Statement insert_statement = insert_prepared.bind();
   insert_statement.bind<Integer>(0, Integer(0));
   insert_statement.bind<Integer>(1, Integer(1));
