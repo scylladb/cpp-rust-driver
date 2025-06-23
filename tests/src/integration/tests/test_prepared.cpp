@@ -62,12 +62,13 @@ CASSANDRA_INTEGRATION_TEST_F(PreparedTests, FailFastWhenPreparedIDChangesDuringR
                                  table_name_.c_str(), "int", "int"));
 
   // Execute the insert statement and validate the error code
-  logger_.add_critera("ID mismatch while trying to prepare query");
+  logger_.add_critera("Prepared statement id changed after repreparation");
   Statement insert_statement = insert_prepared.bind();
   insert_statement.bind<Integer>(0, Integer(0));
   insert_statement.bind<Integer>(1, Integer(1));
   Result result = session_.execute(insert_statement, false);
   EXPECT_TRUE(contains(result.error_message(), "Prepared statement id changed after repreparation"));
+  EXPECT_EQ(1u, logger_.count());
 }
 
 /**
