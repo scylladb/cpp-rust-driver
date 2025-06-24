@@ -314,7 +314,7 @@ impl CassFuture {
         CassError::CASS_OK
     }
 
-    fn into_raw(self: Arc<Self>) -> CassOwnedSharedPtr<Self, CMut> {
+    pub(crate) fn into_raw(self: Arc<Self>) -> CassOwnedSharedPtr<Self, CMut> {
         ArcFFI::into_ptr(self)
     }
 
