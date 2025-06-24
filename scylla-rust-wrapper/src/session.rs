@@ -37,13 +37,13 @@ use tokio::sync::RwLock;
 // CassSession would need to be a newtype wrapper around this struct
 // instead of a type alias.
 #[expect(unnameable_types)]
-pub struct CassSessionInner {
+pub struct CassConnectedSession {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
     client_id: uuid::Uuid,
 }
 
-impl CassSessionInner {
+impl CassConnectedSession {
     pub(crate) fn resolve_exec_profile(
         &self,
         name: &ExecProfileName,
@@ -77,7 +77,7 @@ impl CassSessionInner {
     }
 
     fn connect(
-        session_opt: Arc<RwLock<Option<CassSessionInner>>>,
+        session_opt: Arc<RwLock<Option<CassConnectedSession>>>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -156,7 +156,7 @@ impl CassSessionInner {
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
-        *session_guard = Some(CassSessionInner {
+        *session_guard = Some(CassConnectedSession {
             session,
             exec_profile_map,
             client_id,
@@ -185,7 +185,7 @@ impl CassSessionInner {
     }
 }
 
-pub type CassSession = RwLock<Option<CassSessionInner>>;
+pub type CassSession = RwLock<Option<CassConnectedSession>>;
 
 impl FFI for CassSession {
     type Origin = FromArc;
@@ -193,7 +193,7 @@ impl FFI for CassSession {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
-    let session = Arc::new(RwLock::new(None::<CassSessionInner>));
+    let session = Arc::new(RwLock::new(None::<CassConnectedSession>));
     ArcFFI::into_ptr(session)
 }
 
@@ -211,7 +211,7 @@ pub unsafe extern "C" fn cass_session_connect(
         return ArcFFI::null();
     };
 
-    CassSessionInner::connect(session_opt, cluster, None)
+    CassConnectedSession::connect(session_opt, cluster, None)
 }
 
 #[unsafe(no_mangle)]
@@ -240,7 +240,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     };
     let keyspace = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }.map(ToOwned::to_owned);
 
-    CassSessionInner::connect(session_opt, cluster, keyspace)
+    CassConnectedSession::connect(session_opt, cluster, keyspace)
 }
 
 #[unsafe(no_mangle)]
@@ -274,10 +274,10 @@ pub unsafe extern "C" fn cass_session_execute_batch(
             ));
         }
 
-        let cass_session_inner = &session_guard.as_ref().unwrap();
-        let session = &cass_session_inner.session;
+        let cass_connected_session = session_guard.as_ref().unwrap();
+        let session = &cass_connected_session.session;
 
-        let handle = cass_session_inner
+        let handle = cass_connected_session
             .get_or_resolve_profile_handle(batch_exec_profile.as_ref())
             .await?;
 
@@ -372,15 +372,15 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let future = async move {
         let session_guard = session_opt.read().await;
-        let Some(cass_session_inner) = session_guard.as_ref() else {
+        let Some(cass_connected_session) = session_guard.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
         };
-        let session = &cass_session_inner.session;
+        let session = &cass_connected_session.session;
 
-        let handle = cass_session_inner
+        let handle = cass_connected_session
             .get_or_resolve_profile_handle(statement_exec_profile.as_ref())
             .await?;
 
@@ -600,7 +600,7 @@ pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassS
         return;
     };
 
-    let close_fut = CassSessionInner::close_fut(session_opt);
+    let close_fut = CassConnectedSession::close_fut(session_opt);
     close_fut.with_waited_result(|_| ());
 
     // We don't have to drop the session's Arc explicitly, because it has been moved
@@ -616,7 +616,7 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassSessionInner::close_fut(session_opt).into_raw()
+    CassConnectedSession::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
