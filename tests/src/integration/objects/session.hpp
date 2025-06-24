@@ -286,7 +286,7 @@ protected:
     session.connect_future_.wait(false);
     if (assert_ok && session.connect_error_code() != CASS_OK) {
       throw Exception("Unable to Establish Session Connection: " +
-                          session.connect_error_description(),
+                          session.connect_error_description() + " - " + session.connect_error_message(),
                       session.connect_error_code(), session.connect_error_message());
     }
     return session;
