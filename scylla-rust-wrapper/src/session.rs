@@ -598,23 +598,7 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(
-        async move {
-            let mut session_guard = session_opt.write().await;
-            if session_guard.connected.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
-
-            session_guard.connected = None;
-
-            Ok(CassResultValue::Empty)
-        },
-        #[cfg(cpp_integration_testing)]
-        None,
-    )
+    CassConnectedSession::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
