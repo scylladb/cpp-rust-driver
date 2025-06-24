@@ -595,7 +595,16 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassSession, CMut>) {
-    ArcFFI::free(session_raw);
+    let Some(session_opt) = ArcFFI::from_ptr(session_raw) else {
+        // `free()` does nothing on null pointers, so by analogy let's do nothing here.
+        return;
+    };
+
+    let close_fut = CassSessionInner::close_fut(session_opt);
+    close_fut.with_waited_result(|_| ());
+
+    // We don't have to drop the session's Arc explicitly, because it has been moved
+    // into the CassFuture, which is dropped here with the end of the scope.
 }
 
 #[unsafe(no_mangle)]
