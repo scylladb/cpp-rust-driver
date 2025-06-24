@@ -129,8 +129,21 @@ impl CassSessionInner {
             exec_profile_map.insert(name, builder.build(&default_profile).await.into_handle());
         }
 
-        if let Some(keyspace) = keyspace {
-            session_builder = session_builder.use_keyspace(keyspace, false);
+        if let Some(maybe_quoted_keyspace) = keyspace {
+            // Handle case-sensitivity. If the keyspace name is enclosed in quotes, it is case-sensitive.
+            let (unquoted_keyspace, case_sensitive) =
+                if maybe_quoted_keyspace.starts_with('"') && maybe_quoted_keyspace.ends_with('"') {
+                    // Keyspace is case-sensitive. We acknowledge that and remove the quotes,
+                    // as the Rust Driver expects keyspace name without quotes and rejects non-alphanumeric characters.
+                    let mut quoted_keyspace = maybe_quoted_keyspace;
+                    quoted_keyspace.remove(0); // Remove the first quote.
+                    quoted_keyspace.pop(); // Remove the last quote.
+                    (quoted_keyspace, true)
+                } else {
+                    (maybe_quoted_keyspace, false)
+                };
+
+            session_builder = session_builder.use_keyspace(unquoted_keyspace, case_sensitive);
         }
 
         let session = session_builder

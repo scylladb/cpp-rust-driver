@@ -52,8 +52,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionFailure\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionAlreadyExists\
 :*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount)
 endif
 
 ifndef SCYLLA_NO_VALGRIND_TEST_FILTER
@@ -113,8 +112,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionAlreadyExists\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
 :*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+:PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount)
 endif
 
 ifndef CASSANDRA_NO_VALGRIND_TEST_FILTER
