@@ -32,12 +32,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-// Technically, we should not allow this struct to be public,
-// but this would require a lot of changes in the codebase:
-// CassSession would need to be a newtype wrapper around this struct
-// instead of a type alias.
-#[expect(unnameable_types)]
-pub struct CassConnectedSession {
+pub(crate) struct CassConnectedSession {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
     client_id: uuid::Uuid,
@@ -77,7 +72,7 @@ impl CassConnectedSession {
     }
 
     fn connect(
-        session_opt: Arc<RwLock<Option<CassConnectedSession>>>,
+        session_opt: Arc<RwLock<CassSessionInner>>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -105,7 +100,7 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
-        session_opt: Arc<RwLock<Option<CassConnectedSession>>>,
+        session_opt: Arc<RwLock<CassSessionInner>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
@@ -115,7 +110,7 @@ impl CassConnectedSession {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
         let mut session_guard = session_opt.write().await;
-        if session_guard.is_some() {
+        if session_guard.connected.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
                 "Already connecting, closing, or connected".msg(),
@@ -156,7 +151,7 @@ impl CassConnectedSession {
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
-        *session_guard = Some(CassConnectedSession {
+        session_guard.connected = Some(CassConnectedSession {
             session,
             exec_profile_map,
             client_id,
@@ -165,7 +160,18 @@ impl CassConnectedSession {
     }
 }
 
-pub type CassSession = RwLock<Option<CassConnectedSession>>;
+// Technically, we should not allow this struct to be public,
+// but this would require a lot of changes in the codebase:
+// CassSession would need to be a newtype wrapper around this struct
+// instead of a type alias.
+#[expect(unnameable_types)]
+pub struct CassSessionInner {
+    // This is an `Option` to allow the session to be closed.
+    // If it is `None`, the session is closed.
+    connected: Option<CassConnectedSession>,
+}
+
+pub type CassSession = RwLock<CassSessionInner>;
 
 impl FFI for CassSession {
     type Origin = FromArc;
@@ -173,7 +179,7 @@ impl FFI for CassSession {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
-    let session = Arc::new(RwLock::new(None::<CassConnectedSession>));
+    let session = Arc::new(RwLock::new(CassSessionInner { connected: None }));
     ArcFFI::into_ptr(session)
 }
 
@@ -247,14 +253,14 @@ pub unsafe extern "C" fn cass_session_execute_batch(
 
     let future = async move {
         let session_guard = session_opt.read().await;
-        if session_guard.is_none() {
+        if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
         }
 
-        let cass_connected_session = session_guard.as_ref().unwrap();
+        let cass_connected_session = session_guard.connected.as_ref().unwrap();
         let session = &cass_connected_session.session;
 
         let handle = cass_connected_session
@@ -352,13 +358,13 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let future = async move {
         let session_guard = session_opt.read().await;
-        if session_guard.is_none() {
+        if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
         }
-        let cass_connected_session = session_guard.as_ref().unwrap();
+        let cass_connected_session = session_guard.connected.as_ref().unwrap();
         let session = &cass_connected_session.session;
 
         let handle = cass_connected_session
@@ -499,13 +505,13 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
             };
 
             let session_guard = session.read().await;
-            if session_guard.is_none() {
+            if session_guard.connected.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                     "Session is not connected".msg(),
                 ));
             }
-            let session = &session_guard.as_ref().unwrap().session;
+            let session = &session_guard.connected.as_ref().unwrap().session;
             let prepared = session
                 .prepare(query.query.clone())
                 .await
@@ -549,13 +555,13 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 
     let fut = async move {
         let session_guard = cass_session.read().await;
-        if session_guard.is_none() {
+        if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
         }
-        let session = &session_guard.as_ref().unwrap().session;
+        let session = &session_guard.connected.as_ref().unwrap().session;
 
         let prepared = session
             .prepare(query)
@@ -591,14 +597,14 @@ pub unsafe extern "C" fn cass_session_close(
     CassFuture::make_raw(
         async move {
             let mut session_guard = session_opt.write().await;
-            if session_guard.is_none() {
+            if session_guard.connected.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
                     "Already closing or closed".msg(),
                 ));
             }
 
-            *session_guard = None;
+            session_guard.connected = None;
 
             Ok(CassResultValue::Empty)
         },
@@ -616,7 +622,12 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
+    let client_id: uuid::Uuid = cass_session
+        .blocking_read()
+        .connected
+        .as_ref()
+        .unwrap()
+        .client_id;
     client_id.into()
 }
 
@@ -629,6 +640,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
 
     for (keyspace_name, keyspace) in cass_session
         .blocking_read()
+        .connected
         .as_ref()
         .unwrap()
         .session
@@ -705,7 +717,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
     }
 
     let maybe_session_guard = maybe_session_lock.blocking_read();
-    let maybe_session = maybe_session_guard.as_ref();
+    let maybe_session = maybe_session_guard.connected.as_ref();
     let Some(session) = maybe_session else {
         tracing::warn!("Attempted to get metrics before connecting session object");
         return;
@@ -940,6 +952,7 @@ mod tests {
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
                         .blocking_read()
+                        .connected
                         .as_ref()
                         .unwrap()
                         .exec_profile_map
@@ -956,6 +969,7 @@ mod tests {
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
                         .blocking_read()
+                        .connected
                         .as_ref()
                         .unwrap()
                         .exec_profile_map
@@ -972,6 +986,7 @@ mod tests {
                 let profile_map_keys = ArcFFI::as_ref(session_raw.borrow())
                     .unwrap()
                     .blocking_read()
+                    .connected
                     .as_ref()
                     .unwrap()
                     .exec_profile_map
