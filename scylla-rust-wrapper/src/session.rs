@@ -352,13 +352,12 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let future = async move {
         let session_guard = session_opt.read().await;
-        if session_guard.is_none() {
+        let Some(cass_session_inner) = session_guard.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
-        }
-        let cass_session_inner = session_guard.as_ref().unwrap();
+        };
         let session = &cass_session_inner.session;
 
         let handle = cass_session_inner
