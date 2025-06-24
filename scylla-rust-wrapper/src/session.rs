@@ -1,3 +1,4 @@
+use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -30,12 +31,11 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
 
 pub(crate) struct CassConnectedSession {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
-    client_id: uuid::Uuid,
 }
 
 impl CassConnectedSession {
@@ -80,15 +80,18 @@ impl CassConnectedSession {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
+        let mut session_guard = RUNTIME.block_on(session_opt.write_owned());
+
+        if let Some(cluster_client_id) = cluster.get_client_id() {
+            // If the user set a client id, use it instead of the random one.
+            session_guard.client_id = cluster_client_id;
+        }
+
         let fut = Self::connect_fut(
-            session_opt,
+            session_guard,
             session_builder,
             exec_profile_map,
             host_filter,
-            cluster
-                .get_client_id()
-                // If user did not set a client id, generate a random uuid v4.
-                .unwrap_or_else(uuid::Uuid::new_v4),
             keyspace,
         );
 
@@ -100,16 +103,14 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
-        session_opt: Arc<RwLock<CassSessionInner>>,
+        mut session_guard: OwnedRwLockWriteGuard<CassSessionInner>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
-        client_id: uuid::Uuid,
         keyspace: Option<String>,
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
-        let mut session_guard = session_opt.write().await;
         if session_guard.connected.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
@@ -154,7 +155,6 @@ impl CassConnectedSession {
         session_guard.connected = Some(CassConnectedSession {
             session,
             exec_profile_map,
-            client_id,
         });
         Ok(CassResultValue::Empty)
     }
@@ -189,6 +189,10 @@ pub struct CassSessionInner {
     // This is an `Option` to allow the session to be closed.
     // If it is `None`, the session is closed.
     connected: Option<CassConnectedSession>,
+    // This is the same that the CPP Driver does: it generates a random UUID v4
+    // and stores it in the session. Upon connection, if the CassCluster
+    // has a client_id set, it will be used instead.
+    client_id: uuid::Uuid,
 }
 
 pub type CassSession = RwLock<CassSessionInner>;
@@ -199,7 +203,10 @@ impl FFI for CassSession {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
-    let session = Arc::new(RwLock::new(CassSessionInner { connected: None }));
+    let session = Arc::new(RwLock::new(CassSessionInner {
+        connected: None,
+        client_id: uuid::Uuid::new_v4(),
+    }));
     ArcFFI::into_ptr(session)
 }
 
@@ -650,12 +657,7 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session
-        .blocking_read()
-        .connected
-        .as_ref()
-        .unwrap()
-        .client_id;
+    let client_id: uuid::Uuid = cass_session.blocking_read().client_id;
     client_id.into()
 }
 
