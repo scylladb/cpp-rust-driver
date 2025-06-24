@@ -105,7 +105,7 @@ impl CassSessionInner {
     }
 
     async fn connect_fut(
-        session_opt: Arc<RwLock<Option<CassSessionInner>>>,
+        session_opt: Arc<RwLock<Option<Self>>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
@@ -162,6 +162,26 @@ impl CassSessionInner {
             client_id,
         });
         Ok(CassResultValue::Empty)
+    }
+
+    fn close_fut(session_opt: Arc<RwLock<Option<Self>>>) -> Arc<CassFuture> {
+        CassFuture::new_from_future(
+            async move {
+                let mut session_guard = session_opt.write().await;
+                if session_guard.is_none() {
+                    return Err((
+                        CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                        "Already closing or closed".msg(),
+                    ));
+                }
+
+                *session_guard = None;
+
+                Ok(CassResultValue::Empty)
+            },
+            #[cfg(cpp_integration_testing)]
+            None,
+        )
     }
 }
 
@@ -587,23 +607,7 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(
-        async move {
-            let mut session_guard = session_opt.write().await;
-            if session_guard.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
-
-            *session_guard = None;
-
-            Ok(CassResultValue::Empty)
-        },
-        #[cfg(cpp_integration_testing)]
-        None,
-    )
+    CassSessionInner::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
