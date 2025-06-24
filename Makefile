@@ -35,10 +35,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.*\
 :DCExecutionProfileTest.*\
 :DisconnectedNullStringApiArgsTest.*\
-:MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
-:MetricsTests.Integration_Cassandra_ErrorsConnectionTimeouts\
-:MetricsTests.Integration_Cassandra_Requests\
-:MetricsTests.Integration_Cassandra_StatsShardConnections\
+:MetricsTests.*\
 :DcAwarePolicyTest.*\
 :-SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
 :SchemaMetadataTest.Integration_Cassandra_VirtualMetadata\
@@ -52,6 +49,8 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ControlConnectionTests.Integration_Cassandra_TerminatedUsingMultipleIoThreadsWithError\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionFailure\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionAlreadyExists\
+:MetricsTests.Integration_Cassandra_StatsConnections\
+:MetricsTests.Integration_Cassandra_SpeculativeExecutionRequests\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount)
 endif
@@ -94,10 +93,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ExecutionProfileTest.*\
 :DCExecutionProfileTest.*\
 :DisconnectedNullStringApiArgsTest.*\
-:MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
-:MetricsTests.Integration_Cassandra_ErrorsConnectionTimeouts\
-:MetricsTests.Integration_Cassandra_Requests\
-:MetricsTests.Integration_Cassandra_StatsShardConnections\
+:MetricsTests.*\
 :DcAwarePolicyTest.*\
 :-PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
 :SchemaMetadataTest.Integration_Cassandra_RegularMetadataNotMarkedVirtual\
@@ -113,6 +109,8 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionFailure\
 :ServerSideFailureTests.Integration_Cassandra_ErrorFunctionAlreadyExists\
 :SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
+:MetricsTests.Integration_Cassandra_StatsConnections\
+:MetricsTests.Integration_Cassandra_SpeculativeExecutionRequests\
 :*NoCompactEnabledConnection\
 :PreparedMetadataTests.Integration_Cassandra_AlterProperlyUpdatesColumnCount)
 endif
