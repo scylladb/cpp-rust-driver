@@ -36,6 +36,7 @@ SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :DCExecutionProfileTest.*\
 :DisconnectedNullStringApiArgsTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
+:MetricsTests.Integration_Cassandra_ErrorsConnectionTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
 :DcAwarePolicyTest.*\
@@ -94,6 +95,7 @@ CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
 :DCExecutionProfileTest.*\
 :DisconnectedNullStringApiArgsTest.*\
 :MetricsTests.Integration_Cassandra_ErrorsRequestTimeouts\
+:MetricsTests.Integration_Cassandra_ErrorsConnectionTimeouts\
 :MetricsTests.Integration_Cassandra_Requests\
 :MetricsTests.Integration_Cassandra_StatsShardConnections\
 :DcAwarePolicyTest.*\
