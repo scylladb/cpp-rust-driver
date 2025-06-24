@@ -340,7 +340,7 @@ mod origin_sealed {
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
+pub unsafe trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
     /// Consumes the Box and returns a pointer with exclusive ownership.
     /// The pointer needs to be freed. See [`BoxFFI::free()`].
     fn into_ptr<CM: CMutability>(self: Box<Self>) -> CassPtr<'static, Self, (Exclusive, CM)> {
@@ -414,7 +414,7 @@ pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub(crate) trait ArcFFI: Sized + origin_sealed::FromArcSealed {
+pub(crate) unsafe trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
     #[allow(clippy::needless_lifetimes)]
@@ -505,7 +505,7 @@ pub(crate) trait ArcFFI: Sized + origin_sealed::FromArcSealed {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
+pub unsafe trait RefFFI: Sized + origin_sealed::FromRefSealed {
     /// Creates a borrowed pointer from a valid reference.
     #[allow(clippy::needless_lifetimes)]
     fn as_ptr<'a, CM: CMutability>(&'a self) -> CassPtr<'a, Self, (Shared, CM)> {
@@ -529,7 +529,7 @@ pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
     /// # use std::sync::{Arc, Weak};
     ///
     /// struct Foo;
-    /// impl FFI for Foo {
+    /// unsafe impl FFI for Foo {
     ///     type Origin = FromRef;
     /// }
     ///
@@ -579,7 +579,7 @@ pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
 /// - [`FromArc`]
 /// - [`FromRef`]
 #[allow(clippy::upper_case_acronyms)]
-pub trait FFI {
+pub unsafe trait FFI {
     type Origin;
 }
 
@@ -602,7 +602,7 @@ pub trait FFI {
 /// - user is responsible for freeing the associated memory (`cass_cluster_free`)
 pub struct FromBox;
 impl<T> origin_sealed::FromBoxSealed for T where T: FFI<Origin = FromBox> {}
-impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
+unsafe impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
 
 /// Represents types with a shared ownership.
 ///
@@ -621,7 +621,7 @@ impl<T> BoxFFI for T where T: FFI<Origin = FromBox> {}
 /// - user is responsible for freeing (decreasing RC of) the associated memory (`cass_data_type_free`)
 pub struct FromArc;
 impl<T> origin_sealed::FromArcSealed for T where T: FFI<Origin = FromArc> {}
-impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
+unsafe impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
 
 /// Represents borrowed types.
 ///
@@ -637,13 +637,13 @@ impl<T> ArcFFI for T where T: FFI<Origin = FromArc> {}
 /// - user only "borrows" the pointer - he is not responsible for freeing the memory
 pub struct FromRef;
 impl<T> origin_sealed::FromRefSealed for T where T: FFI<Origin = FromRef> {}
-impl<T> RefFFI for T where T: FFI<Origin = FromRef> {}
+unsafe impl<T> RefFFI for T where T: FFI<Origin = FromRef> {}
 
 /// ```compile_fail,E0499
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedExclusivePtr, CMut};
 /// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl FFI for Foo {
+/// unsafe impl FFI for Foo {
 ///     type Origin = FromBox;
 /// }
 ///
@@ -659,7 +659,7 @@ fn _test_box_ffi_cannot_have_two_mutable_references() {}
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedSharedPtr, CassBorrowedExclusivePtr, CConst, CMut};
 /// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl FFI for Foo {
+/// unsafe impl FFI for Foo {
 ///     type Origin = FromBox;
 /// }
 ///
@@ -675,7 +675,7 @@ fn _test_box_ffi_cannot_have_mutable_and_immutable_references_at_the_same_time()
 /// # use scylla_cpp_driver::argconv::{CassOwnedExclusivePtr, CassBorrowedSharedPtr, CMut};
 /// # use scylla_cpp_driver::argconv::{FFI, BoxFFI, FromBox};
 /// struct Foo;
-/// impl FFI for Foo {
+/// unsafe impl FFI for Foo {
 ///     type Origin = FromBox;
 /// }
 ///
@@ -691,7 +691,7 @@ fn _test_box_ffi_cannot_free_while_having_borrowed_pointer() {}
 /// # use scylla_cpp_driver::argconv::{FFI, ArcFFI, FromArc};
 /// # use std::sync::Arc;
 /// struct Foo;
-/// impl FFI for Foo {
+/// unsafe impl FFI for Foo {
 ///     type Origin = FromArc;
 /// }
 ///
@@ -707,7 +707,7 @@ fn _test_arc_ffi_cannot_clone_after_free() {}
 /// # use scylla_cpp_driver::argconv::{FFI, ArcFFI, FromArc};
 /// # use std::sync::Arc;
 /// struct Foo;
-/// impl FFI for Foo {
+/// unsafe impl FFI for Foo {
 ///     type Origin = FromArc;
 /// }
 ///

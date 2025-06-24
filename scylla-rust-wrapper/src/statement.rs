@@ -222,7 +222,7 @@ pub struct CassStatement {
     pub(crate) record_hosts: bool,
 }
 
-impl FFI for CassStatement {
+unsafe impl FFI for CassStatement {
     type Origin = FromBox;
 }
 

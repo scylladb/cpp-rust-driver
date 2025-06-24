@@ -150,7 +150,7 @@ impl CassSessionInner {
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
 
-impl FFI for CassSession {
+unsafe impl FFI for CassSession {
     type Origin = FromArc;
 }
 

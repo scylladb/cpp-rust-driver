@@ -19,7 +19,7 @@ pub enum CassErrorResult {
     Deserialization(#[from] DeserializationError),
 }
 
-impl FFI for CassErrorResult {
+unsafe impl FFI for CassErrorResult {
     type Origin = FromArc;
 }
 

@@ -22,7 +22,7 @@ pub struct CassBatch {
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
-impl FFI for CassBatch {
+unsafe impl FFI for CassBatch {
     type Origin = FromBox;
 }
 

@@ -35,7 +35,7 @@ pub struct CassCollection {
     pub(crate) items: Vec<CassCqlValue>,
 }
 
-impl FFI for CassCollection {
+unsafe impl FFI for CassCollection {
     type Origin = FromBox;
 }
 

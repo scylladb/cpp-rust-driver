@@ -13,7 +13,7 @@ pub struct CassSchemaMeta {
     pub(crate) keyspaces: HashMap<String, CassKeyspaceMeta>,
 }
 
-impl FFI for CassSchemaMeta {
+unsafe impl FFI for CassSchemaMeta {
     type Origin = FromBox;
 }
 
@@ -27,7 +27,7 @@ pub struct CassKeyspaceMeta {
 }
 
 // Owned by CassSchemaMeta
-impl FFI for CassKeyspaceMeta {
+unsafe impl FFI for CassKeyspaceMeta {
     type Origin = FromRef;
 }
 
@@ -44,7 +44,7 @@ pub struct CassTableMeta {
 // Either:
 // - owned by CassMaterializedViewMeta - won't be given to user
 // - Owned by CassKeyspaceMeta (in Arc), referenced (Weak) by CassMaterializedViewMeta
-impl FFI for CassTableMeta {
+unsafe impl FFI for CassTableMeta {
     type Origin = FromRef;
 }
 
@@ -55,7 +55,7 @@ pub struct CassMaterializedViewMeta {
 }
 
 // Shared ownership by CassKeyspaceMeta and CassTableMeta
-impl FFI for CassMaterializedViewMeta {
+unsafe impl FFI for CassMaterializedViewMeta {
     type Origin = FromRef;
 }
 
@@ -66,7 +66,7 @@ pub struct CassColumnMeta {
 }
 
 // Owned by CassTableMeta
-impl FFI for CassColumnMeta {
+unsafe impl FFI for CassColumnMeta {
     type Origin = FromRef;
 }
 

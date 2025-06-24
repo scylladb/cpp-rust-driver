@@ -39,7 +39,7 @@ pub struct CassExecProfile {
     pub(crate) load_balancing_config: LoadBalancingConfig,
 }
 
-impl FFI for CassExecProfile {
+unsafe impl FFI for CassExecProfile {
     type Origin = FromBox;
 }
 

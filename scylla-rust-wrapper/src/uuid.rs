@@ -17,7 +17,7 @@ pub struct CassUuidGen {
     pub(crate) last_timestamp: AtomicU64,
 }
 
-impl FFI for CassUuidGen {
+unsafe impl FFI for CassUuidGen {
     type Origin = FromBox;
 }
 

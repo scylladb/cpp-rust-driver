@@ -661,7 +661,7 @@ pub enum CassIterator<'result_or_schema> {
     ColumnsMeta(CassColumnsMetaIterator<'result_or_schema>),
 }
 
-impl FFI for CassIterator<'_> {
+unsafe impl FFI for CassIterator<'_> {
     type Origin = FromBox;
 }
 

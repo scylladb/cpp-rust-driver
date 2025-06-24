@@ -16,7 +16,7 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::prelude::*;
 
-impl FFI for CassLogMessage {
+unsafe impl FFI for CassLogMessage {
     type Origin = FromRef;
 }
 

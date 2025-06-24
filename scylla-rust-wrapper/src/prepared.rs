@@ -72,7 +72,7 @@ impl CassPrepared {
     }
 }
 
-impl FFI for CassPrepared {
+unsafe impl FFI for CassPrepared {
     type Origin = FromArc;
 }
 

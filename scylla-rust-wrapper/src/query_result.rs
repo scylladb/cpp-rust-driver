@@ -52,7 +52,7 @@ pub(crate) struct CassRowsResultSharedData {
 pub type CassNode = Coordinator;
 
 // Borrowed from CassResult in cass_future_coordinator.
-impl FFI for CassNode {
+unsafe impl FFI for CassNode {
     type Origin = FromRef;
 }
 
@@ -122,7 +122,7 @@ impl CassResult {
     }
 }
 
-impl FFI for CassResult {
+unsafe impl FFI for CassResult {
     type Origin = FromArc;
 }
 
@@ -169,7 +169,7 @@ pub struct CassRow<'result> {
     pub(crate) result_metadata: &'result CassResultMetadata,
 }
 
-impl FFI for CassRow<'_> {
+unsafe impl FFI for CassRow<'_> {
     type Origin = FromRef;
 }
 
@@ -441,7 +441,7 @@ pub struct CassValue<'result> {
     pub(crate) value_type: &'result Arc<CassDataType>,
 }
 
-impl FFI for CassValue<'_> {
+unsafe impl FFI for CassValue<'_> {
     type Origin = FromRef;
 }
 

@@ -14,7 +14,7 @@ pub struct CassUserType {
     pub(crate) field_values: Vec<Option<CassCqlValue>>,
 }
 
-impl FFI for CassUserType {
+unsafe impl FFI for CassUserType {
     type Origin = FromBox;
 }
 

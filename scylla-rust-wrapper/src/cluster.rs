@@ -139,7 +139,7 @@ impl CassCluster {
     }
 }
 
-impl FFI for CassCluster {
+unsafe impl FFI for CassCluster {
     type Origin = FromBox;
 }
 

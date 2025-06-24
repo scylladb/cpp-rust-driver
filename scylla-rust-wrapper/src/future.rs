@@ -64,7 +64,7 @@ pub struct CassFuture {
     recording_listener: Option<Arc<crate::integration_testing::RecordingHistoryListener>>,
 }
 
-impl FFI for CassFuture {
+unsafe impl FFI for CassFuture {
     type Origin = FromArc;
 }
 

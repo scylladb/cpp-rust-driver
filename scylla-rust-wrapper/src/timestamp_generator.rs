@@ -10,7 +10,7 @@ pub enum CassTimestampGen {
     Monotonic(Arc<MonotonicTimestampGenerator>),
 }
 
-impl FFI for CassTimestampGen {
+unsafe impl FFI for CassTimestampGen {
     type Origin = FromBox;
 }
 

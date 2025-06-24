@@ -19,7 +19,7 @@ pub struct CassSsl {
     pub(crate) trusted_store: *mut X509_STORE,
 }
 
-impl FFI for CassSsl {
+unsafe impl FFI for CassSsl {
     type Origin = FromArc;
 }
 

@@ -137,7 +137,7 @@ pub(crate) enum CassDataTypeInner {
     Custom(String),
 }
 
-impl FFI for CassDataType {
+unsafe impl FFI for CassDataType {
     type Origin = FromArc;
 }
 

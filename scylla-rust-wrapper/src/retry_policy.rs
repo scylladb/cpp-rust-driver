@@ -80,7 +80,7 @@ impl RetryPolicy for CassRetryPolicy {
     }
 }
 
-impl FFI for CassRetryPolicy {
+unsafe impl FFI for CassRetryPolicy {
     type Origin = FromArc;
 }
 

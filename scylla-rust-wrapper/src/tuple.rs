@@ -17,7 +17,7 @@ pub struct CassTuple {
     pub(crate) items: Vec<Option<CassCqlValue>>,
 }
 
-impl FFI for CassTuple {
+unsafe impl FFI for CassTuple {
     type Origin = FromBox;
 }
 
