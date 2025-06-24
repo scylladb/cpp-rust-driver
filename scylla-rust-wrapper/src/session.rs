@@ -836,9 +836,9 @@ mod tests {
         },
         cass_types::CassBatchType,
         cluster::{
-            cass_cluster_free, cass_cluster_new, cass_cluster_set_contact_points_n,
-            cass_cluster_set_execution_profile, cass_cluster_set_latency_aware_routing,
-            cass_cluster_set_retry_policy,
+            cass_cluster_free, cass_cluster_new, cass_cluster_set_client_id,
+            cass_cluster_set_contact_points_n, cass_cluster_set_execution_profile,
+            cass_cluster_set_latency_aware_routing, cass_cluster_set_retry_policy,
         },
         exec_profile::{
             ExecProfileName, cass_batch_set_execution_profile, cass_batch_set_execution_profile_n,
@@ -1810,6 +1810,37 @@ mod tests {
                 cass_execution_profile_free(profile_raw);
                 cass_session_free(session_raw);
             }
+        }
+    }
+
+    #[test]
+    #[ntest::timeout(5000)]
+    fn test_cass_session_get_client_id_on_disconnected_session() {
+        init_logger();
+        unsafe {
+            let session_raw = cass_session_new();
+
+            // Check that we can get a client ID from a disconnected session.
+            let _random_client_id = cass_session_get_client_id(session_raw.borrow());
+
+            let mut cluster_raw = cass_cluster_new();
+            let cluster_client_id = CassUuid {
+                time_and_version: 2137,
+                clock_seq_and_node: 7312,
+            };
+            cass_cluster_set_client_id(cluster_raw.borrow_mut(), cluster_client_id);
+
+            cass_session_connect(session_raw.borrow(), cluster_raw.borrow().into_c_const());
+            // Verify that the session inherits the client ID from the cluster.
+            let session_client_id = cass_session_get_client_id(session_raw.borrow());
+            assert_eq!(session_client_id, cluster_client_id);
+
+            // Verify that we can still get a client ID after disconnecting.
+            let session_client_id = cass_session_get_client_id(session_raw.borrow());
+            assert_eq!(session_client_id, cluster_client_id);
+
+            cass_session_free(session_raw);
+            cass_cluster_free(cluster_raw)
         }
     }
 }
