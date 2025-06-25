@@ -165,7 +165,13 @@ pub(crate) mod cass_metrics_types {
     include_bindgen_generated!("cppdriver_metrics_types.rs");
 }
 
-pub(crate) static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+pub(crate) static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+});
 pub(crate) static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
     RwLock::new(Logger {
         cb: Some(stderr_log_callback),
