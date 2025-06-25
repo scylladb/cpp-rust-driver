@@ -681,7 +681,8 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
+    let session_guard = RUNTIME.block_on(cass_session.read());
+    let client_id: uuid::Uuid = session_guard.as_ref().unwrap().client_id;
     client_id.into()
 }
 
@@ -692,8 +693,9 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     let cass_session = ArcFFI::as_ref(session).unwrap();
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
-    for (keyspace_name, keyspace) in cass_session
-        .blocking_read()
+    let session_guard = RUNTIME.block_on(cass_session.read());
+
+    for (keyspace_name, keyspace) in session_guard
         .as_ref()
         .unwrap()
         .session
@@ -769,7 +771,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
         return;
     }
 
-    let maybe_session_guard = maybe_session_lock.blocking_read();
+    let maybe_session_guard = RUNTIME.block_on(maybe_session_lock.read());
     let maybe_session = maybe_session_guard.as_ref();
     let Some(session) = maybe_session else {
         tracing::warn!("Attempted to get metrics before connecting session object");
@@ -1000,15 +1002,11 @@ mod tests {
                 ));
                 // Initially, the profile map is empty.
 
-                assert!(
-                    ArcFFI::as_ref(session_raw.borrow())
-                        .unwrap()
-                        .blocking_read()
-                        .as_ref()
-                        .unwrap()
-                        .exec_profile_map
-                        .is_empty()
-                );
+                let session_lock = ArcFFI::as_ref(session_raw.borrow()).unwrap();
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    assert!(session_guard.as_ref().unwrap().exec_profile_map.is_empty());
+                }
 
                 cass_cluster_set_execution_profile(
                     cluster_raw.borrow_mut(),
@@ -1016,15 +1014,10 @@ mod tests {
                     profile_raw.borrow_mut(),
                 );
                 // Mutations in cluster do not affect the session that was connected before.
-                assert!(
-                    ArcFFI::as_ref(session_raw.borrow())
-                        .unwrap()
-                        .blocking_read()
-                        .as_ref()
-                        .unwrap()
-                        .exec_profile_map
-                        .is_empty()
-                );
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    assert!(session_guard.as_ref().unwrap().exec_profile_map.is_empty());
+                }
 
                 cass_future_wait_check_and_free(cass_session_close(session_raw.borrow()));
 
@@ -1033,20 +1026,21 @@ mod tests {
                     session_raw.borrow(),
                     cluster_raw.borrow().into_c_const(),
                 ));
-                let profile_map_keys = ArcFFI::as_ref(session_raw.borrow())
-                    .unwrap()
-                    .blocking_read()
-                    .as_ref()
-                    .unwrap()
-                    .exec_profile_map
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>();
-                assert_eq!(
-                    profile_map_keys,
-                    std::iter::once(ExecProfileName::try_from("prof".to_owned()).unwrap())
-                        .collect::<HashSet<_>>()
-                );
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    let profile_map_keys = session_guard
+                        .as_ref()
+                        .unwrap()
+                        .exec_profile_map
+                        .keys()
+                        .cloned()
+                        .collect::<HashSet<_>>();
+                    assert_eq!(
+                        profile_map_keys,
+                        std::iter::once(ExecProfileName::try_from("prof".to_owned()).unwrap())
+                            .collect::<HashSet<_>>()
+                    );
+                }
                 cass_future_wait_check_and_free(cass_session_close(session_raw.borrow()));
             }
             cass_execution_profile_free(profile_raw);
