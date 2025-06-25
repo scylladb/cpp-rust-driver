@@ -1,3 +1,4 @@
+use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -31,7 +32,7 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
 
 pub(crate) struct CassSessionInner {
     session: Session,
@@ -81,8 +82,13 @@ impl CassSessionInner {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
+        // TODO: It's not clear whether this lock should be taken synchronously or asynchronously.
+        // In another PR that I have opened, however, I have made it synchronous,
+        // because it is needed to set the client_id synchronously, in line with the CPP Driver behaviour.
+        let session_guard = RUNTIME.block_on(session_opt.write_owned());
+
         let fut = Self::connect_fut(
-            session_opt,
+            session_guard,
             session_builder,
             exec_profile_map,
             host_filter,
@@ -101,7 +107,7 @@ impl CassSessionInner {
     }
 
     async fn connect_fut(
-        session_opt: Arc<RwLock<Option<Self>>>,
+        mut session_guard: OwnedRwLockWriteGuard<Option<Self>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
@@ -110,7 +116,6 @@ impl CassSessionInner {
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
-        let mut session_guard = session_opt.write().await;
         if session_guard.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
@@ -163,6 +168,15 @@ impl CassSessionInner {
     fn close_fut(session_opt: Arc<RwLock<Option<Self>>>) -> Arc<CassFuture> {
         CassFuture::new_from_future(
             async move {
+                // This lock is unavailable for writing as long as there are any running requests.
+                // This way we ensure that no requests are running when we close the session.
+                // If there are any requests running, they will finish before this lock is acquired.
+                //
+                // We take this lock only in the async block, because `cass_session_close` shall not
+                // itself block. Only the future returned by it shall block, until the session is closed.
+                //
+                // This will not deadlock on current_thread runtime, because the executor will execute
+                // remaining futures while waiting for the lock.
                 let mut session_guard = session_opt.write().await;
                 if session_guard.is_none() {
                     return Err((
@@ -261,8 +275,18 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     #[allow(unused, clippy::let_unit_value)]
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session_opt.read_owned());
+
     let future = async move {
-        let session_guard = session_opt.read().await;
         if session_guard.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -366,8 +390,18 @@ pub unsafe extern "C" fn cass_session_execute(
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session_opt.read_owned());
+
     let future = async move {
-        let session_guard = session_opt.read().await;
         let Some(cass_session_inner) = session_guard.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -504,6 +538,17 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     let statement = cass_statement.statement.clone();
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session.read_owned());
+
     CassFuture::make_raw(
         async move {
             let query = match &statement {
@@ -513,7 +558,6 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let session_guard = session.read().await;
             if session_guard.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -562,8 +606,18 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(cass_session.read_owned());
+
     let fut = async move {
-        let session_guard = cass_session.read().await;
         if session_guard.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
