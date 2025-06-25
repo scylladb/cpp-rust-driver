@@ -16,7 +16,7 @@
 
 #include "integration.hpp"
 
-#define NUMBER_OF_CONCURRENT_REQUESTS 4096u
+#define NUMBER_OF_CONCURRENT_REQUESTS 5u
 
 /**
  * Asynchronous integration tests
@@ -54,6 +54,7 @@ public:
       insert.bind<TimeUuid>(0, key);
       insert.bind<Integer>(1, Integer(i));
       insert.bind<Text>(2, Text(format_string("row-%d", i + 1)));
+      insert.set_sleep_time(100);
 
       // Execute the insert request asynchronously
       futures->push_back(session.execute_async(insert));

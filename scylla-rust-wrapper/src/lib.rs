@@ -145,7 +145,8 @@ pub(crate) mod cass_metrics_types {
 }
 
 pub(crate) static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
-    tokio::runtime::Builder::new_current_thread()
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .enable_all()
         .build()
         .unwrap()
