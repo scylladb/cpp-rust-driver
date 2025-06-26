@@ -854,7 +854,8 @@ mod tests {
             cass_statement_set_execution_profile_n,
         },
         future::{
-            cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
+            cass_future_error_code, cass_future_error_message, cass_future_free,
+            cass_future_set_callback, cass_future_wait,
         },
         retry_policy::{
             CassRetryPolicy, cass_retry_policy_default_new, cass_retry_policy_fallthrough_new,
@@ -866,8 +867,10 @@ mod tests {
     use std::{
         collections::HashSet,
         convert::{TryFrom, TryInto},
+        ffi::{CStr, c_void},
         iter,
         net::SocketAddr,
+        sync::atomic::{AtomicUsize, Ordering},
     };
 
     // This is for convenient logs from failing tests. Just call it at the beginning of a test.
@@ -1884,5 +1887,122 @@ mod tests {
         )
         .with_current_subscriber()
         .await;
+    }
+
+    #[tokio::test]
+    #[ntest::timeout(5000)]
+    async fn session_free_waits_for_requests_to_complete() {
+        init_logger();
+        test_with_one_proxy(
+            session_free_waits_for_requests_to_complete_do,
+            mock_init_rules(),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn session_free_waits_for_requests_to_complete_do(
+        node_addr: SocketAddr,
+        proxy: RunningProxy,
+    ) -> RunningProxy {
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw.borrow_mut(), c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+            let session_raw = cass_session_new();
+            cass_future_wait_check_and_free(cass_session_connect(
+                session_raw.borrow(),
+                cluster_raw.borrow().into_c_const(),
+            ));
+
+            tracing::debug!("Session connected, starting to execute requests...");
+
+            let statement = c"SELECT host_id FROM system.local WHERE key='local'" as *const CStr
+                as *const c_char;
+            let statement_raw = cass_statement_new(statement, 0);
+
+            let mut batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            // This batch is obviously invalid, because it contains a SELECT statement. This is OK for us,
+            // because we anyway expect the batch to fail. The goal is to have the future set, no matter if it's
+            // set with a success or an error.
+            cass_batch_add_statement(batch_raw.borrow_mut(), statement_raw.borrow());
+
+            let finished_executions = AtomicUsize::new(0);
+            unsafe extern "C" fn finished_execution_callback(
+                _future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
+                data: *mut c_void,
+            ) {
+                let finished_executions = unsafe { &*(data as *const AtomicUsize) };
+                finished_executions.fetch_add(1, Ordering::SeqCst);
+            }
+
+            const ITERATIONS: usize = 1;
+            const EXECUTIONS: usize = 3 * ITERATIONS; // One prepare, one statement and one batch per iteration.
+
+            let futures = (0..ITERATIONS)
+                .flat_map(|_| {
+                    // Prepare a statement
+                    let prepare_fut = cass_session_prepare(session_raw.borrow(), statement);
+
+                    // Execute a statement
+                    let statement_fut = cass_session_execute(
+                        session_raw.borrow(),
+                        statement_raw.borrow().into_c_const(),
+                    );
+
+                    // Execute a batch
+                    let batch_fut = cass_session_execute_batch(
+                        session_raw.borrow(),
+                        batch_raw.borrow().into_c_const(),
+                    );
+                    for fut in [
+                        prepare_fut.borrow(),
+                        statement_fut.borrow(),
+                        batch_fut.borrow(),
+                    ] {
+                        cass_future_set_callback(
+                            fut,
+                            Some(finished_execution_callback),
+                            std::ptr::addr_of!(finished_executions) as _,
+                        );
+                    }
+
+                    [prepare_fut, statement_fut, batch_fut]
+                })
+                .collect::<Vec<_>>();
+
+            tracing::debug!("Started all requests. Now, freeing statements and session...");
+
+            // Free the statement
+            cass_statement_free(statement_raw);
+            // Free the batch
+            cass_batch_free(batch_raw);
+
+            // Session is freed, but the requests may still be in-flight.
+            cass_session_free(session_raw);
+
+            tracing::debug!("Session freed.");
+
+            // Assert that the session awaited completion of all requests.
+            let actually_finished_executions = finished_executions.load(Ordering::SeqCst);
+            assert_eq!(
+                actually_finished_executions, EXECUTIONS,
+                "Expected {} requests to complete before the session was freed, but only {} did.",
+                EXECUTIONS, actually_finished_executions
+            );
+
+            futures.into_iter().for_each(|fut| {
+                // As per cassandra.h, "a future can be freed anytime".
+                cass_future_free(fut);
+            });
+
+            cass_cluster_free(cluster_raw);
+        }
+        proxy
     }
 }
