@@ -188,7 +188,7 @@ CassError select_from_udt(CassSession* session) {
         printf("%.*s ", (int)field_name_length, field_name);
 
         if (!cass_value_is_null(field_value)) {
-          if (cass_value_type(field_value) == CASS_VALUE_TYPE_VARCHAR) {
+          if (cass_value_type(field_value) == CASS_VALUE_TYPE_VARCHAR || cass_value_type(field_value) == CASS_VALUE_TYPE_TEXT) {
             const char* text;
             size_t text_length;
             cass_value_get_string(field_value, &text, &text_length);
