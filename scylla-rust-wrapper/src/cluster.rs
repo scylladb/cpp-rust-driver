@@ -1443,14 +1443,25 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let serial_consistency: SerialConsistency = match serial_consistency.try_into() {
-        Ok(c) => c,
-        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_serial_consistency) =
+        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+    else {
+        // Invalid serial consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.serial_consistency(Some(serial_consistency))
-    });
+    match maybe_set_serial_consistency {
+        MaybeUnsetConfig::Unset => {
+            // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(serial_consistency) => {
+            exec_profile_builder_modify(
+                &mut cluster.default_execution_profile_builder,
+                |builder| builder.serial_consistency(serial_consistency),
+            );
+        }
+    }
 
     CassError::CASS_OK
 }
