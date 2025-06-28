@@ -6,11 +6,11 @@ use std::os::raw::c_char;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
 
-pub(crate) unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
+pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
     unsafe { CStr::from_ptr(ptr) }.to_str().ok()
 }
 
-pub(crate) unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
+pub unsafe fn ptr_to_cstr_n(ptr: *const c_char, size: size_t) -> Option<&'static str> {
     if ptr.is_null() {
         return None;
     }
@@ -228,9 +228,8 @@ pub type CassBorrowedExclusivePtr<'a, T, CM> = CassPtr<'a, T, (Exclusive, CM)>;
 
 /// Utility method for tests. Useful when some method returns `T*`,
 /// and then another method accepts `const T*`.
-#[cfg(test)]
 impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
-    pub(crate) fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
+    pub fn into_c_const(self) -> CassPtr<'a, T, (P::Onwership, CConst)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -309,7 +308,7 @@ impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
     /// Resulting pointer inherits the lifetime from the immutable borrow
     /// of original pointer.
     #[allow(clippy::needless_lifetimes)]
-    pub(crate) fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
+    pub fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Shared, P::CMutability)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
@@ -323,8 +322,7 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
     /// of original pointer. Since the method accepts a mutable reference
     /// to the original pointer, we enforce aliasing ^ mutability principle at compile time.
     #[allow(clippy::needless_lifetimes)]
-    #[cfg_attr(not(test), expect(unused))]
-    pub(crate) fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
+    pub fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Exclusive, CMut)> {
         CassPtr {
             ptr: self.ptr,
             _phantom: PhantomData,
