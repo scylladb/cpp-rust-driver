@@ -54,7 +54,7 @@ macro_rules! include_bindgen_generated {
 }
 
 /// All numeric types are defined here.
-pub(crate) mod types {
+pub mod types {
     #![allow(non_camel_case_types)]
     // for `cass_false` and `cass_true` globals.
     #![allow(non_upper_case_globals)]

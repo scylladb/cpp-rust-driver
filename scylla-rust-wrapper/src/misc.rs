@@ -1,6 +1,6 @@
 use std::ffi::{CStr, c_char};
 
-use crate::{cass_error_types::CassWriteType, cass_types::CassConsistency};
+pub use crate::{cass_error_types::CassWriteType, cass_types::CassConsistency};
 
 impl CassConsistency {
     pub(crate) fn as_cstr(&self) -> &'static CStr {

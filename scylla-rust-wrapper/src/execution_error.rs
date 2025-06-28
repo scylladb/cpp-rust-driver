@@ -1,5 +1,6 @@
 use crate::argconv::*;
 use crate::cass_error::*;
+pub use crate::cass_error::{CassError, CassErrorSource};
 use crate::cass_error_types::CassWriteType;
 use crate::cass_types::CassConsistency;
 use crate::types::*;

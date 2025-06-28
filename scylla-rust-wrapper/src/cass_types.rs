@@ -8,9 +8,9 @@ use std::cell::UnsafeCell;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
-pub(crate) use crate::cass_batch_types::CassBatchType;
-pub(crate) use crate::cass_consistency_types::CassConsistency;
-pub(crate) use crate::cass_data_types::CassValueType;
+pub use crate::cass_batch_types::CassBatchType;
+pub use crate::cass_consistency_types::CassConsistency;
+pub use crate::cass_data_types::CassValueType;
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]

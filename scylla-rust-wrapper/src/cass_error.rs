@@ -1,7 +1,7 @@
 use scylla::errors::*;
 
 // Re-export error types.
-pub(crate) use crate::cass_error_types::{CassError, CassErrorSource};
+pub use crate::cass_error_types::{CassError, CassErrorSource};
 use crate::execution_error::CassErrorResult;
 use crate::statement::UnknownNamedParameterError;
 

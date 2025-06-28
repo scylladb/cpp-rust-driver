@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-pub(crate) struct CassSessionInner {
+pub struct CassSessionInner {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
     client_id: uuid::Uuid,

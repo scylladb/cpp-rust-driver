@@ -14,6 +14,7 @@
 pub mod execution_profile {
     #[rustfmt::skip]
     pub use crate::exec_profile::{
+        CassExecProfile,
         cass_execution_profile_free,
         cass_execution_profile_new,
         cass_execution_profile_set_blacklist_dc_filtering,
@@ -45,6 +46,7 @@ pub mod execution_profile {
 pub mod cluster {
     #[rustfmt::skip]
     pub use crate::cluster::{
+        CassCluster,
         cass_cluster_free,
         cass_cluster_new,
         cass_cluster_set_application_name,
@@ -139,6 +141,7 @@ pub mod cluster {
 pub mod session {
     #[rustfmt::skip]
     pub use crate::session::{
+        CassSession,
         cass_session_close,
         cass_session_connect,
         cass_session_connect_keyspace,
@@ -160,6 +163,7 @@ pub mod session {
 pub mod schema_meta {
     #[rustfmt::skip]
     pub use crate::metadata::{
+        CassSchemaMeta,
         cass_schema_meta_free,
         // cass_schema_meta_snapshot_version, UNIMPLEMENTED
         // cass_schema_meta_version, UNIMPLEMENTED
@@ -171,6 +175,7 @@ pub mod schema_meta {
 pub mod keyspace_meta {
     #[rustfmt::skip]
     pub use crate::metadata::{
+        CassKeyspaceMeta,
         // cass_keyspace_meta_aggregate_by_name, UNIMPLEMENTED
         // cass_keyspace_meta_aggregate_by_name_n, UNIMPLEMENTED
         // cass_keyspace_meta_field_by_name, UNIMPLEMENTED
@@ -191,6 +196,7 @@ pub mod keyspace_meta {
 pub mod table_meta {
     #[rustfmt::skip]
     pub use crate::metadata::{
+        CassTableMeta,
         cass_table_meta_clustering_key_count,
         cass_table_meta_clustering_key,
         // cass_table_meta_clustering_key_order, UNIMPLEMENTED
@@ -218,6 +224,7 @@ pub mod table_meta {
 pub mod materialized_view_meta {
     #[rustfmt::skip]
     pub use crate::metadata::{
+        CassMaterializedViewMeta,
         cass_materialized_view_meta_base_table,
         cass_materialized_view_meta_column,
         cass_materialized_view_meta_column_by_name,
@@ -237,6 +244,7 @@ pub mod materialized_view_meta {
 pub mod column_meta {
     #[rustfmt::skip]
     pub use crate::metadata::{
+        CassColumnMeta,
         cass_column_meta_data_type,
         // cass_column_meta_field_by_name, UNIMPLEMENTED
         // cass_column_meta_field_by_name_n, UNIMPLEMENTED
@@ -249,6 +257,7 @@ pub mod index_meta {
     #[expect(unused_imports)]
     #[rustfmt::skip]
     pub use crate::metadata::{
+        // CassIndexMeta,
         // cass_index_meta_name, UNIMPLEMENTED
         // cass_index_meta_field_by_name, UNIMPLEMENTED
         // cass_index_meta_field_by_name_n, UNIMPLEMENTED
@@ -262,6 +271,7 @@ pub mod function_meta {
     #[expect(unused_imports)]
     #[rustfmt::skip]
     pub use crate::metadata::{
+        // CassFunctionMeta,
         // cass_function_meta_argument_count, UNIMPLEMENTED
         // cass_function_meta_argument, UNIMPLEMENTED
         // cass_function_meta_argument_type_by_name, UNIMPLEMENTED
@@ -281,6 +291,7 @@ pub mod aggregate_meta {
     #[expect(unused_imports)]
     #[rustfmt::skip]
     pub use crate::metadata::{
+        // CassAggregateMeta,
         // cass_aggregate_meta_argument, UNIMPLEMENTED
         // cass_aggregate_meta_argument_count, UNIMPLEMENTED
         // cass_aggregate_meta_argument_type, UNIMPLEMENTED
@@ -299,6 +310,7 @@ pub mod aggregate_meta {
 pub mod ssl {
     #[rustfmt::skip]
     pub use crate::ssl::{
+        CassSsl,
         cass_ssl_add_trusted_cert,
         cass_ssl_add_trusted_cert_n,
         cass_ssl_free,
@@ -316,6 +328,7 @@ pub mod authenticator {
     #[expect(unused_imports)]
     #[rustfmt::skip]
     pub use crate::{
+        // CassAuthenticator,
         // cass_authenticator_address, UNIMPLEMENTED
         // cass_authenticator_hostname, UNIMPLEMENTED
         // cass_authenticator_class_name, UNIMPLEMENTED
@@ -331,6 +344,8 @@ pub mod authenticator {
 pub mod future {
     #[rustfmt::skip]
     pub use crate::future::{
+        CassFuture,
+        CassFutureCallback,
         cass_future_coordinator,
         cass_future_error_code,
         cass_future_error_message,
@@ -350,11 +365,17 @@ pub mod future {
         cass_future_custom_payload_item,  // FIXME: Should be unimplemented!
         cass_future_custom_payload_item_count,  // FIXME: Should be unimplemented!
     };
+
+    #[rustfmt::skip]
+    pub use crate::query_result::{
+        CassNode, // `cass_future_coordinator()` returns a `CassNode`.
+    };
 }
 
 pub mod statement {
     #[rustfmt::skip]
     pub use crate::statement::{
+        CassStatement,
         cass_statement_bind_bool,
         cass_statement_bind_bool_by_name,
         cass_statement_bind_bool_by_name_n,
@@ -448,6 +469,7 @@ pub mod statement {
 pub mod prepared {
     #[rustfmt::skip]
     pub use crate::prepared::{
+        CassPrepared,
         cass_prepared_bind,
         cass_prepared_free,
         cass_prepared_parameter_data_type,
@@ -460,6 +482,8 @@ pub mod prepared {
 pub mod batch {
     #[rustfmt::skip]
     pub use crate::batch::{
+        CassBatch,
+        CassBatchType,
         cass_batch_add_statement,
         cass_batch_free,
         cass_batch_new,
@@ -485,6 +509,7 @@ pub mod batch {
 pub mod data_type {
     #[rustfmt::skip]
     pub use crate::cass_types::{
+        CassDataType,
         cass_data_sub_type_count,
         cass_data_type_add_sub_type,
         cass_data_type_add_sub_type_by_name,
@@ -519,6 +544,7 @@ pub mod data_type {
 pub mod collection {
     #[rustfmt::skip]
     pub use crate::collection::{
+        CassCollection,
         cass_collection_append_bool,
         cass_collection_append_bytes,
         cass_collection_append_collection,
@@ -549,6 +575,7 @@ pub mod collection {
 pub mod tuple {
     #[rustfmt::skip]
     pub use crate::tuple::{
+        CassTuple,
         cass_tuple_data_type,
         cass_tuple_free,
         cass_tuple_new,
@@ -580,6 +607,7 @@ pub mod tuple {
 pub mod user_type {
     #[rustfmt::skip]
     pub use crate::user_type::{
+        CassUserType,
         cass_user_type_data_type,
         cass_user_type_free,
         cass_user_type_new_from_data_type,
@@ -648,6 +676,7 @@ pub mod user_type {
 pub mod result {
     #[rustfmt::skip]
     pub use crate::query_result::{
+        CassResult,
         cass_result_column_count,
         cass_result_column_data_type,
         cass_result_column_name,
@@ -663,6 +692,9 @@ pub mod result {
 pub mod error {
     #[rustfmt::skip]
     pub use crate::execution_error::{
+        CassError,
+        CassErrorResult,
+        CassErrorSource,
         cass_error_num_arg_types,
         cass_error_result_arg_type,
         cass_error_result_code,
@@ -687,6 +719,7 @@ pub mod error {
 pub mod iterator {
     #[rustfmt::skip]
     pub use crate::iterator::{
+        CassIterator,
         cass_iterator_fields_from_user_type,
         cass_iterator_free,
         cass_iterator_from_collection,
@@ -736,6 +769,7 @@ pub mod iterator {
 pub mod row {
     #[rustfmt::skip]
     pub use crate::query_result::{
+        CassRow,
         cass_row_get_column,
         cass_row_get_column_by_name,
         cass_row_get_column_by_name_n,
@@ -745,6 +779,8 @@ pub mod row {
 pub mod value {
     #[rustfmt::skip]
     pub use crate::query_result::{
+        CassValue,
+        CassValueType,
         cass_value_data_type,
         cass_value_get_bool,
         cass_value_get_bytes,
@@ -774,6 +810,7 @@ pub mod value {
 pub mod uuid_gen {
     #[rustfmt::skip]
     pub use crate::uuid::{
+        CassUuidGen,
         cass_uuid_gen_free,
         cass_uuid_gen_from_time,
         cass_uuid_gen_new,
@@ -799,6 +836,7 @@ pub mod uuid {
 pub mod timestamp_gen {
     #[rustfmt::skip]
     pub use crate::timestamp_generator::{
+        CassTimestampGen,
         cass_timestamp_gen_free,
         cass_timestamp_gen_monotonic_new,
         cass_timestamp_gen_monotonic_new_with_settings,
@@ -809,6 +847,7 @@ pub mod timestamp_gen {
 pub mod retry_policy {
     #[rustfmt::skip]
     pub use crate::retry_policy::{
+        CassRetryPolicy,
         cass_retry_policy_default_new,
         cass_retry_policy_downgrading_consistency_new,
         cass_retry_policy_fallthrough_new,
@@ -826,6 +865,7 @@ pub mod custom_payload {
     // cass_custom_payload_set_n, UNIMPLEMENTED
     #[rustfmt::skip]
     pub use crate::cluster::{
+        CassCustomPayload, // FIXME: Should be unimplemented!
         cass_custom_payload_new, // FIXME: Should be unimplemented!
     };
 }
@@ -833,6 +873,7 @@ pub mod custom_payload {
 pub mod consistency {
     #[rustfmt::skip]
     pub use crate::misc::{
+        CassConsistency,
         cass_consistency_string
     };
 }
@@ -840,6 +881,7 @@ pub mod consistency {
 pub mod write_type {
     #[rustfmt::skip]
     pub use crate::misc::{
+        CassWriteType,
         cass_write_type_string
     };
 }
@@ -847,6 +889,7 @@ pub mod write_type {
 pub mod log {
     #[rustfmt::skip]
     pub use crate::logging::{
+        CassLogCallback,
         cass_log_cleanup,
         cass_log_get_callback_and_data,
         cass_log_level_string,
@@ -859,6 +902,7 @@ pub mod log {
 pub mod inet {
     #[rustfmt::skip]
     pub use crate::inet::{
+        CassInet,
         cass_inet_from_string,
         cass_inet_from_string_n,
         cass_inet_init_v4,
