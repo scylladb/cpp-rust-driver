@@ -8,6 +8,7 @@ use tokio::runtime::Runtime;
 
 #[macro_use]
 mod binding;
+pub mod api;
 // pub, because doctests defined in `argconv` module need to access it.
 pub mod argconv;
 pub(crate) mod batch;
