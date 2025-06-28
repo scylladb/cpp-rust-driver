@@ -75,7 +75,7 @@ pub unsafe extern "C" fn cass_tuple_new(
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn cass_tuple_new_from_data_type(
+pub unsafe extern "C" fn cass_tuple_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
 ) -> CassOwnedExclusivePtr<CassTuple, CMut> {
     let Some(data_type) = ArcFFI::cloned_from_ptr(data_type) else {
@@ -94,12 +94,12 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn cass_tuple_free(tuple: CassOwnedExclusivePtr<CassTuple, CMut>) {
+pub unsafe extern "C" fn cass_tuple_free(tuple: CassOwnedExclusivePtr<CassTuple, CMut>) {
     BoxFFI::free(tuple);
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn cass_tuple_data_type(
+pub unsafe extern "C" fn cass_tuple_data_type(
     tuple: CassBorrowedSharedPtr<CassTuple, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let Some(tuple) = BoxFFI::as_ref(tuple) else {
