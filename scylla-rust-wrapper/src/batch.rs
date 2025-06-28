@@ -3,18 +3,16 @@ use crate::argconv::{
     FFI, FromBox,
 };
 use crate::cass_error::CassError;
-use crate::cass_types::CassConsistency;
-use crate::cass_types::{CassBatchType, make_batch_type};
+use crate::cass_types::{CassBatchType, CassConsistency, make_batch_type};
 use crate::config_value::MaybeUnsetConfig;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::*;
 use crate::value::CassCqlValue;
-use scylla::statement::Consistency;
 use scylla::statement::batch::Batch;
+use scylla::statement::{Consistency, SerialConsistency};
 use scylla::value::MaybeUnset;
-use std::convert::TryInto;
 use std::sync::Arc;
 
 pub struct CassBatch {
@@ -115,13 +113,48 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let serial_consistency = match serial_consistency.try_into().ok() {
-        Some(c) => c,
-        None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    // cpp-driver doesn't validate passed value in any way.
+    // If it is an incorrect serial-consistency value then it will be set
+    // and sent as-is.
+    // Before adapting the driver to Rust Driver 0.12 this code
+    // set serial consistency if a user passed correct value and set it to
+    // None otherwise.
+    // I think that failing explicitly is a better idea, so I decided to return
+    // an error.
+    let Ok(maybe_set_serial_consistency) =
+        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+    else {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
-    Arc::make_mut(&mut batch.state)
-        .batch
-        .set_serial_consistency(Some(serial_consistency));
+
+    match maybe_set_serial_consistency {
+        MaybeUnsetConfig::Unset => {
+            // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
+            // make batch not have any opinion at all about serial consistency.
+            // Then, the default from the cluster/execution profile should be used.
+            // Unfortunately, the Rust Driver does not support
+            // "unsetting" serial consistency from a batch at the moment.
+            //
+            // FIXME: Implement unsetting serial consistency in the Rust Driver.
+            // Then, fix this code.
+            //
+            // For now, we will throw an error in order to warn the user
+            // about this limitation.
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_batch_set_serial_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some serial consistency \
+                on a batch, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting serial consistency on a batch, which \
+                will make the driver use the serial consistency set on execution profile or cluster level."
+            );
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(serial_consistency) => {
+            Arc::make_mut(&mut batch.state)
+                .batch
+                .set_serial_consistency(serial_consistency);
+        }
+    };
 
     CassError::CASS_OK
 }
