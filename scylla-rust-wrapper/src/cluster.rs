@@ -188,6 +188,12 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
         .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT))
         .retry_policy(Arc::new(DefaultRetryPolicy::new()))
         .speculative_execution_policy(None);
+    // Load balancing is set in LoadBalancingConfig::build().
+    // The default load balancing policy is DCAware in CPP Driver.
+    // NOTE: CPP Driver initializes the local DC to the first node the client
+    // connects to. This is tricky, a possible footgun, and hard to be done with
+    // the current Rust driver implementation, which is why do don't use DC awareness
+    // by default.
 
     /* Default config options - according to `cassandra.h`:
      * ```c++
