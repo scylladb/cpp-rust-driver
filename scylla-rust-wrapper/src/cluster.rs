@@ -155,27 +155,28 @@ impl FFI for CassCluster {
 
 pub struct CassCustomPayload;
 
-// We want to make sure that the returned future does not depend
-// on the provided &CassCluster, hence the `static here.
-pub(crate) fn build_session_builder(
-    cluster: &CassCluster,
-) -> impl Future<Output = SessionBuilder> + 'static {
-    let known_nodes = cluster
-        .contact_points
-        .iter()
-        .map(|cp| format!("{}:{}", cp, cluster.port));
-    let mut execution_profile_builder = cluster.default_execution_profile_builder.clone();
-    let load_balancing_config = cluster.load_balancing_config.clone();
-    let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
-    if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
-        session_builder = session_builder.user(username, password)
-    }
+impl CassCluster {
+    // We want to make sure that the returned future does not depend
+    // on the provided &CassCluster, hence the `static here.
+    pub(crate) fn build_session_builder(&self) -> impl Future<Output = SessionBuilder> + 'static {
+        let known_nodes = self
+            .contact_points
+            .iter()
+            .map(|cp| format!("{}:{}", cp, self.port));
+        let mut execution_profile_builder = self.default_execution_profile_builder.clone();
+        let load_balancing_config = self.load_balancing_config.clone();
+        let mut session_builder = self.session_builder.clone().known_nodes(known_nodes);
+        if let (Some(username), Some(password)) = (&self.auth_username, &self.auth_password) {
+            session_builder = session_builder.user(username, password)
+        }
 
-    async move {
-        let load_balancing = load_balancing_config.clone().build().await;
-        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
-        session_builder
-            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        async move {
+            let load_balancing = load_balancing_config.clone().build().await;
+            execution_profile_builder =
+                execution_profile_builder.load_balancing_policy(load_balancing);
+            session_builder
+                .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        }
     }
 }
 
