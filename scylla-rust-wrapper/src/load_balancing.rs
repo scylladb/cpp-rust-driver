@@ -145,7 +145,12 @@ impl LoadBalancingConfig {
     pub(crate) async fn build(self) -> Arc<dyn LoadBalancingPolicy> {
         let load_balancing_kind = self
             .load_balancing_kind
-            // Round robin is chosen by default for cluster wide LBP.
+            // Round robin is chosen by default for cluster wide LBP, while
+            // in CPP Driver the default load balancing policy is DCAware!
+            // Rationale: CPP Driver initializes the local DC to the first node the client
+            // connects to. This is tricky, a possible footgun, and hard to be done with
+            // the current Rust driver implementation, which is why do don't use DC awareness
+            // by default.
             .unwrap_or(LoadBalancingKind::RoundRobin);
 
         let mut builder = DefaultPolicyBuilder::new().token_aware(self.token_awareness_enabled);
