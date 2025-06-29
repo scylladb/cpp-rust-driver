@@ -179,7 +179,99 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
         .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
         .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
 
-    // Default config options - according to cassandra.h
+    /* Default config options - according to `cassandra.h`:
+     * ```c++
+     * // Cluster-level defaults
+     * #define CASS_DEFAULT_CONNECT_TIMEOUT_MS 5000
+     * #define CASS_DEFAULT_HEARTBEAT_INTERVAL_SECS 30
+     * #define CASS_DEFAULT_HOSTNAME_RESOLUTION_ENABLED false
+     * #define CASS_DEFAULT_IDLE_TIMEOUT_SECS 60
+     * #define CASS_DEFAULT_LOG_LEVEL CASS_LOG_WARN
+     * #define CASS_DEFAULT_MAX_PREPARES_PER_FLUSH 128
+     * #define CASS_DEFAULT_MAX_REUSABLE_WRITE_OBJECTS UINT_MAX
+     * #define CASS_DEFAULT_MAX_SCHEMA_WAIT_TIME_MS 10000
+     * #define CASS_DEFAULT_NUM_CONNECTIONS_PER_HOST 1
+     * #define CASS_DEFAULT_PREPARE_ON_ALL_HOSTS true
+     * #define CASS_DEFAULT_PREPARE_ON_UP_OR_ADD_HOST true
+     * #define CASS_DEFAULT_PORT 9042
+     * #define CASS_DEFAULT_QUEUE_SIZE_IO 8192
+     * #define CASS_DEFAULT_CONSTANT_RECONNECT_WAIT_TIME_MS 2000u
+     * #define CASS_DEFAULT_EXPONENTIAL_RECONNECT_BASE_DELAY_MS \
+     *   CASS_DEFAULT_CONSTANT_RECONNECT_WAIT_TIME_MS
+     * #define CASS_DEFAULT_EXPONENTIAL_RECONNECT_MAX_DELAY_MS 600000u // 10 minutes
+     * #define CASS_DEFAULT_RESOLVE_TIMEOUT_MS 5000
+     * #define CASS_DEFAULT_TCP_KEEPALIVE_DELAY_SECS 0
+     * #define CASS_DEFAULT_TCP_KEEPALIVE_ENABLED true
+     * #define CASS_DEFAULT_TCP_NO_DELAY_ENABLED true
+     * #define CASS_DEFAULT_THREAD_COUNT_IO 1
+     * #define CASS_DEFAULT_USE_TOKEN_AWARE_ROUTING true
+     * #define CASS_DEFAULT_USE_SNI_ROUTING false
+     * #define CASS_DEFAULT_USE_BETA_PROTOCOL_VERSION false
+     * #define CASS_DEFAULT_USE_RANDOMIZED_CONTACT_POINTS true
+     * #define CASS_DEFAULT_USE_SCHEMA true
+     * #define CASS_DEFAULT_COALESCE_DELAY 200
+     * #define CASS_DEFAULT_NEW_REQUEST_RATIO 50
+     * #define CASS_DEFAULT_NO_COMPACT false
+     * #define CASS_DEFAULT_CQL_VERSION "3.0.0"
+     * #define CASS_DEFAULT_MAX_TRACING_DATA_WAIT_TIME_MS 15
+     * #define CASS_DEFAULT_RETRY_TRACING_DATA_WAIT_TIME_MS 3
+     * #define CASS_DEFAULT_TRACING_CONSISTENCY CASS_CONSISTENCY_ONE
+     * #define CASS_DEFAULT_HISTOGRAM_REFRESH_INTERVAL_NO_REFRESH 0
+     *
+     * // Request-level defaults
+     * #define CASS_DEFAULT_CONSISTENCY CASS_CONSISTENCY_LOCAL_ONE
+     * #define CASS_DEFAULT_REQUEST_TIMEOUT_MS 12000u
+     * #define CASS_DEFAULT_SERIAL_CONSISTENCY CASS_CONSISTENCY_ANY
+     *
+     *  Config()
+     *    : port_(CASS_DEFAULT_PORT)
+     *    , protocol_version_(ProtocolVersion::highest_supported())
+     *    , use_beta_protocol_version_(CASS_DEFAULT_USE_BETA_PROTOCOL_VERSION)
+     *    , thread_count_io_(CASS_DEFAULT_THREAD_COUNT_IO)
+     *    , queue_size_io_(CASS_DEFAULT_QUEUE_SIZE_IO)
+     *    , core_connections_per_host_(CASS_DEFAULT_NUM_CONNECTIONS_PER_HOST)
+     *    , reconnection_policy_(new ExponentialReconnectionPolicy())
+     *    , connect_timeout_ms_(CASS_DEFAULT_CONNECT_TIMEOUT_MS)
+     *    , resolve_timeout_ms_(CASS_DEFAULT_RESOLVE_TIMEOUT_MS)
+     *    , max_schema_wait_time_ms_(CASS_DEFAULT_MAX_SCHEMA_WAIT_TIME_MS)
+     *    , max_tracing_wait_time_ms_(CASS_DEFAULT_MAX_TRACING_DATA_WAIT_TIME_MS)
+     *    , retry_tracing_wait_time_ms_(CASS_DEFAULT_RETRY_TRACING_DATA_WAIT_TIME_MS)
+     *    , tracing_consistency_(CASS_DEFAULT_TRACING_CONSISTENCY)
+     *    , coalesce_delay_us_(CASS_DEFAULT_COALESCE_DELAY)
+     *    , new_request_ratio_(CASS_DEFAULT_NEW_REQUEST_RATIO)
+     *    , log_level_(CASS_DEFAULT_LOG_LEVEL)
+     *    , log_callback_(stderr_log_callback)
+     *    , log_data_(NULL)
+     *    , auth_provider_(new AuthProvider())
+     *    , tcp_nodelay_enable_(CASS_DEFAULT_TCP_NO_DELAY_ENABLED)
+     *    , tcp_keepalive_enable_(CASS_DEFAULT_TCP_KEEPALIVE_ENABLED)
+     *    , tcp_keepalive_delay_secs_(CASS_DEFAULT_TCP_KEEPALIVE_DELAY_SECS)
+     *    , connection_idle_timeout_secs_(CASS_DEFAULT_IDLE_TIMEOUT_SECS)
+     *    , connection_heartbeat_interval_secs_(CASS_DEFAULT_HEARTBEAT_INTERVAL_SECS)
+     *    , timestamp_gen_(new MonotonicTimestampGenerator())
+     *    , use_schema_(CASS_DEFAULT_USE_SCHEMA)
+     *    , use_hostname_resolution_(CASS_DEFAULT_HOSTNAME_RESOLUTION_ENABLED)
+     *    , use_randomized_contact_points_(CASS_DEFAULT_USE_RANDOMIZED_CONTACT_POINTS)
+     *    , max_reusable_write_objects_(CASS_DEFAULT_MAX_REUSABLE_WRITE_OBJECTS)
+     *    , prepare_on_all_hosts_(CASS_DEFAULT_PREPARE_ON_ALL_HOSTS)
+     *    , prepare_on_up_or_add_host_(CASS_DEFAULT_PREPARE_ON_UP_OR_ADD_HOST)
+     *    , no_compact_(CASS_DEFAULT_NO_COMPACT)
+     *    , is_client_id_set_(false)
+     *    , host_listener_(new DefaultHostListener())
+     *    , monitor_reporting_interval_secs_(CASS_DEFAULT_CLIENT_MONITOR_EVENTS_INTERVAL_SECS)
+     *    , cluster_metadata_resolver_factory_(new DefaultClusterMetadataResolverFactory())
+     *    , histogram_refresh_interval_(CASS_DEFAULT_HISTOGRAM_REFRESH_INTERVAL_NO_REFRESH) {
+     *    profiles_.set_empty_key(String());
+     *
+     *    // Assign the defaults to the cluster profile
+     *    default_profile_.set_serial_consistency(CASS_DEFAULT_SERIAL_CONSISTENCY);
+     *    default_profile_.set_request_timeout(CASS_DEFAULT_REQUEST_TIMEOUT_MS);
+     *    default_profile_.set_load_balancing_policy(new DCAwarePolicy());
+     *    default_profile_.set_retry_policy(new DefaultRetryPolicy());
+     *    default_profile_.set_speculative_execution_policy(new NoSpeculativeExecutionPolicy());
+     *  }
+     * ```
+     */
     let default_session_builder = {
         // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
         let custom_identity = SelfIdentity::new()
