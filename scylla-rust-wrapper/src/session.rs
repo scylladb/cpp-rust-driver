@@ -4,7 +4,6 @@ use crate::cass_error::*;
 use crate::cass_metrics_types::CassMetrics;
 use crate::cass_types::get_column_type;
 use crate::cluster::CassCluster;
-use crate::cluster::build_session_builder;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
@@ -81,7 +80,7 @@ impl CassSessionInner {
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-        let session_builder = build_session_builder(cluster);
+        let session_builder = cluster.build_session_builder();
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
