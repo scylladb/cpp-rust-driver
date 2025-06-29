@@ -66,6 +66,13 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - TCP keepalive interval (actually: delay before the first keepalive
+//   probe is sent) is 0 sec in the CPP Driver. However, libuv started
+//   to reject such configuration on purpose since 1.49, so let's follow
+//   its reasoning and set it to more.
+//   1 sec could make sense, but Rust driver warns if it's not greater
+//   than 1 sec (for performance reasons), so let's set 2 secs..
+const DEFAULT_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(2);
 // - default local ip address is arbitrary
 const DEFAULT_LOCAL_IP_ADDRESS: Option<IpAddr> = None;
 // - default shard aware local port range is ephemeral range
@@ -284,6 +291,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .schema_agreement_timeout(DEFAULT_MAX_SCHEMA_WAIT_TIME)
             .schema_agreement_interval(DEFAULT_SCHEMA_AGREEMENT_INTERVAL)
             .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
+            .tcp_keepalive_interval(DEFAULT_TCP_KEEPALIVE_INTERVAL)
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
             .pool_size(DEFAULT_CONNECTION_POOL_SIZE)
             .write_coalescing(DEFAULT_ENABLE_WRITE_COALESCING)
