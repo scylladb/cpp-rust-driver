@@ -20,7 +20,7 @@ use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
 use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
-use scylla::policies::retry::RetryPolicy;
+use scylla::policies::retry::{DefaultRetryPolicy, RetryPolicy};
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::policies::timestamp_generator::{MonotonicTimestampGenerator, TimestampGenerator};
 use scylla::routing::ShardAwarePortRange;
@@ -185,7 +185,9 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
         .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
-        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
+        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT))
+        .retry_policy(Arc::new(DefaultRetryPolicy::new()))
+        .speculative_execution_policy(None);
 
     /* Default config options - according to `cassandra.h`:
      * ```c++
