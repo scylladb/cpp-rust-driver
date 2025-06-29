@@ -56,15 +56,15 @@ impl CassExecProfile {
         self,
         cluster_default_profile: &ExecutionProfile,
     ) -> ExecutionProfile {
-        let load_balacing = if self.load_balancing_config.load_balancing_kind.is_some() {
+        let load_balancing = if self.load_balancing_config.load_balancing_kind.is_some() {
             self.load_balancing_config.build().await
         } else {
             // If load balancing config does not have LB kind defined,
             // we make use of cluster's LBP.
-            cluster_default_profile.get_load_balancing_policy().clone()
+            Arc::clone(cluster_default_profile.get_load_balancing_policy())
         };
 
-        self.inner.load_balancing_policy(load_balacing).build()
+        self.inner.load_balancing_policy(load_balancing).build()
     }
 }
 
