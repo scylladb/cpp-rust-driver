@@ -22,7 +22,7 @@ use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
-use scylla::policies::timestamp_generator::TimestampGenerator;
+use scylla::policies::timestamp_generator::{MonotonicTimestampGenerator, TimestampGenerator};
 use scylla::routing::ShardAwarePortRange;
 use scylla::statement::{Consistency, SerialConsistency};
 use std::collections::HashMap;
@@ -292,6 +292,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
             .local_ip_address(DEFAULT_LOCAL_IP_ADDRESS)
             .shard_aware_local_port_range(DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE)
+            .timestamp_generator(Arc::new(MonotonicTimestampGenerator::new()))
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
