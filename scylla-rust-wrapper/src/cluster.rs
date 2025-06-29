@@ -39,7 +39,7 @@ use crate::cass_compression_types::CassCompressionType;
 
 // According to `cassandra.h` the defaults for
 // - consistency for statements is LOCAL_ONE,
-const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
+pub(crate) const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
 // - serial consistency for statements is ANY, which corresponds to None in Rust Driver.
 const DEFAULT_SERIAL_CONSISTENCY: Option<SerialConsistency> = None;
 // - request client timeout is 12000 millis,
