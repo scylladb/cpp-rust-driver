@@ -414,7 +414,7 @@ pub trait BoxFFI: Sized + origin_sealed::FromBoxSealed {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub(crate) trait ArcFFI: Sized + origin_sealed::FromArcSealed {
+pub trait ArcFFI: Sized + origin_sealed::FromArcSealed {
     /// Creates a pointer from a valid reference to Arc-allocated data.
     /// Holder of the pointer borrows the pointee.
     #[allow(clippy::needless_lifetimes)]
