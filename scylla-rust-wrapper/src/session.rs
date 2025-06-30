@@ -72,7 +72,7 @@ impl CassConnectedSession {
     }
 
     fn connect(
-        session_opt: Arc<RwLock<CassSessionInner>>,
+        session: Arc<RwLock<CassSessionInner>>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -80,7 +80,7 @@ impl CassConnectedSession {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
-        let mut session_guard = RUNTIME.block_on(session_opt.write_owned());
+        let mut session_guard = RUNTIME.block_on(session.write_owned());
 
         if let Some(cluster_client_id) = cluster.get_client_id() {
             // If the user set a client id, use it instead of the random one.
@@ -215,7 +215,7 @@ pub unsafe extern "C" fn cass_session_connect(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     cluster_raw: CassBorrowedSharedPtr<CassCluster, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+    let Some(session) = ArcFFI::cloned_from_ptr(session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_connect!");
         return ArcFFI::null();
     };
@@ -224,7 +224,7 @@ pub unsafe extern "C" fn cass_session_connect(
         return ArcFFI::null();
     };
 
-    CassConnectedSession::connect(session_opt, cluster, None)
+    CassConnectedSession::connect(session, cluster, None)
 }
 
 #[unsafe(no_mangle)]
@@ -243,7 +243,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     keyspace: *const c_char,
     keyspace_length: size_t,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+    let Some(session) = ArcFFI::cloned_from_ptr(session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_connect_keyspace_n!");
         return ArcFFI::null();
     };
@@ -253,7 +253,7 @@ pub unsafe extern "C" fn cass_session_connect_keyspace_n(
     };
     let keyspace = unsafe { ptr_to_cstr_n(keyspace, keyspace_length) }.map(ToOwned::to_owned);
 
-    CassConnectedSession::connect(session_opt, cluster, keyspace)
+    CassConnectedSession::connect(session, cluster, keyspace)
 }
 
 #[unsafe(no_mangle)]
