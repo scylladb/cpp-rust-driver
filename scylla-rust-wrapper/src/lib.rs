@@ -59,6 +59,7 @@ pub mod types {
     // for `cass_false` and `cass_true` globals.
     #![allow(non_upper_case_globals)]
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     // Definition for size_t (and possibly other types in the future)
     include_bindgen_generated!("basic_types.rs");
@@ -67,36 +68,48 @@ pub mod types {
 /// CassError, CassErrorSource, CassWriteType
 pub(crate) mod cass_error_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_error_types.rs");
 }
 
 /// CassValueType
 pub(crate) mod cass_data_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_data_types.rs");
 }
 
 /// CassConsistency
 pub(crate) mod cass_consistency_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_consistency_types.rs");
 }
 
 /// CassBatchType
 pub(crate) mod cass_batch_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_batch_types.rs");
 }
 
 /// CassCompressionType
 pub(crate) mod cass_compression_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_compression_types.rs");
 }
 
 /// CassCollectionType
 pub(crate) mod cass_collection_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
+
     include_bindgen_generated!("cppdriver_collection_types.rs");
 }
 
@@ -104,6 +117,7 @@ pub(crate) mod cass_collection_types {
 pub(crate) mod cass_inet_types {
     #![allow(unused)]
     #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_inet_types.rs");
 }
@@ -112,6 +126,7 @@ pub(crate) mod cass_inet_types {
 pub(crate) mod cass_log_types {
     #![allow(unused)]
     #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_log_types.rs");
 }
@@ -119,6 +134,7 @@ pub(crate) mod cass_log_types {
 /// CassColumnType
 pub(crate) mod cass_column_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_column_type.rs");
 }
@@ -127,6 +143,7 @@ pub(crate) mod cass_column_types {
 pub(crate) mod cass_uuid_types {
     #![allow(unused)]
     #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_uuid_types.rs");
 }
@@ -134,6 +151,7 @@ pub(crate) mod cass_uuid_types {
 /// CassIteratorType
 pub(crate) mod cass_iterator_types {
     #![allow(unused)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_iterator_types.rs");
 }
@@ -142,6 +160,7 @@ pub(crate) mod cass_iterator_types {
 pub(crate) mod cass_metrics_types {
     #![allow(unused)]
     #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
 
     include_bindgen_generated!("cppdriver_metrics_types.rs");
 }
