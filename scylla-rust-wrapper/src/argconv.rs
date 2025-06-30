@@ -240,14 +240,14 @@ impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
 
 /// Pointer constructors.
 impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
-    fn null() -> Self {
+    pub fn null() -> Self {
         CassPtr {
             ptr: None,
             _phantom: PhantomData,
         }
     }
 
-    pub(crate) fn is_null(&self) -> bool {
+    pub fn is_null(&self) -> bool {
         self.ptr.is_none()
     }
 
@@ -274,7 +274,7 @@ impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
 
 /// Constructors for to exclusive pointers.
 impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
-    fn null_mut() -> Self {
+    pub(crate) fn null_mut() -> Self {
         CassPtr {
             ptr: None,
             _phantom: PhantomData,
