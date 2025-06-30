@@ -76,6 +76,9 @@ macro_rules! make_c_str {
 pub(crate) use make_c_str;
 
 mod sealed {
+    // This is a sealed trait - its whole purpose is to be unnameable.
+    // This means we need to disable the check.
+    #[expect(unnameable_types)]
     pub trait Sealed {}
 }
 
@@ -330,8 +333,19 @@ impl<T: Sized> CassPtr<'_, T, (Exclusive, CMut)> {
 }
 
 mod origin_sealed {
+    // This is a sealed trait - its whole purpose is to be unnameable.
+    // This means we need to disable the check.
+    #[expect(unnameable_types)]
     pub trait FromBoxSealed {}
+
+    // This is a sealed trait - its whole purpose is to be unnameable.
+    // This means we need to disable the check.
+    #[expect(unnameable_types)]
     pub trait FromArcSealed {}
+
+    // This is a sealed trait - its whole purpose is to be unnameable.
+    // This means we need to disable the check.
+    #[expect(unnameable_types)]
     pub trait FromRefSealed {}
 }
 
