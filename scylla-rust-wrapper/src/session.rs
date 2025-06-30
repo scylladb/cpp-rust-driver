@@ -19,7 +19,6 @@ use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::cluster::metadata::ColumnType;
 use scylla::errors::ExecutionError;
-use scylla::frame::types::Consistency;
 use scylla::observability::metrics::MetricsError;
 use scylla::policies::host_filter::HostFilter;
 use scylla::response::PagingStateResponse;
@@ -553,13 +552,10 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         }
         let session = &session_guard.as_ref().unwrap().session;
 
-        let mut prepared = session
+        let prepared = session
             .prepare(query)
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
-
-        // Set Cpp Driver default configuration for queries:
-        prepared.set_consistency(Consistency::One);
 
         Ok(CassResultValue::Prepared(Arc::new(
             CassPrepared::new_from_prepared_statement(prepared),
@@ -778,6 +774,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
 mod tests {
     use rusty_fork::rusty_fork_test;
     use scylla::errors::DbError;
+    use scylla::frame::types::Consistency;
     use scylla_proxy::{
         Condition, Node, Proxy, Reaction, RequestFrame, RequestOpcode, RequestReaction,
         RequestRule, ResponseFrame, RunningProxy,
