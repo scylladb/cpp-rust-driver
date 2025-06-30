@@ -30,7 +30,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Clone)]
-pub enum BoundStatement {
+pub(crate) enum BoundStatement {
     Simple(BoundSimpleStatement),
     Prepared(BoundPreparedStatement),
 }
