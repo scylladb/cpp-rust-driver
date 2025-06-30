@@ -752,23 +752,30 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         );
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
-    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
-        Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
-        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
-        #[cfg(cpp_integration_testing)]
-        Some(CassRetryPolicy::Ignoring(ignoring)) => Arc::clone(ignoring) as _,
-        None => {
-            tracing::error!(
-                "Provided null retry policy pointer to cass_execution_profile_set_retry_policy!"
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-        }
-    };
+    let maybe_retry_policy: Option<Arc<dyn RetryPolicy>> =
+        ArcFFI::as_ref(retry_policy).map(|rp| match rp {
+            CassRetryPolicy::Default(default) => Arc::clone(default) as Arc<dyn RetryPolicy>,
+            CassRetryPolicy::Fallthrough(fallthrough) => Arc::clone(fallthrough) as _,
+            CassRetryPolicy::DowngradingConsistency(downgrading) => Arc::clone(downgrading) as _,
+            CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
+            #[cfg(cpp_integration_testing)]
+            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
+        });
 
-    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
-    profile_builder.overrides.retry_policy = true;
+    match maybe_retry_policy {
+        Some(retry_policy) => {
+            // If the retry policy is set, we use it.
+            profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
+            profile_builder.overrides.retry_policy = true;
+        }
+        None => {
+            // If the retry policy is not set, we set to use the retry policy from the cluster's
+            // default profile.
+            // This works around the problem that the Rust Driver's API does not allow
+            // unsetting the retry policy in the execution profile.
+            profile_builder.overrides.retry_policy = false;
+        }
+    }
 
     CassError::CASS_OK
 }
