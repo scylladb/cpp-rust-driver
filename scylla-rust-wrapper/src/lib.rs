@@ -15,6 +15,7 @@ pub(crate) mod cass_error;
 pub(crate) mod cass_types;
 pub(crate) mod cluster;
 pub(crate) mod collection;
+pub(crate) mod config_value;
 pub(crate) mod date_time;
 pub(crate) mod exec_profile;
 pub(crate) mod execution_error;
