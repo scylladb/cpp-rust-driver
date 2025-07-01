@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
+use crate::config_value::MaybeUnsetConfig;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
 use crate::load_balancing::{
@@ -1410,14 +1411,24 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let consistency: Consistency = match consistency.try_into() {
-        Ok(c) => c,
-        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    else {
+        // Invalid consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.consistency(consistency)
-    });
+    match maybe_set_consistency {
+        MaybeUnsetConfig::Unset => {
+            // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(consistency) => {
+            exec_profile_builder_modify(
+                &mut cluster.default_execution_profile_builder,
+                |builder| builder.consistency(consistency),
+            );
+        }
+    }
 
     CassError::CASS_OK
 }
