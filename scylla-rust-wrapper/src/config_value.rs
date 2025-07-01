@@ -1,8 +1,11 @@
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
-use scylla::statement::{Consistency, SerialConsistency};
+use scylla::{
+    policies::retry::RetryPolicy,
+    statement::{Consistency, SerialConsistency},
+};
 
-use crate::{cass_types::CassConsistency, types::cass_uint64_t};
+use crate::{cass_types::CassConsistency, retry_policy::CassRetryPolicy, types::cass_uint64_t};
 
 /// Represents a configuration value that may or may not be set.
 /// If a configuration value is unset, it means that the default value
@@ -128,5 +131,33 @@ impl MaybeUnsetConfigValue<'static> for RequestTimeout {
         Ok(RequestTimeout(
             (cvalue != 0).then(|| Duration::from_millis(cvalue)),
         ))
+    }
+}
+
+impl<'cval> MaybeUnsetConfigValue<'cval> for Arc<dyn RetryPolicy> {
+    type CValue = Option<&'cval CassRetryPolicy>;
+    type Error = Infallible;
+
+    fn is_unset(cvalue: &Self::CValue) -> bool {
+        cvalue.is_none()
+    }
+
+    fn from_set_c_value(cvalue: Self::CValue) -> Result<Self, Self::Error> {
+        Ok(cvalue
+            .map(|rp| match rp {
+                CassRetryPolicy::Default(default) => Arc::clone(default) as _,
+                CassRetryPolicy::Fallthrough(fallthrough) => Arc::clone(fallthrough) as _,
+                CassRetryPolicy::DowngradingConsistency(downgrading) => {
+                    Arc::clone(downgrading) as _
+                }
+                CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
+                #[cfg(cpp_integration_testing)]
+                CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
+            })
+            .expect(
+                "None passed as CassRetryPolicy, which should not happen due to \
+                MaybeUnsetConfigValue construction invariants: `from_set_c_value` should not be called."
+            )
+        )
     }
 }
