@@ -5,11 +5,13 @@ use crate::argconv::{
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cass_types::{CassBatchType, make_batch_type};
+use crate::config_value::MaybeUnsetConfig;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::retry_policy::CassRetryPolicy;
 use crate::statement::{BoundStatement, CassStatement};
 use crate::types::*;
 use crate::value::CassCqlValue;
+use scylla::statement::Consistency;
 use scylla::statement::batch::Batch;
 use scylla::value::MaybeUnset;
 use std::convert::TryInto;
@@ -65,14 +67,41 @@ pub unsafe extern "C" fn cass_batch_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let consistency = match consistency.try_into().ok() {
-        Some(c) => c,
-        None => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    else {
+        // Invalid consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
-    Arc::make_mut(&mut batch.state)
-        .batch
-        .set_consistency(consistency);
 
+    match maybe_set_consistency {
+        MaybeUnsetConfig::Unset => {
+            // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
+            // make batch not have any opinion at all about consistency.
+            // Then, the default from the cluster/execution profile should be used.
+            // Unfortunately, the Rust Driver does not support
+            // "unsetting" consistency from a batch at the moment.
+            //
+            // FIXME: Implement unsetting consistency in the Rust Driver.
+            // Then, fix this code.
+            //
+            // For now, we will throw an error in order to warn the user
+            // about this limitation.
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_batch_set_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some consistency \
+                on a batch, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting consistency on a batch, which \
+                will make the driver use the consistency set on execution profile or cluster level."
+            );
+
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(consistency) => {
+            Arc::make_mut(&mut batch.state)
+                .batch
+                .set_consistency(consistency);
+        }
+    };
     CassError::CASS_OK
 }
 
