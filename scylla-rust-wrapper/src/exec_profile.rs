@@ -25,7 +25,7 @@ use crate::cass_types::CassConsistency;
 use crate::cluster::{
     set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, update_comma_delimited_list,
 };
-use crate::config_value::MaybeUnsetConfig;
+use crate::config_value::{MaybeUnsetConfig, RequestTimeout};
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::session::CassConnectedSession;
@@ -732,11 +732,17 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let timeout =
-        (timeout_ms != cass_uint64_t::MAX).then_some(std::time::Duration::from_millis(timeout_ms));
-
-    profile_builder.modify_in_place(|builder| builder.request_timeout(timeout));
-    profile_builder.overrides.request_timeout = timeout.is_some();
+    match MaybeUnsetConfig::<RequestTimeout>::from_c_value_infallible(timeout_ms) {
+        MaybeUnsetConfig::Unset => {
+            // CASS_UINT64_MAX
+            // This will make the profile inherit the request timeout from the cluster's default profile.
+            profile_builder.overrides.request_timeout = false;
+        }
+        MaybeUnsetConfig::Set(RequestTimeout(maybe_timeout)) => {
+            profile_builder.modify_in_place(|builder| builder.request_timeout(maybe_timeout));
+            profile_builder.overrides.request_timeout = true;
+        }
+    }
 
     CassError::CASS_OK
 }
@@ -1341,7 +1347,7 @@ mod tests {
                 let custom_cass_consistency = CassConsistency::CASS_CONSISTENCY_THREE;
                 // This will be converted to `None` in the Rust Driver.
                 let custom_serial_cass_consistency = CassConsistency::CASS_CONSISTENCY_ANY;
-                let custom_request_timeout = 42 as cass_uint64_t;
+                let custom_request_timeout = 0 as cass_uint64_t;
 
                 // Set custom settings.
                 {
@@ -1357,7 +1363,7 @@ mod tests {
                         custom_serial_cass_consistency,
                     );
 
-                    // Set the request timeout to something different.
+                    // Set the request timeout to no timeout.
                     cass_execution_profile_set_request_timeout(
                         cass_exec_profile_raw.borrow_mut(),
                         custom_request_timeout,
@@ -1410,10 +1416,7 @@ mod tests {
                     }
                 );
 
-                assert_eq!(
-                    built_profile.get_request_timeout(),
-                    Some(Duration::from_millis(custom_request_timeout))
-                );
+                assert_eq!(built_profile.get_request_timeout(), None,);
 
                 // No idea how to check the retry policy in such a simple unit test.
                 // At least check that it is different (wrt pointer equality) than the default one.
