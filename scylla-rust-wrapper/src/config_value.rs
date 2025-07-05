@@ -15,8 +15,8 @@ pub(crate) enum MaybeUnsetConfig<T> {
 /// Represents types that can be converted from a C value have the special unset value.
 /// This is used to handle cases where a configuration value may not be set,
 /// allowing the driver to clearly distinguish between an unset value and a set value.
-pub(crate) trait MaybeUnsetConfigValue: Sized {
-    type CValue;
+pub(crate) trait MaybeUnsetConfigValue<'cval>: Sized {
+    type CValue: 'cval;
     type Error;
 
     /// Checks if the given C value is considered unset.
@@ -38,7 +38,7 @@ pub(crate) trait MaybeUnsetConfigValue: Sized {
     fn from_set_c_value(cvalue: Self::CValue) -> Result<Self, Self::Error>;
 }
 
-impl<T: MaybeUnsetConfigValue> MaybeUnsetConfig<T> {
+impl<'cval, T: MaybeUnsetConfigValue<'cval>> MaybeUnsetConfig<T> {
     /// Converts a maybe unset C value to a Rust value, returning an error if the value
     /// is invalid.
     pub(crate) fn from_c_value(cvalue: T::CValue) -> Result<Self, T::Error> {
@@ -46,7 +46,7 @@ impl<T: MaybeUnsetConfigValue> MaybeUnsetConfig<T> {
     }
 }
 
-impl<T: MaybeUnsetConfigValue<Error = Infallible>> MaybeUnsetConfig<T> {
+impl<'cval, T: MaybeUnsetConfigValue<'cval, Error = Infallible>> MaybeUnsetConfig<T> {
     /// Converts a maybe unset C value to a Rust value. Available for C values that are guaranteed
     /// to be valid and thus never return an error.
     pub(crate) fn from_c_value_infallible(cvalue: T::CValue) -> Self {
@@ -54,7 +54,7 @@ impl<T: MaybeUnsetConfigValue<Error = Infallible>> MaybeUnsetConfig<T> {
     }
 }
 
-impl MaybeUnsetConfigValue for Consistency {
+impl MaybeUnsetConfigValue<'static> for Consistency {
     type CValue = CassConsistency;
     type Error = ();
 
@@ -80,7 +80,7 @@ impl MaybeUnsetConfigValue for Consistency {
     }
 }
 
-impl MaybeUnsetConfigValue for Option<SerialConsistency> {
+impl MaybeUnsetConfigValue<'static> for Option<SerialConsistency> {
     type CValue = CassConsistency;
     type Error = ();
 
@@ -116,7 +116,7 @@ impl RequestTimeout {
     pub(crate) const INFINITE: Duration = Duration::MAX;
 }
 
-impl MaybeUnsetConfigValue for RequestTimeout {
+impl MaybeUnsetConfigValue<'static> for RequestTimeout {
     type CValue = cass_uint64_t;
     type Error = Infallible;
 
