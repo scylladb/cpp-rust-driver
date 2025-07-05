@@ -1,3 +1,4 @@
+use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -30,7 +31,7 @@ use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
 
 // Technically, we should not allow this struct to be public,
 // but this would require a lot of changes in the codebase:
@@ -85,8 +86,13 @@ impl CassSessionInner {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
+        // TODO: It's not clear whether this lock should be taken synchronously or asynchronously.
+        // In another PR that I have opened, however, I have made it synchronous,
+        // because it is needed to set the client_id synchronously, in line with the CPP Driver behaviour.
+        let session_guard = RUNTIME.block_on(session_opt.write_owned());
+
         let fut = Self::connect_fut(
-            session_opt,
+            session_guard,
             session_builder,
             exec_profile_map,
             host_filter,
@@ -105,7 +111,7 @@ impl CassSessionInner {
     }
 
     async fn connect_fut(
-        session_opt: Arc<RwLock<Option<CassSessionInner>>>,
+        mut session_guard: OwnedRwLockWriteGuard<Option<Self>>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
@@ -114,7 +120,6 @@ impl CassSessionInner {
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
-        let mut session_guard = session_opt.write().await;
         if session_guard.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
@@ -162,6 +167,35 @@ impl CassSessionInner {
             client_id,
         });
         Ok(CassResultValue::Empty)
+    }
+
+    fn close_fut(session_opt: Arc<RwLock<Option<Self>>>) -> Arc<CassFuture> {
+        CassFuture::new_from_future(
+            async move {
+                // This lock is unavailable for writing as long as there are any running requests.
+                // This way we ensure that no requests are running when we close the session.
+                // If there are any requests running, they will finish before this lock is acquired.
+                //
+                // We take this lock only in the async block, because `cass_session_close` shall not
+                // itself block. Only the future returned by it shall block, until the session is closed.
+                //
+                // This will not deadlock on current_thread runtime, because the executor will execute
+                // remaining futures while waiting for the lock.
+                let mut session_guard = session_opt.write().await;
+                if session_guard.is_none() {
+                    return Err((
+                        CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                        "Already closing or closed".msg(),
+                    ));
+                }
+
+                *session_guard = None;
+
+                Ok(CassResultValue::Empty)
+            },
+            #[cfg(cpp_integration_testing)]
+            None,
+        )
     }
 }
 
@@ -245,8 +279,18 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     #[allow(unused, clippy::let_unit_value)]
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session_opt.read_owned());
+
     let future = async move {
-        let session_guard = session_opt.read().await;
         if session_guard.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -350,15 +394,24 @@ pub unsafe extern "C" fn cass_session_execute(
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session_opt.read_owned());
+
     let future = async move {
-        let session_guard = session_opt.read().await;
-        if session_guard.is_none() {
+        let Some(cass_session_inner) = session_guard.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
-        }
-        let cass_session_inner = session_guard.as_ref().unwrap();
+        };
         let session = &cass_session_inner.session;
 
         let handle = cass_session_inner
@@ -489,6 +542,17 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     let statement = cass_statement.statement.clone();
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(session.read_owned());
+
     CassFuture::make_raw(
         async move {
             let query = match &statement {
@@ -498,7 +562,6 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let session_guard = session.read().await;
             if session_guard.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -547,8 +610,18 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
 
+    // This lock must be taken synchronously, because it is used to ensure that
+    // the session is not closed while there are any requests running.
+    // If the lock were taken only in the async block, it would be possible
+    // for the session to be closed before the future is executed,
+    // leading to the race between session close and request execution.
+    // CPP-Driver ensures that this won't happen.
+    //
+    // This will not deadlock on current_thread runtime, because the executor will execute
+    // remaining futures while waiting for the lock.
+    let session_guard = RUNTIME.block_on(cass_session.read_owned());
+
     let fut = async move {
-        let session_guard = cass_session.read().await;
         if session_guard.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -576,7 +649,16 @@ pub unsafe extern "C" fn cass_session_prepare_n(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassSession, CMut>) {
-    ArcFFI::free(session_raw);
+    let Some(session_opt) = ArcFFI::from_ptr(session_raw) else {
+        // `free()` does nothing on null pointers, so by analogy let's do nothing here.
+        return;
+    };
+
+    let close_fut = CassSessionInner::close_fut(session_opt);
+    close_fut.with_waited_result(|_| ());
+
+    // We don't have to drop the session's Arc explicitly, because it has been moved
+    // into the CassFuture, which is dropped here with the end of the scope.
 }
 
 #[unsafe(no_mangle)]
@@ -588,23 +670,7 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(
-        async move {
-            let mut session_guard = session_opt.write().await;
-            if session_guard.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
-
-            *session_guard = None;
-
-            Ok(CassResultValue::Empty)
-        },
-        #[cfg(cpp_integration_testing)]
-        None,
-    )
+    CassSessionInner::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -616,7 +682,8 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().as_ref().unwrap().client_id;
+    let session_guard = RUNTIME.block_on(cass_session.read());
+    let client_id: uuid::Uuid = session_guard.as_ref().unwrap().client_id;
     client_id.into()
 }
 
@@ -627,8 +694,9 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     let cass_session = ArcFFI::as_ref(session).unwrap();
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
-    for (keyspace_name, keyspace) in cass_session
-        .blocking_read()
+    let session_guard = RUNTIME.block_on(cass_session.read());
+
+    for (keyspace_name, keyspace) in session_guard
         .as_ref()
         .unwrap()
         .session
@@ -704,7 +772,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
         return;
     }
 
-    let maybe_session_guard = maybe_session_lock.blocking_read();
+    let maybe_session_guard = RUNTIME.block_on(maybe_session_lock.read());
     let maybe_session = maybe_session_guard.as_ref();
     let Some(session) = maybe_session else {
         tracing::warn!("Attempted to get metrics before connecting session object");
@@ -936,15 +1004,11 @@ mod tests {
                 ));
                 // Initially, the profile map is empty.
 
-                assert!(
-                    ArcFFI::as_ref(session_raw.borrow())
-                        .unwrap()
-                        .blocking_read()
-                        .as_ref()
-                        .unwrap()
-                        .exec_profile_map
-                        .is_empty()
-                );
+                let session_lock = ArcFFI::as_ref(session_raw.borrow()).unwrap();
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    assert!(session_guard.as_ref().unwrap().exec_profile_map.is_empty());
+                }
 
                 cass_cluster_set_execution_profile(
                     cluster_raw.borrow_mut(),
@@ -952,15 +1016,10 @@ mod tests {
                     profile_raw.borrow_mut(),
                 );
                 // Mutations in cluster do not affect the session that was connected before.
-                assert!(
-                    ArcFFI::as_ref(session_raw.borrow())
-                        .unwrap()
-                        .blocking_read()
-                        .as_ref()
-                        .unwrap()
-                        .exec_profile_map
-                        .is_empty()
-                );
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    assert!(session_guard.as_ref().unwrap().exec_profile_map.is_empty());
+                }
 
                 cass_future_wait_check_and_free(cass_session_close(session_raw.borrow()));
 
@@ -969,20 +1028,21 @@ mod tests {
                     session_raw.borrow(),
                     cluster_raw.borrow().into_c_const(),
                 ));
-                let profile_map_keys = ArcFFI::as_ref(session_raw.borrow())
-                    .unwrap()
-                    .blocking_read()
-                    .as_ref()
-                    .unwrap()
-                    .exec_profile_map
-                    .keys()
-                    .cloned()
-                    .collect::<HashSet<_>>();
-                assert_eq!(
-                    profile_map_keys,
-                    std::iter::once(ExecProfileName::try_from("prof".to_owned()).unwrap())
-                        .collect::<HashSet<_>>()
-                );
+                {
+                    let session_guard = RUNTIME.block_on(session_lock.read());
+                    let profile_map_keys = session_guard
+                        .as_ref()
+                        .unwrap()
+                        .exec_profile_map
+                        .keys()
+                        .cloned()
+                        .collect::<HashSet<_>>();
+                    assert_eq!(
+                        profile_map_keys,
+                        std::iter::once(ExecProfileName::try_from("prof".to_owned()).unwrap())
+                            .collect::<HashSet<_>>()
+                    );
+                }
                 cass_future_wait_check_and_free(cass_session_close(session_raw.borrow()));
             }
             cass_execution_profile_free(profile_raw);
