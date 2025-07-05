@@ -112,6 +112,10 @@ impl MaybeUnsetConfigValue for Option<SerialConsistency> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RequestTimeout(pub(crate) Option<Duration>);
 
+impl RequestTimeout {
+    pub(crate) const INFINITE: Duration = Duration::MAX;
+}
+
 impl MaybeUnsetConfigValue for RequestTimeout {
     type CValue = cass_uint64_t;
     type Error = Infallible;
