@@ -1275,24 +1275,19 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) {
     let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
         tracing::error!("Provided null cluster pointer to cass_cluster_set_retry_policy!");
         return;
     };
 
-    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
-        Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
-        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
-        #[cfg(cpp_integration_testing)]
-        Some(CassRetryPolicy::Ignoring(ignoring)) => Arc::clone(ignoring) as _,
-        None => {
-            tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
-            return;
-        }
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    let MaybeUnsetConfig::Set(retry_policy): MaybeUnsetConfig<_, Arc<dyn RetryPolicy>> =
+        MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy)
+    else {
+        tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
+        return;
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
