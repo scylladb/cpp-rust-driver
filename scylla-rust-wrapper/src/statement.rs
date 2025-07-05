@@ -602,30 +602,25 @@ pub unsafe extern "C" fn cass_statement_set_node(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let Some(statement) = BoxFFI::as_mut_ref(statement) else {
         tracing::error!("Provided null statement pointer to cass_statement_set_retry_policy!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
-        ArcFFI::as_ref(retry_policy).map(|policy| match policy {
-            CassRetryPolicy::Default(default) => {
-                default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
-            }
-            CassRetryPolicy::Fallthrough(fallthrough) => fallthrough.clone(),
-            CassRetryPolicy::DowngradingConsistency(downgrading) => downgrading.clone(),
-            CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
-            #[cfg(cpp_integration_testing)]
-            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
-        });
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    let retry_policy_opt =
+        match MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy) {
+            MaybeUnsetConfig::Set(retry_policy) => Some(retry_policy),
+            MaybeUnsetConfig::Unset(_) => None,
+        };
 
     match &mut statement.statement {
-        BoundStatement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
+        BoundStatement::Simple(inner) => inner.query.set_retry_policy(retry_policy_opt),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
-            .set_retry_policy(maybe_arced_retry_policy),
+            .set_retry_policy(retry_policy_opt),
     }
 
     CassError::CASS_OK
