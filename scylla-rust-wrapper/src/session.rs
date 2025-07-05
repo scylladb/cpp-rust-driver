@@ -354,8 +354,6 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
-    let request_timeout_ms = statement_opt.request_timeout_ms;
-
     let mut statement = statement_opt.statement.clone();
 
     #[cfg(cpp_integration_testing)]
@@ -491,18 +489,11 @@ pub unsafe extern "C" fn cass_session_execute(
         }
     };
 
-    match request_timeout_ms {
-        Some(timeout_ms) => CassFuture::make_raw(
-            async move { request_with_timeout(timeout_ms, future).await },
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-        None => CassFuture::make_raw(
-            future,
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-    }
+    CassFuture::make_raw(
+        future,
+        #[cfg(cpp_integration_testing)]
+        recording_listener,
+    )
 }
 
 #[unsafe(no_mangle)]
