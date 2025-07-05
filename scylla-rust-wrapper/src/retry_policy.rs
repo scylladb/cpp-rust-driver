@@ -6,8 +6,13 @@ use std::sync::Arc;
 
 use crate::argconv::{ArcFFI, CMut, CassBorrowedSharedPtr, CassOwnedSharedPtr, FFI, FromArc};
 
+// Technically, we should not allow this struct to be public,
+// but this would require a lot of changes in the codebase:
+// CassRetryPolicy would need to be a newtype wrapper around
+// an additional inner enum.
+#[expect(unnameable_types)]
 #[derive(Debug)]
-pub(crate) struct CassLoggingRetryPolicy {
+pub struct CassLoggingRetryPolicy {
     child_policy: Arc<CassRetryPolicy>,
 }
 

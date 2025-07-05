@@ -154,7 +154,7 @@ pub unsafe extern "C" fn cass_collection_new(
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn cass_collection_new_from_data_type(
+pub unsafe extern "C" fn cass_collection_new_from_data_type(
     data_type: CassBorrowedSharedPtr<CassDataType, CConst>,
     item_count: size_t,
 ) -> CassOwnedExclusivePtr<CassCollection, CMut> {
@@ -185,7 +185,7 @@ unsafe extern "C" fn cass_collection_new_from_data_type(
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn cass_collection_data_type(
+pub unsafe extern "C" fn cass_collection_data_type(
     collection: CassBorrowedSharedPtr<CassCollection, CConst>,
 ) -> CassBorrowedSharedPtr<CassDataType, CConst> {
     let Some(collection_ref) = BoxFFI::as_ref(collection) else {

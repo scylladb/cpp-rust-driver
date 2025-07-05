@@ -32,7 +32,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-pub(crate) struct CassSessionInner {
+// Technically, we should not allow this struct to be public,
+// but this would require a lot of changes in the codebase:
+// CassSession would need to be a newtype wrapper around this struct
+// instead of a type alias.
+#[expect(unnameable_types)]
+pub struct CassSessionInner {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
     client_id: uuid::Uuid,

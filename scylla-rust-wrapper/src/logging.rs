@@ -73,7 +73,7 @@ impl TryFrom<CassLogLevel> for Level {
 
 pub(crate) const CASS_LOG_MAX_MESSAGE_SIZE: usize = 1024;
 
-pub unsafe extern "C" fn stderr_log_callback(
+pub(crate) unsafe extern "C" fn stderr_log_callback(
     message: CassBorrowedSharedPtr<CassLogMessage, CConst>,
     _data: *mut c_void,
 ) {

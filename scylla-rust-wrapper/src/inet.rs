@@ -9,12 +9,12 @@ use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 use std::str::FromStr;
 
-pub(crate) use crate::cass_inet_types::CassInet;
+pub use crate::cass_inet_types::CassInet;
 
 #[repr(u8)] // address_length field in CassInet is cass_uint8_t
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone)]
-pub enum CassInetLength {
+pub(crate) enum CassInetLength {
     CASS_INET_V4 = 4,
     CASS_INET_V6 = 16,
 }

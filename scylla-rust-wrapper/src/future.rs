@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 #[derive(Debug)]
-pub enum CassResultValue {
+pub(crate) enum CassResultValue {
     Empty,
     QueryResult(Arc<CassResult>),
     QueryError(Arc<CassErrorResult>),
@@ -26,7 +26,7 @@ pub enum CassResultValue {
 
 type CassFutureError = (CassError, String);
 
-pub type CassFutureResult = Result<CassResultValue, CassFutureError>;
+pub(crate) type CassFutureResult = Result<CassResultValue, CassFutureError>;
 
 pub type CassFutureCallback = Option<
     unsafe extern "C" fn(future: CassBorrowedSharedPtr<CassFuture, CMut>, data: *mut c_void),

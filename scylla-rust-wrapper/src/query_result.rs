@@ -1,8 +1,9 @@
 use crate::argconv::*;
 use crate::cass_error::{CassError, ToCassError};
+pub use crate::cass_types::CassValueType;
 use crate::cass_types::{
-    CassColumnSpec, CassDataType, CassDataTypeInner, CassValueType, MapDataType,
-    cass_data_type_type, get_column_type,
+    CassColumnSpec, CassDataType, CassDataTypeInner, MapDataType, cass_data_type_type,
+    get_column_type,
 };
 use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
