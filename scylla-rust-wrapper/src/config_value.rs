@@ -1,6 +1,11 @@
-use scylla::statement::{Consistency, SerialConsistency};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
-use crate::cass_types::CassConsistency;
+use scylla::{
+    policies::retry::RetryPolicy,
+    statement::{Consistency, SerialConsistency},
+};
+
+use crate::{cass_types::CassConsistency, retry_policy::CassRetryPolicy, types::cass_uint64_t};
 
 /// Represents a configuration value that may or may not be set.
 /// If a configuration value is unset, it means that the default value
@@ -13,8 +18,8 @@ pub(crate) enum MaybeUnsetConfig<T> {
 /// Represents types that can be converted from a C value have the special unset value.
 /// This is used to handle cases where a configuration value may not be set,
 /// allowing the driver to clearly distinguish between an unset value and a set value.
-pub(crate) trait MaybeUnsetConfigValue: Sized {
-    type CValue;
+pub(crate) trait MaybeUnsetConfigValue<'cval>: Sized {
+    type CValue: 'cval;
     type Error;
 
     /// Checks if the given C value is considered unset.
@@ -36,7 +41,7 @@ pub(crate) trait MaybeUnsetConfigValue: Sized {
     fn from_set_c_value(cvalue: Self::CValue) -> Result<Self, Self::Error>;
 }
 
-impl<T: MaybeUnsetConfigValue> MaybeUnsetConfig<T> {
+impl<'cval, T: MaybeUnsetConfigValue<'cval>> MaybeUnsetConfig<T> {
     /// Converts a maybe unset C value to a Rust value, returning an error if the value
     /// is invalid.
     pub(crate) fn from_c_value(cvalue: T::CValue) -> Result<Self, T::Error> {
@@ -44,7 +49,15 @@ impl<T: MaybeUnsetConfigValue> MaybeUnsetConfig<T> {
     }
 }
 
-impl MaybeUnsetConfigValue for Consistency {
+impl<'cval, T: MaybeUnsetConfigValue<'cval, Error = Infallible>> MaybeUnsetConfig<T> {
+    /// Converts a maybe unset C value to a Rust value. Available for C values that are guaranteed
+    /// to be valid and thus never return an error.
+    pub(crate) fn from_c_value_infallible(cvalue: T::CValue) -> Self {
+        Self::from_c_value(cvalue).unwrap_or_else(|never| match never {})
+    }
+}
+
+impl MaybeUnsetConfigValue<'static> for Consistency {
     type CValue = CassConsistency;
     type Error = ();
 
@@ -70,7 +83,7 @@ impl MaybeUnsetConfigValue for Consistency {
     }
 }
 
-impl MaybeUnsetConfigValue for Option<SerialConsistency> {
+impl MaybeUnsetConfigValue<'static> for Option<SerialConsistency> {
     type CValue = CassConsistency;
     type Error = ();
 
@@ -96,5 +109,55 @@ impl MaybeUnsetConfigValue for Option<SerialConsistency> {
             CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(Some(SerialConsistency::Serial)),
             _ => Err(()),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RequestTimeout(pub(crate) Option<Duration>);
+
+impl RequestTimeout {
+    pub(crate) const INFINITE: Duration = Duration::MAX;
+}
+
+impl MaybeUnsetConfigValue<'static> for RequestTimeout {
+    type CValue = cass_uint64_t;
+    type Error = Infallible;
+
+    fn is_unset(cvalue: &Self::CValue) -> bool {
+        *cvalue == cass_uint64_t::MAX
+    }
+
+    fn from_set_c_value(cvalue: Self::CValue) -> Result<Self, Self::Error> {
+        Ok(RequestTimeout(
+            (cvalue != 0).then(|| Duration::from_millis(cvalue)),
+        ))
+    }
+}
+
+impl<'cval> MaybeUnsetConfigValue<'cval> for Arc<dyn RetryPolicy> {
+    type CValue = Option<&'cval CassRetryPolicy>;
+    type Error = Infallible;
+
+    fn is_unset(cvalue: &Self::CValue) -> bool {
+        cvalue.is_none()
+    }
+
+    fn from_set_c_value(cvalue: Self::CValue) -> Result<Self, Self::Error> {
+        Ok(cvalue
+            .map(|rp| match rp {
+                CassRetryPolicy::Default(default) => Arc::clone(default) as _,
+                CassRetryPolicy::Fallthrough(fallthrough) => Arc::clone(fallthrough) as _,
+                CassRetryPolicy::DowngradingConsistency(downgrading) => {
+                    Arc::clone(downgrading) as _
+                }
+                CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
+                #[cfg(cpp_integration_testing)]
+                CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
+            })
+            .expect(
+                "None passed as CassRetryPolicy, which should not happen due to \
+                MaybeUnsetConfigValue construction invariants: `from_set_c_value` should not be called."
+            )
+        )
     }
 }

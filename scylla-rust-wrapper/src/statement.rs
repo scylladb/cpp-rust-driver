@@ -1,6 +1,6 @@
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
-use crate::config_value::MaybeUnsetConfig;
+use crate::config_value::{MaybeUnsetConfig, RequestTimeout};
 use crate::exec_profile::PerStatementExecProfile;
 use crate::inet::CassInet;
 use crate::prepared::CassPrepared;
@@ -215,7 +215,6 @@ pub struct CassStatement {
     pub(crate) statement: BoundStatement,
     pub(crate) paging_state: PagingState,
     pub(crate) paging_enabled: bool,
-    pub(crate) request_timeout_ms: Option<cass_uint64_t>,
 
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
     #[cfg(cpp_integration_testing)]
@@ -233,7 +232,6 @@ impl CassStatement {
             paging_state: PagingState::start(),
             // Cpp driver disables paging by default.
             paging_enabled: false,
-            request_timeout_ms: None,
             exec_profile: None,
             #[cfg(cpp_integration_testing)]
             record_hosts: false,
@@ -615,30 +613,25 @@ pub unsafe extern "C" fn cass_statement_set_node(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let Some(statement) = BoxFFI::as_mut_ref(statement) else {
         tracing::error!("Provided null statement pointer to cass_statement_set_retry_policy!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
-        ArcFFI::as_ref(retry_policy).map(|policy| match policy {
-            CassRetryPolicy::Default(default) => {
-                default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
-            }
-            CassRetryPolicy::Fallthrough(fallthrough) => fallthrough.clone(),
-            CassRetryPolicy::DowngradingConsistency(downgrading) => downgrading.clone(),
-            CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
-            #[cfg(cpp_integration_testing)]
-            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
-        });
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    let retry_policy_opt =
+        match MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy) {
+            MaybeUnsetConfig::Set(retry_policy) => Some(retry_policy),
+            MaybeUnsetConfig::Unset => None,
+        };
 
     match &mut statement.statement {
-        BoundStatement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
+        BoundStatement::Simple(inner) => inner.query.set_retry_policy(retry_policy_opt),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
-            .set_retry_policy(maybe_arced_retry_policy),
+            .set_retry_policy(retry_policy_opt),
     }
 
     CassError::CASS_OK
@@ -725,23 +718,36 @@ pub unsafe extern "C" fn cass_statement_set_timestamp(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_request_timeout(
-    statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
+    statement_raw: CassBorrowedExclusivePtr<CassStatement, CMut>,
     timeout_ms: cass_uint64_t,
 ) -> CassError {
-    let Some(statement_from_raw) = BoxFFI::as_mut_ref(statement) else {
+    let Some(statement) = BoxFFI::as_mut_ref(statement_raw) else {
         tracing::error!("Provided null statement pointer to cass_statement_set_request_timeout!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    // The maximum duration for a sleep is 68719476734 milliseconds (approximately 2.2 years).
-    // Note: this is limited by tokio::time:timout
-    // https://github.com/tokio-rs/tokio/blob/4b1c4801b1383800932141d0f6508d5b3003323e/tokio/src/time/driver/wheel/mod.rs#L44-L50
-    let request_timeout_limit = 2_u64.pow(36) - 1;
-    if timeout_ms >= request_timeout_limit {
-        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-    }
+    let maybe_unset_timeout =
+        MaybeUnsetConfig::<RequestTimeout>::from_c_value_infallible(timeout_ms);
 
-    statement_from_raw.request_timeout_ms = Some(timeout_ms);
+    // `Statement::set_request_timeout` expects an Option<Duration> with unusual semantics:
+    // - `None` means "ignore me and use the default timeout from the cluster/execution profile" - this is
+    //   different than other configuration parameters such as retry policy or serial consistency,
+    //   where `None` means "unset this parameter";
+    // - `Some(timeout)` means "use timeout of given value".
+    // Therefore, to acquire "no timeout" semantics, we need to emulate it with an extremely long timeout.
+    let timeout = match maybe_unset_timeout {
+        MaybeUnsetConfig::Unset => None,
+        MaybeUnsetConfig::Set(RequestTimeout(timeout)) => {
+            Some(timeout.unwrap_or(RequestTimeout::INFINITE))
+        }
+    };
+
+    match &mut statement.statement {
+        BoundStatement::Simple(inner) => inner.query.set_request_timeout(timeout),
+        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+            .statement
+            .set_request_timeout(timeout),
+    };
 
     CassError::CASS_OK
 }

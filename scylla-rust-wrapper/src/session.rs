@@ -4,7 +4,6 @@ use crate::cass_error::*;
 use crate::cass_metrics_types::CassMetrics;
 use crate::cass_types::get_column_type;
 use crate::cluster::CassCluster;
-use crate::cluster::build_session_builder;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, PerStatementExecProfile};
 use crate::future::{CassFuture, CassFutureResult, CassResultValue};
 use crate::metadata::create_table_metadata;
@@ -81,7 +80,7 @@ impl CassSessionInner {
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-        let session_builder = build_session_builder(cluster);
+        let session_builder = cluster.build_session_builder();
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
@@ -321,8 +320,6 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
-    let request_timeout_ms = statement_opt.request_timeout_ms;
-
     let mut statement = statement_opt.statement.clone();
 
     #[cfg(cpp_integration_testing)]
@@ -459,18 +456,11 @@ pub unsafe extern "C" fn cass_session_execute(
         }
     };
 
-    match request_timeout_ms {
-        Some(timeout_ms) => CassFuture::make_raw(
-            async move { request_with_timeout(timeout_ms, future).await },
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-        None => CassFuture::make_raw(
-            future,
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-    }
+    CassFuture::make_raw(
+        future,
+        #[cfg(cpp_integration_testing)]
+        recording_listener,
+    )
 }
 
 #[unsafe(no_mangle)]
