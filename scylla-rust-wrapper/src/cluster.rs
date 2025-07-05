@@ -1,6 +1,7 @@
 use crate::argconv::*;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
+use crate::config_value::MaybeUnsetConfig;
 use crate::exec_profile::{CassExecProfile, ExecProfileName, exec_profile_builder_modify};
 use crate::future::CassFuture;
 use crate::load_balancing::{
@@ -39,6 +40,8 @@ use crate::cass_compression_types::CassCompressionType;
 // According to `cassandra.h` the defaults for
 // - consistency for statements is LOCAL_ONE,
 const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
+// - serial consistency for statements is ANY, which corresponds to None in Rust Driver.
+const DEFAULT_SERIAL_CONSISTENCY: Option<SerialConsistency> = None;
 // - request client timeout is 12000 millis,
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_millis(12000);
 // - fetching schema metadata is true
@@ -173,6 +176,7 @@ pub(crate) fn build_session_builder(
 pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster, CMut> {
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
+        .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
         .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
 
     // Default config options - according to cassandra.h
@@ -1410,14 +1414,24 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let consistency: Consistency = match consistency.try_into() {
-        Ok(c) => c,
-        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    else {
+        // Invalid consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.consistency(consistency)
-    });
+    match maybe_set_consistency {
+        MaybeUnsetConfig::Unset => {
+            // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(consistency) => {
+            exec_profile_builder_modify(
+                &mut cluster.default_execution_profile_builder,
+                |builder| builder.consistency(consistency),
+            );
+        }
+    }
 
     CassError::CASS_OK
 }
@@ -1432,14 +1446,25 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let serial_consistency: SerialConsistency = match serial_consistency.try_into() {
-        Ok(c) => c,
-        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_serial_consistency) =
+        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+    else {
+        // Invalid serial consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
-        builder.serial_consistency(Some(serial_consistency))
-    });
+    match maybe_set_serial_consistency {
+        MaybeUnsetConfig::Unset => {
+            // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(serial_consistency) => {
+            exec_profile_builder_modify(
+                &mut cluster.default_execution_profile_builder,
+                |builder| builder.serial_consistency(serial_consistency),
+            );
+        }
+    }
 
     CassError::CASS_OK
 }

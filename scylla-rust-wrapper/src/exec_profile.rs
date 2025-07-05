@@ -13,7 +13,7 @@ use scylla::client::execution_profile::{
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
 use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
-use scylla::statement::Consistency;
+use scylla::statement::{Consistency, SerialConsistency};
 
 use crate::argconv::{
     ArcFFI, BoxFFI, CMut, CassBorrowedExclusivePtr, CassBorrowedSharedPtr, CassOwnedExclusivePtr,
@@ -25,6 +25,7 @@ use crate::cass_types::CassConsistency;
 use crate::cluster::{
     set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, update_comma_delimited_list,
 };
+use crate::config_value::MaybeUnsetConfig;
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::session::CassSessionInner;
@@ -271,12 +272,32 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let consistency: Consistency = match consistency.try_into() {
-        Ok(c) => c,
-        Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    else {
+        // Invalid consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    profile_builder.modify_in_place(|builder| builder.consistency(consistency));
+    match maybe_set_consistency {
+        MaybeUnsetConfig::Unset => {
+            // CASS_CONSISTENCY_UNKNOWN
+            // TODO: implement semantics of this.
+            // A workaround is needed, because Rust Driver's ExecutionProfileBuilder
+            // does not expose API to unset consistency (enabling semantics:
+            // "ignore me and use the default profile's setting").
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_exec_profile_set_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some consistency \
+                on an execution profile, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting consistency on an execution profile, \
+                which will make the driver use the consistency set on cluster level."
+            );
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(consistency) => {
+            profile_builder.modify_in_place(|builder| builder.consistency(consistency));
+        }
+    }
 
     CassError::CASS_OK
 }
@@ -698,16 +719,35 @@ pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let maybe_serial_consistency =
-        if serial_consistency == CassConsistency::CASS_CONSISTENCY_UNKNOWN {
-            None
-        } else {
-            match serial_consistency.try_into() {
-                Ok(c) => Some(c),
-                Err(_) => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
-            }
-        };
-    profile_builder.modify_in_place(|builder| builder.serial_consistency(maybe_serial_consistency));
+    let Ok(maybe_set_serial_consistency) =
+        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+    else {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    match maybe_set_serial_consistency {
+        MaybeUnsetConfig::Unset => {
+            // CASS_CONSISTENCY_UNKNOWN
+            // TODO: implement semantics of this.
+            // A workaround is needed, because Rust Driver's ExecutionProfileBuilder
+            // does not expose API to unset serial consistency (enabling semantics:
+            // "ignore me and use the default profile's setting").
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_exec_profile_set_serial_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some consistency \
+                on an execution profile, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting serial consistency on an execution profile, \
+                which will make the driver use the consistency set on cluster level."
+            );
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(maybe_serial_consistency) => {
+            // CASS_CONSISTENCY_ANY -> None
+            // other consistency -> Some()
+            profile_builder
+                .modify_in_place(|builder| builder.serial_consistency(maybe_serial_consistency));
+        }
+    }
 
     CassError::CASS_OK
 }

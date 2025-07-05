@@ -3,10 +3,8 @@ use crate::cass_error::CassError;
 use crate::types::*;
 use scylla::cluster::metadata::{CollectionType, NativeType};
 use scylla::frame::response::result::ColumnType;
-use scylla::frame::types::{Consistency, SerialConsistency};
 use scylla::statement::batch::BatchType;
 use std::cell::UnsafeCell;
-use std::convert::TryFrom;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
@@ -891,39 +889,6 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
             name_length,
             ArcFFI::as_ptr(&sub_data_type),
         )
-    }
-}
-
-impl TryFrom<CassConsistency> for Consistency {
-    type Error = ();
-
-    fn try_from(c: CassConsistency) -> Result<Consistency, Self::Error> {
-        match c {
-            CassConsistency::CASS_CONSISTENCY_ANY => Ok(Consistency::Any),
-            CassConsistency::CASS_CONSISTENCY_ONE => Ok(Consistency::One),
-            CassConsistency::CASS_CONSISTENCY_TWO => Ok(Consistency::Two),
-            CassConsistency::CASS_CONSISTENCY_THREE => Ok(Consistency::Three),
-            CassConsistency::CASS_CONSISTENCY_QUORUM => Ok(Consistency::Quorum),
-            CassConsistency::CASS_CONSISTENCY_ALL => Ok(Consistency::All),
-            CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Ok(Consistency::LocalQuorum),
-            CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Ok(Consistency::EachQuorum),
-            CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Ok(Consistency::LocalOne),
-            CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Ok(Consistency::LocalSerial),
-            CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(Consistency::Serial),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<CassConsistency> for SerialConsistency {
-    type Error = ();
-
-    fn try_from(serial: CassConsistency) -> Result<SerialConsistency, Self::Error> {
-        match serial {
-            CassConsistency::CASS_CONSISTENCY_SERIAL => Ok(SerialConsistency::Serial),
-            CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Ok(SerialConsistency::LocalSerial),
-            _ => Err(()),
-        }
     }
 }
 

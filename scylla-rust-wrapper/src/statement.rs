@@ -1,5 +1,6 @@
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
+use crate::config_value::MaybeUnsetConfig;
 use crate::exec_profile::PerStatementExecProfile;
 use crate::inet::CassInet;
 use crate::prepared::CassPrepared;
@@ -17,8 +18,7 @@ use scylla::serialize::value::SerializeValue;
 use scylla::serialize::writers::RowWriter;
 use scylla::statement::SerialConsistency;
 use scylla::statement::unprepared::Statement;
-use scylla::value::MaybeUnset;
-use scylla::value::MaybeUnset::{Set, Unset};
+use scylla::value::MaybeUnset::{self, Set, Unset};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::net::{IpAddr, SocketAddr};
@@ -334,15 +334,41 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let consistency_opt = get_consistency_from_cass_consistency(consistency);
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    else {
+        // Invalid consistency value provided.
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
 
-    if let Some(consistency) = consistency_opt {
-        match &mut statement.statement {
+    match maybe_set_consistency {
+        MaybeUnsetConfig::Unset => {
+            // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
+            // make statement not have any opinion at all about consistency.
+            // Then, the default from the cluster/execution profile should be used.
+            // Unfortunately, the Rust Driver does not support
+            // "unsetting" consistency from a statement at the moment.
+            //
+            // FIXME: Implement unsetting consistency in the Rust Driver.
+            // Then, fix this code.
+            //
+            // For now, we will throw an error in order to warn the user
+            // about this limitation.
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some consistency \
+                on a statement, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting consistency on a statement, which \
+                will make the driver use the consistency set on execution profile or cluster level."
+            );
+
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(consistency) => match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_consistency(consistency),
             BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
                 .statement
                 .set_consistency(consistency),
-        }
+        },
     }
 
     CassError::CASS_OK
@@ -637,38 +663,44 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     // set serial consistency if a user passed correct value and set it to
     // None otherwise.
     // I think that failing explicitly is a better idea, so I decided to return
-    // and error
-    let consistency = match get_consistency_from_cass_consistency(serial_consistency) {
-        Some(Consistency::Serial) => SerialConsistency::Serial,
-        Some(Consistency::LocalSerial) => SerialConsistency::LocalSerial,
-        _ => return CassError::CASS_ERROR_LIB_BAD_PARAMS,
+    // an error.
+    let Ok(maybe_set_serial_consistency) =
+        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+    else {
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    match &mut statement.statement {
-        BoundStatement::Simple(inner) => inner.query.set_serial_consistency(Some(consistency)),
-        BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
-            .statement
-            .set_serial_consistency(Some(consistency)),
-    }
+    match maybe_set_serial_consistency {
+        MaybeUnsetConfig::Unset => {
+            // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
+            // make statement not have any opinion at all about serial consistency.
+            // Then, the default from the cluster/execution profile should be used.
+            // Unfortunately, the Rust Driver does not support
+            // "unsetting" serial consistency from a statement at the moment.
+            //
+            // FIXME: Implement unsetting serial consistency in the Rust Driver.
+            // Then, fix this code.
+            //
+            // For now, we will throw an error in order to warn the user
+            // about this limitation.
+            tracing::warn!(
+                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_serial_consistency`. \
+                This is not supported by the CPP Rust Driver yet: once you set some serial consistency \
+                on a statement, you cannot unset it. This limitation will be fixed in the future. \
+                As a workaround, you can refrain from setting serial consistency on a statement, which \
+                will make the driver use the serial consistency set on execution profile or cluster level."
+            );
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+        MaybeUnsetConfig::Set(serial_consistency) => match &mut statement.statement {
+            BoundStatement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),
+            BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                .statement
+                .set_serial_consistency(serial_consistency),
+        },
+    };
 
     CassError::CASS_OK
-}
-
-fn get_consistency_from_cass_consistency(consistency: CassConsistency) -> Option<Consistency> {
-    match consistency {
-        CassConsistency::CASS_CONSISTENCY_ANY => Some(Consistency::Any),
-        CassConsistency::CASS_CONSISTENCY_ONE => Some(Consistency::One),
-        CassConsistency::CASS_CONSISTENCY_TWO => Some(Consistency::Two),
-        CassConsistency::CASS_CONSISTENCY_THREE => Some(Consistency::Three),
-        CassConsistency::CASS_CONSISTENCY_QUORUM => Some(Consistency::Quorum),
-        CassConsistency::CASS_CONSISTENCY_ALL => Some(Consistency::All),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_QUORUM => Some(Consistency::LocalQuorum),
-        CassConsistency::CASS_CONSISTENCY_EACH_QUORUM => Some(Consistency::EachQuorum),
-        CassConsistency::CASS_CONSISTENCY_SERIAL => Some(Consistency::Serial),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_SERIAL => Some(Consistency::LocalSerial),
-        CassConsistency::CASS_CONSISTENCY_LOCAL_ONE => Some(Consistency::LocalOne),
-        _ => None,
-    }
 }
 
 #[unsafe(no_mangle)]
