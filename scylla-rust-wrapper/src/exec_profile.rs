@@ -11,7 +11,6 @@ use scylla::client::execution_profile::{
     ExecutionProfile, ExecutionProfileBuilder, ExecutionProfileHandle,
 };
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
-use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
 
@@ -750,7 +749,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let Some(profile_builder) = BoxFFI::as_mut_ref(profile) else {
         tracing::error!(
@@ -758,30 +757,22 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         );
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
-    let maybe_retry_policy: Option<Arc<dyn RetryPolicy>> =
-        ArcFFI::as_ref(retry_policy).map(|rp| match rp {
-            CassRetryPolicy::Default(default) => Arc::clone(default) as Arc<dyn RetryPolicy>,
-            CassRetryPolicy::Fallthrough(fallthrough) => Arc::clone(fallthrough) as _,
-            CassRetryPolicy::DowngradingConsistency(downgrading) => Arc::clone(downgrading) as _,
-            CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
-            #[cfg(cpp_integration_testing)]
-            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
-        });
 
-    match maybe_retry_policy {
-        Some(retry_policy) => {
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    match MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy) {
+        MaybeUnsetConfig::Set(retry_policy) => {
             // If the retry policy is set, we use it.
             profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
             profile_builder.overrides.retry_policy = true;
         }
-        None => {
+        MaybeUnsetConfig::Unset(_) => {
             // If the retry policy is not set, we set to use the retry policy from the cluster's
             // default profile.
             // This works around the problem that the Rust Driver's API does not allow
             // unsetting the retry policy in the execution profile.
             profile_builder.overrides.retry_policy = false;
         }
-    }
+    };
 
     CassError::CASS_OK
 }
@@ -881,7 +872,7 @@ mod tests {
     };
 
     use assert_matches::assert_matches;
-    use scylla::policies::retry::FallthroughRetryPolicy;
+    use scylla::policies::retry::{FallthroughRetryPolicy, RetryPolicy};
     use scylla::statement::SerialConsistency;
 
     #[test]
