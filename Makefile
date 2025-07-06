@@ -120,6 +120,38 @@ CASSANDRA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integr
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
+ifndef SCYLLA_EXAMPLES_TO_RUN
+SCYLLA_EXAMPLES_TO_RUN := \
+    async \
+	basic \
+	batch \
+	bind_by_name \
+	callbacks \
+	collections \
+	concurrent_executions \
+	date_time \
+	duration \
+	maps \
+	named_parameters \
+	paging \
+	prepared \
+	simple \
+	ssl \
+	tracing \
+	tuple \
+	udt \
+	uuids \
+
+	# auth <- unimplemented `cass_cluster_set_authenticator_callbacks()`
+	# execution_profiles <- unimplemented `cass_statement_set_keyspace()`
+	# host_listener <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# logging <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# perf <- unimplemented `cass_cluster_set_num_threads_io()`, `cass_cluster_set_queue_size_io()`
+	# schema_meta <- unimplemented multiple schema-related functions
+	# cloud <- out of interest for us, not related to ScyllaDB
+	# dse <- out of interest for us, not related to ScyllaDB
+endif
+
 ifndef CCM_COMMIT_ID
 	export CCM_COMMIT_ID := master
 endif
@@ -212,6 +244,16 @@ build-integration-test-bin-if-missing:
 		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
 		cd "${BUILD_DIR}";\
 		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
+	}
+
+SCYLLA_EXAMPLES_TO_RUN_SEMICOLON_SEPARATED := $(subst ${SPACE},;,${SCYLLA_EXAMPLES_TO_RUN})
+
+build-examples:
+	@{\
+		echo "Building examples to ${EXAMPLES_DIR}";\
+		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
+		cd "${BUILD_DIR}";\
+		cmake -DCASS_EXAMPLES_WHITELIST="${SCYLLA_EXAMPLES_TO_RUN_SEMICOLON_SEPARATED}" -DCASS_BUILD_EXAMPLES=on -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
 	}
 
 _update-rust-tooling:

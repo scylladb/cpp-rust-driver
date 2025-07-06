@@ -69,6 +69,10 @@ if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_UNIT_TESTS)
   set(CASS_USE_LIBUV ON)
 endif()
 
+if(CASS_BUILD_EXAMPLES)
+  set(CASS_USE_LIBUV ON) # Some examples require libuv, e.g. "callbacks".
+endif()
+
 # Determine which driver target should be used as a dependency
 set(PROJECT_LIB_NAME_TARGET scylla-cpp-driver)
 if(CASS_USE_STATIC_LIBS OR
@@ -236,7 +240,25 @@ add_subdirectory(scylla-rust-wrapper)
 add_subdirectory(src)
 
 if(CASS_BUILD_EXAMPLES)
-  add_subdirectory(examples)
+  message(STATUS "Using CASS_EXAMPLES_WHITELIST: ${CASS_EXAMPLES_WHITELIST}")
+
+  set(INCLUDES ${CASS_INCLUDE_DIR})
+  list(APPEND INCLUDES ${CASS_INCLUDES})
+
+  # Get all example directories
+  file(GLOB EXAMPLE_DIRS "${CASS_ROOT_DIR}/examples/*")
+
+  foreach(EXAMPLE_DIR ${EXAMPLE_DIRS})
+    get_filename_component(EXAMPLE_NAME ${EXAMPLE_DIR} NAME)
+
+    # Check whitelist
+    if(IS_DIRECTORY ${EXAMPLE_DIR})
+      if(CASS_EXAMPLES_WHITELIST STREQUAL "" OR EXAMPLE_NAME IN_LIST CASS_EXAMPLES_WHITELIST)
+        message(STATUS "Adding example subdirectory ${EXAMPLE_DIR}, example name ${EXAMPLE_NAME}")
+        add_subdirectory(${EXAMPLE_DIR})
+      endif()
+    endif()
+  endforeach()
 endif()
 
 if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_TESTS)
