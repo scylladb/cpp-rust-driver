@@ -122,6 +122,11 @@ CASSANDRA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integr
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
+ifndef SCYLLA_EXAMPLES_URI
+# In sync with the docker compose file.
+SCYLLA_EXAMPLES_URI := 172.43.0.2
+endif
+
 ifndef SCYLLA_EXAMPLES_TO_RUN
 SCYLLA_EXAMPLES_TO_RUN := \
     async \
@@ -337,3 +342,28 @@ endif
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="${FULL_RUSTFLAGS}" cargo test
+
+# Currently not used.
+CQLSH := cqlsh
+
+run-examples-scylla: build-examples
+	@sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+	@# Keep `SCYLLA_EXAMPLES_URI` in sync with the `scylla` service in `docker-compose.yml`.
+	@docker compose -f tests/examples_cluster/docker-compose.yml up -d --wait
+
+	@# Instead of using cqlsh, which would impose another dependency on the system,
+	@# we use a special example `drop_examples_keyspace` to drop the `examples` keyspace.
+	@# CQLSH_HOST=${SCYLLA_EXAMPLES_URI} ${CQLSH} -e "DROP KEYSPACE IF EXISTS EXAMPLES"; \
+
+	@echo "Running examples on scylla ${SCYLLA_VERSION}"
+	@for example in ${SCYLLA_EXAMPLES_TO_RUN} ; do \
+		echo -e "\nRunning example: $${example}"; \
+		build/examples/drop_examples_keyspace/drop_examples_keyspace ${SCYLLA_EXAMPLES_URI} || exit 1; \
+		build/examples/$${example}/$${example} ${SCYLLA_EXAMPLES_URI} || { \
+		    echo "Example \`$${example}\` has failed!"; \
+			docker compose -f tests/examples_cluster/docker-compose.yml down; \
+			exit 42; \
+		}; \
+	done
+
+	@docker compose -f tests/examples_cluster/docker-compose.yml down --remove-orphans
