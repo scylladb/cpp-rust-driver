@@ -1,4 +1,3 @@
-use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -30,7 +29,7 @@ use std::future::Future;
 use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
+use tokio::sync::RwLock;
 
 pub(crate) struct CassConnectedSession {
     session: Session,
@@ -71,7 +70,7 @@ impl CassConnectedSession {
     }
 
     fn connect(
-        session: Arc<RwLock<CassSessionInner>>,
+        session: Arc<CassSession>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -79,15 +78,13 @@ impl CassConnectedSession {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
-        let mut session_guard = RUNTIME.block_on(session.write_owned());
-
         if let Some(cluster_client_id) = cluster.get_client_id() {
             // If the user set a client id, use it instead of the random one.
-            session_guard.client_id = cluster_client_id;
+            session.inner.blocking_write().client_id = cluster_client_id;
         }
 
         let fut = Self::connect_fut(
-            session_guard,
+            session,
             session_builder,
             exec_profile_map,
             host_filter,
@@ -102,7 +99,7 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
-        mut session_guard: OwnedRwLockWriteGuard<CassSessionInner>,
+        session: Arc<CassSession>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
@@ -110,6 +107,8 @@ impl CassConnectedSession {
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
+        let mut session_guard = session.inner.write().await;
+
         if session_guard.connected.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
@@ -158,10 +157,10 @@ impl CassConnectedSession {
         Ok(CassResultValue::Empty)
     }
 
-    fn close_fut(session_opt: Arc<RwLock<CassSessionInner>>) -> Arc<CassFuture> {
+    fn close_fut(session_opt: Arc<CassSession>) -> Arc<CassFuture> {
         CassFuture::new_from_future(
             async move {
-                let mut session_guard = session_opt.write().await;
+                let mut session_guard = session_opt.inner.write().await;
                 if session_guard.connected.is_none() {
                     return Err((
                         CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
@@ -179,12 +178,7 @@ impl CassConnectedSession {
     }
 }
 
-// Technically, we should not allow this struct to be public,
-// but this would require a lot of changes in the codebase:
-// CassSession would need to be a newtype wrapper around this struct
-// instead of a type alias.
-#[expect(unnameable_types)]
-pub struct CassSessionInner {
+pub(crate) struct CassSessionInner {
     // This is an `Option` to allow the session to be closed.
     // If it is `None`, the session is closed.
     connected: Option<CassConnectedSession>,
@@ -194,7 +188,9 @@ pub struct CassSessionInner {
     client_id: uuid::Uuid,
 }
 
-pub type CassSession = RwLock<CassSessionInner>;
+pub struct CassSession {
+    inner: RwLock<CassSessionInner>,
+}
 
 impl FFI for CassSession {
     type Origin = FromArc;
@@ -202,10 +198,12 @@ impl FFI for CassSession {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
-    let session = Arc::new(RwLock::new(CassSessionInner {
-        connected: None,
-        client_id: uuid::Uuid::new_v4(),
-    }));
+    let session = Arc::new(CassSession {
+        inner: RwLock::new(CassSessionInner {
+            connected: None,
+            client_id: uuid::Uuid::new_v4(),
+        }),
+    });
     ArcFFI::into_ptr(session)
 }
 
@@ -277,7 +275,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
-        let session_guard = session_opt.read().await;
+        let session_guard = session_opt.inner.read().await;
         if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -361,7 +359,7 @@ pub unsafe extern "C" fn cass_session_execute(
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
-        let session_guard = session_opt.read().await;
+        let session_guard = session_opt.inner.read().await;
         let Some(cass_connected_session) = session_guard.connected.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -500,7 +498,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let session_guard = session.read().await;
+            let session_guard = session.inner.read().await;
             if session_guard.connected.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -550,7 +548,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     let query = Statement::new(query_str.to_string());
 
     let fut = async move {
-        let session_guard = cass_session.read().await;
+        let session_guard = cass_session.inner.read().await;
         if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -611,7 +609,7 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().client_id;
+    let client_id: uuid::Uuid = cass_session.inner.blocking_read().client_id;
     client_id.into()
 }
 
@@ -623,6 +621,7 @@ pub unsafe extern "C" fn cass_session_get_schema_meta(
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
     for (keyspace_name, keyspace) in cass_session
+        .inner
         .blocking_read()
         .connected
         .as_ref()
@@ -700,7 +699,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
         return;
     }
 
-    let maybe_session_guard = maybe_session_lock.blocking_read();
+    let maybe_session_guard = maybe_session_lock.inner.blocking_read();
     let maybe_session = maybe_session_guard.connected.as_ref();
     let Some(session) = maybe_session else {
         tracing::warn!("Attempted to get metrics before connecting session object");
@@ -935,6 +934,7 @@ mod tests {
                 assert!(
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
+                        .inner
                         .blocking_read()
                         .connected
                         .as_ref()
@@ -952,6 +952,7 @@ mod tests {
                 assert!(
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
+                        .inner
                         .blocking_read()
                         .connected
                         .as_ref()
@@ -969,6 +970,7 @@ mod tests {
                 ));
                 let profile_map_keys = ArcFFI::as_ref(session_raw.borrow())
                     .unwrap()
+                    .inner
                     .blocking_read()
                     .connected
                     .as_ref()
