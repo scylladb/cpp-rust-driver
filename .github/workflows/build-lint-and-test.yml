@@ -38,6 +38,9 @@ jobs:
       - name: Run unit and proxy tests
         run: make run-test-unit
 
+      - name: Run examples
+        run: make run-examples-scylla
+
       - name: Build integration test binary
         id: build-integration-test-bin
         run: make build-integration-test-bin
