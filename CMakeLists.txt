@@ -240,6 +240,17 @@ add_subdirectory(scylla-rust-wrapper)
 add_subdirectory(src)
 
 if(CASS_BUILD_EXAMPLES)
+  if(NOT DEFINED CASS_EXAMPLES_WHITELIST) # If someone runs CMake straight, not from the Makefile.
+    execute_process(
+      COMMAND make -f ../Makefile -p -n # Print the makefile's variables without executing it.
+      COMMAND grep -E "^SCYLLA_EXAMPLES_TO_RUN :="  # Find the list of examples to run.
+      COMMAND awk -F ":= " "{print $2}" # Extract the value after the ":=", which is a whitespace-separated list.
+      OUTPUT_VARIABLE SCYLLA_EXAMPLES_TO_RUN
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REPLACE " " ";" CASS_EXAMPLES_WHITELIST ${SCYLLA_EXAMPLES_TO_RUN})
+    string(APPEND CASS_EXAMPLES_WHITELIST drop_examples_keyspace)
+  endif()
   message(STATUS "Using CASS_EXAMPLES_WHITELIST: ${CASS_EXAMPLES_WHITELIST}")
 
   set(INCLUDES ${CASS_INCLUDE_DIR})
