@@ -81,7 +81,7 @@ fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed={}", RELATIVE_PATH_TO_CASSANDRA_H);
+    println!("cargo:rerun-if-changed={RELATIVE_PATH_TO_CASSANDRA_H}");
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     prepare_full_bindings(&out_path);
     prepare_basic_types(&out_path);
