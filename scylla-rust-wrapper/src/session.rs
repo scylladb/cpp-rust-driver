@@ -29,7 +29,8 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Notify;
 
 /// Represents a session that is connected to the ScyllaDB/Cassandra cluster.
 /// This is atomically stored in the `CassSession` struct upon connection,
@@ -41,6 +42,30 @@ pub(crate) struct CassConnectedSession {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
     pending_requests: std::sync::atomic::AtomicUsize,
+    /// Used to notify the closing future when all requests have finished.
+    // This is a `OnceLock`, because it's only set once, when the session closing is initiated.
+    // Since then, if any request notices that it is the last one, it will notify this,
+    // allowing the closing future to resolve.
+    // Q. Why do we need to put the `Notify` into a `OnceLock`?
+    // A. 1. `Notify`, not to lose any notifiacations in race conditions
+    //    between the notifier and notifiee, must store all past notifications
+    //    that have not yet been handled.
+    //    2. The `Notify` is notified every time the last in-flight request
+    //    completes. In normal operating of the session, there may be times
+    //    that the *temporarily* last in-flight request completes, but the
+    //    session is not even closed. After some time, another request may
+    //    be started, so this was not really the last request. The `Notify`
+    //    would, however, store this notification, and once the session is
+    //    really closed, `Notify::notified().await` would return immediately,
+    //    leading to a false positive. This would not be a correctness problem
+    //    as long as the condition (no more running requests) is checked in
+    //    the loop, but it would nevertheless be a performance problem, because
+    //    the closer task would be woken up `n` times, where `n` is the number
+    //    of times during the whole operation time of the session when the
+    //    "temporarily last" in-flight request completed.
+    //    With `OnceLock`, we have a guarantee that the `Notify` is only
+    //    notified when *the truly last* request completes.
+    requests_finished_notify: OnceLock<Notify>,
 }
 
 /// This module encodes the invariants that guard against mishandling of pending
@@ -88,10 +113,33 @@ mod pending_requests {
         /// (without a panic).
         pub(super) fn unpend_request(&self, mut proof: PendingRequestProof) {
             proof.unpended = true;
-            self.pending_requests.fetch_sub(1, Ordering::AcqRel);
+            let pending_requests = self
+                .pending_requests
+                .fetch_sub(1, Ordering::AcqRel)
+                .checked_sub(1) // `fetch_sub` returns the value *before* the decrement.
+                .expect("BUG: more requests unpended than had been pended!");
+
+            if pending_requests == 0 {
+                // If there are no pending requests, notify the closing future.
+                if let Some(notify) = self.requests_finished_notify.get() {
+                    // A single `notify_one` is enough, because there may never be more that a single
+                    // waiter. This is because the session is atomically swapped with `None` when closing,
+                    // so there can be only one thread that waits for the given session to close.
+                    //
+                    // By the virtue of the `Notify`, any possible execution order of `notify_one`
+                    // and `notified().await` will work correctly.
+                    notify.notify_one();
+                } else {
+                    // No need to do anything if the notify is not set, because it means that either:
+                    // 1. the session is not being closed, or
+                    // 2. the session is already closed, but the notify was not set yet.
+                    //
+                    // In both cases, the closing future, at the point when no new requests are accepted,
+                    // will check `has_pending_requests()` and return immediately if there are no pending requests.
+                }
+            }
         }
 
-        #[expect(unused)]
         pub(super) fn has_pending_requests(&self) -> bool {
             self.pending_requests.load(Ordering::Acquire) > 0
         }
@@ -242,6 +290,7 @@ impl CassConnectedSession {
                 session,
                 exec_profile_map,
                 pending_requests: 0.into(),
+                requests_finished_notify: OnceLock::new(),
             })),
         );
         if prev.is_some() {
@@ -253,17 +302,37 @@ impl CassConnectedSession {
 
     fn close_fut(cass_session: &CassSession) -> Arc<CassFuture> {
         let prev = cass_session.connected.swap(None);
+        // Since now, no new requests will be accepted.
 
-        let Some(_cass_session_connected) = prev else {
+        let Some(cass_session_connected) = prev else {
             return CassFuture::new_ready(Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
                 "Already closing or closed".msg(),
             )));
         };
 
+        // We start by setting the Notify, so that we won't lose a wakeup
+        // if the last request finishes before we set it.
+        cass_session_connected
+            .requests_finished_notify
+            .set(Notify::new())
+            .expect(
+                "The swap guarantees that only one thread takes the connected session. \
+                And this should never be an issue IRL, because session should be closed \
+                from a single thread, only once",
+            );
+
         let fut = async move {
-            // TODO: add waiting for the pending requests to finish.
-            let _ = cass_session_connected;
+            while cass_session_connected.has_pending_requests() {
+                // Wait for all pending requests to finish.
+                // This will block until the last request finishes and calls `requests_finished_notify.notify_one()`.
+                cass_session_connected
+                    .requests_finished_notify
+                    .get()
+                    .expect("We have initialized the OnceLock prior")
+                    .notified()
+                    .await;
+            }
 
             Ok(CassResultValue::Empty)
         };
@@ -709,7 +778,12 @@ pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassS
     };
 
     let close_fut = CassConnectedSession::close_fut(&session_opt);
-    close_fut.with_waited_result(|_| ());
+    close_fut.with_waited_result(|_| {
+        // The future may return an error, but we don't care about it here,
+        // because we are just cleaning up the session.
+        // If the future returned, no matter if it was successful or not,
+        // the session is now closed, and we can safely drop it.
+    });
 
     // The CassSession's Arc is dropped here with the end of the scope.
 }
