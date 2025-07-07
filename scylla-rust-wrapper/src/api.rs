@@ -923,3 +923,21 @@ pub mod date_time {
 pub mod alloc {
     // cass_alloc_set_functions, UNIMPLEMENTED
 }
+
+#[cfg(cpp_integration_testing)]
+pub mod integration_testing {
+    #[rustfmt::skip]
+    pub use crate::integration_testing::{
+        IgnoringRetryPolicy,
+        testing_batch_set_sleeping_history_listener,
+        testing_cluster_get_connect_timeout,
+        testing_cluster_get_contact_points,
+        testing_cluster_get_port,
+        testing_free_cstring,
+        testing_future_get_attempted_hosts,
+        testing_future_get_host,
+        testing_retry_policy_ignoring_new,
+        testing_statement_set_recording_history_listener,
+        testing_statement_set_sleeping_history_listener,
+    };
+}

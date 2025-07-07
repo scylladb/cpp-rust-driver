@@ -332,7 +332,7 @@ fn test_future_get_attempted_hosts() {
 ///
 /// Useful for testing purposes.
 #[derive(Debug)]
-pub(crate) struct IgnoringRetryPolicy;
+pub struct IgnoringRetryPolicy;
 
 #[derive(Debug)]
 struct IgnoringRetrySession;
