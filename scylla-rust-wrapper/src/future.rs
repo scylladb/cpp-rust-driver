@@ -157,12 +157,14 @@ impl CassFuture {
 
     /// Awaits the future until completion.
     ///
-    /// There are two possible cases:
-    /// - noone is currently working on the future -> we take the ownership
-    ///   of JoinHandle (future) and we poll it until completion.
+    /// There are three possible cases:
+    /// - result is already available -> we can return.
+    /// - no one is currently working on the future -> we take the ownership
+    ///   of JoinHandle (future) and poll it until completion.
     /// - some other thread is working on the future -> we wait on the condition
     ///   variable to get an access to the future's state. Once we are notified,
-    ///   there are two cases:
+    ///   there are three cases:
+    ///     - result is already available -> we can return.
     ///     - JoinHandle is consumed -> some other thread already resolved the future.
     ///       We can return.
     ///     - JoinHandle is Some -> some other thread was working on the future, but
@@ -171,6 +173,10 @@ impl CassFuture {
     fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
         let mut guard = self.state.lock().unwrap();
         loop {
+            if self.result.get().is_some() {
+                // The result is already available, we can return it.
+                return f(&mut guard);
+            }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
                 mem::drop(guard);
@@ -185,11 +191,12 @@ impl CassFuture {
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
-                if guard.join_handle.is_some() {
+                if self.result.get().is_none() && guard.join_handle.is_some() {
                     // join_handle was none, and now it isn't - some other thread must
                     // have timed out and returned the handle. We need to take over
-                    // the work of completing the future. To do that, we go into
-                    // another iteration so that we land in the branch with block_on.
+                    // the work of completing the future, because the result is still not available.
+                    // To do that, we go into another iteration so that we land in the branch
+                    // with `block_on`.
                     continue;
                 }
             }
@@ -207,14 +214,16 @@ impl CassFuture {
 
     /// Tries to await the future with a given timeout.
     ///
-    /// There are two possible cases:
-    /// - noone is currently working on the future -> we take the ownership
+    /// There are three possible cases:
+    /// - result is already available -> we can return.
+    /// - no one is currently working on the future -> we take the ownership
     ///   of JoinHandle (future) and we try to poll it with given timeout.
     ///   If we timed out, we need to return the unfinished JoinHandle, so
     ///   some other thread can complete the future later.
     /// - some other thread is working on the future -> we wait on the condition
     ///   variable to get an access to the future's state.
-    ///   Once we are notified (before the timeout), there are two cases.
+    ///   Once we are notified (before the timeout), there are three cases:
+    ///     - result is already available -> we can return.
     ///     - JoinHandle is consumed -> some other thread already resolved the future.
     ///       We can return.
     ///     - JoinHandle is Some -> some other thread was working on the future, but
@@ -231,6 +240,10 @@ impl CassFuture {
             .ok_or(FutureError::InvalidDuration)?;
 
         loop {
+            if self.result.get().is_some() {
+                // The result is already available, we can return it.
+                return Ok(f(&mut guard));
+            }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
                 mem::drop(guard);
@@ -277,8 +290,9 @@ impl CassFuture {
                 if timeout_result.timed_out() {
                     return Err(FutureError::TimeoutError);
                 }
+
                 guard = guard_result;
-                if guard.join_handle.is_some() {
+                if self.result.get().is_none() && guard.join_handle.is_some() {
                     // join_handle was none, and now it isn't - some other thread must
                     // have timed out and returned the handle. We need to take over
                     // the work of completing the future. To do that, we go into
