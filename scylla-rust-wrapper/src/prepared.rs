@@ -65,8 +65,7 @@ impl CassPrepared {
             // col specs, and we found an index with a corresponding name, we should
             // find a CassDataType at given index.
             None => panic!(
-                "Cannot find a data type of parameter with given name: {}. This is a driver bug!",
-                name
+                "Cannot find a data type of parameter with given name: {name}. This is a driver bug!",
             ),
         }
     }

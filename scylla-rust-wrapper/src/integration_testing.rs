@@ -272,7 +272,7 @@ pub unsafe extern "C" fn testing_future_get_attempted_hosts(
         // Convert the SocketAddr to a string.
         // Delimit address strings with '\n' to enable easy parsing in C.
 
-        write!(&mut acc, "{}\n", host.ip()).unwrap();
+        writeln!(&mut acc, "{}", host.ip()).unwrap();
         acc
     });
 
@@ -332,7 +332,7 @@ fn test_future_get_attempted_hosts() {
 ///
 /// Useful for testing purposes.
 #[derive(Debug)]
-pub(crate) struct IgnoringRetryPolicy;
+pub struct IgnoringRetryPolicy;
 
 #[derive(Debug)]
 struct IgnoringRetrySession;
