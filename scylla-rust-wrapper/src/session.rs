@@ -167,14 +167,14 @@ impl CassConnectedSession {
     fn close_fut(cass_session: &CassSession) -> Arc<CassFuture> {
         let prev = cass_session.connected.swap(None);
 
-        let fut = async move {
-            if prev.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
+        let Some(_cass_session_connected) = prev else {
+            return CassFuture::new_ready(Err((
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                "Already closing or closed".msg(),
+            )));
+        };
 
+        let fut = async move {
             // TODO: add waiting for the pending requests to finish.
 
             Ok(CassResultValue::Empty)
@@ -279,14 +279,15 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
     let session_opt = cass_session.connected.load_full();
-    let future = async move {
-        let Some(cass_connected_session) = session_opt else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
 
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
+    let future = async move {
         let session = &cass_connected_session.session;
 
         let handle = cass_connected_session
@@ -336,6 +337,14 @@ pub unsafe extern "C" fn cass_session_execute(
     let paging_enabled = statement_opt.paging_enabled;
     let mut statement = statement_opt.statement.clone();
 
+    let session_opt = cass_session.connected.load_full();
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     #[cfg(cpp_integration_testing)]
     let recording_listener = statement_opt.record_hosts.then(|| {
         let recording_listener =
@@ -361,15 +370,7 @@ pub unsafe extern "C" fn cass_session_execute(
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
-    let session_opt = cass_session.connected.load_full();
-
     let future = async move {
-        let Some(ref cass_connected_session) = session_opt else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
         let session = &cass_connected_session.session;
 
         let handle = cass_connected_session
@@ -494,15 +495,15 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
     let statement = cass_statement.statement.clone();
 
     let session_opt = session.connected.load_full();
+    let Some(connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     CassFuture::make_raw(
         async move {
-            let Some(ref connected_session) = session_opt else {
-                return Err((
-                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                    "Session is not connected".msg(),
-                ));
-            };
-
             let query = match &statement {
                 BoundStatement::Simple(q) => q,
                 BoundStatement::Prepared(ps) => {
@@ -553,14 +554,14 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     let query = Statement::new(query_str.to_string());
 
     let session_opt = cass_session.connected.load_full();
-    let fut = async move {
-        let Some(connected_session) = session_opt else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
+    let Some(connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
 
+    let fut = async move {
         let prepared = connected_session
             .session
             .prepare(query)
