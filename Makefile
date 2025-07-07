@@ -212,7 +212,7 @@ _update-rust-tooling:
 
 check-cargo: install-cargo-if-missing _update-rust-tooling
 	@echo "Running \"cargo check\" in ./scylla-rust-wrapper"
-	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo check
+	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo check --all-targets
 
 fix-cargo:
 	@echo "Running \"cargo fix --verbose --all\" in ./scylla-rust-wrapper"
