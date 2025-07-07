@@ -343,23 +343,12 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" consistency from a statement at the moment.
-            //
-            // FIXME: Implement unsetting consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some consistency \
-                on a statement, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting consistency on a statement, which \
-                will make the driver use the consistency set on execution profile or cluster level."
-            );
-
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            match &mut statement.statement {
+                BoundStatement::Simple(inner) => inner.query.unset_consistency(),
+                BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                    .statement
+                    .unset_consistency(),
+            }
         }
         MaybeUnsetConfig::Set(consistency) => match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_consistency(consistency),
@@ -673,22 +662,12 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about serial consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" serial consistency from a statement at the moment.
-            //
-            // FIXME: Implement unsetting serial consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_serial_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some serial consistency \
-                on a statement, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting serial consistency on a statement, which \
-                will make the driver use the serial consistency set on execution profile or cluster level."
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            match &mut statement.statement {
+                BoundStatement::Simple(inner) => inner.query.unset_serial_consistency(),
+                BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                    .statement
+                    .unset_serial_consistency(),
+            }
         }
         MaybeUnsetConfig::Set(serial_consistency) => match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),

@@ -69,33 +69,16 @@ pub unsafe extern "C" fn cass_batch_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
+    let batch = &mut Arc::make_mut(&mut batch.state).batch;
     match maybe_set_consistency {
         MaybeUnsetConfig::Unset => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make batch not have any opinion at all about consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" consistency from a batch at the moment.
-            //
-            // FIXME: Implement unsetting consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_batch_set_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some consistency \
-                on a batch, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting consistency on a batch, which \
-                will make the driver use the consistency set on execution profile or cluster level."
-            );
-
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            batch.unset_consistency();
         }
         MaybeUnsetConfig::Set(consistency) => {
-            Arc::make_mut(&mut batch.state)
-                .batch
-                .set_consistency(consistency);
+            batch.set_consistency(consistency);
         }
     };
     CassError::CASS_OK
@@ -125,32 +108,16 @@ pub unsafe extern "C" fn cass_batch_set_serial_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
+    let batch = &mut Arc::make_mut(&mut batch.state).batch;
     match maybe_set_serial_consistency {
         MaybeUnsetConfig::Unset => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make batch not have any opinion at all about serial consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" serial consistency from a batch at the moment.
-            //
-            // FIXME: Implement unsetting serial consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_batch_set_serial_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some serial consistency \
-                on a batch, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting serial consistency on a batch, which \
-                will make the driver use the serial consistency set on execution profile or cluster level."
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            batch.unset_serial_consistency();
         }
         MaybeUnsetConfig::Set(serial_consistency) => {
-            Arc::make_mut(&mut batch.state)
-                .batch
-                .set_serial_consistency(serial_consistency);
+            batch.set_serial_consistency(serial_consistency);
         }
     };
 
