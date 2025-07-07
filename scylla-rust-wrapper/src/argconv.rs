@@ -240,7 +240,7 @@ impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
 
 /// Pointer constructors.
 impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
-    fn null() -> Self {
+    pub(crate) fn null() -> Self {
         CassPtr {
             ptr: None,
             _phantom: PhantomData,
