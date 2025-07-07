@@ -132,6 +132,14 @@ ifndef CASSANDRA_VERSION
 	CASSANDRA_VERSION := 3.11.17
 endif
 
+# RUSTFLAGS are normally specified in .cargo/config.toml, but those do not include
+# the integration testing flag ("cpp_integration_testing"), to prevent CMake from
+# including testing stuff when building the main library.
+# This constant is used to store the full set of RUSTFLAGS that should be used
+# for running integration tests, as well as running lints on conditionally compiled
+# code related to integration testing.
+FULL_RUSTFLAGS := --cfg cpp_rust_unstable --cfg cpp_integration_testing
+
 CURRENT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 BUILD_DIR := "${CURRENT_DIR}build"
 INTEGRATION_TEST_BIN := ${BUILD_DIR}/cassandra-integration-tests
@@ -220,7 +228,7 @@ fix-cargo:
 
 check-cargo-clippy: install-cargo-if-missing _update-rust-tooling
 	@echo "Running \"cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args\" in ./scylla-rust-wrapper"
-	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args
+	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="${FULL_RUSTFLAGS}" cargo clippy --verbose --all-targets -- -D warnings -Aclippy::uninlined_format_args
 
 fix-cargo-clippy: install-cargo-if-missing _update-rust-tooling
 	@echo "Running \"cargo clippy --verbose --all-targets --fix -- -D warnings -Aclippy::uninlined_format_args\" in ./scylla-rust-wrapper"
@@ -287,4 +295,4 @@ endif
 	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_NO_VALGRIND_TEST_FILTER}"
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
-	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="--cfg cpp_rust_unstable --cfg cpp_integration_testing" cargo test
+	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="${FULL_RUSTFLAGS}" cargo test
