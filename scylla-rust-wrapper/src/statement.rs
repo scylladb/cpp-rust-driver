@@ -332,14 +332,14 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about consistency.
             // Then, the default from the cluster/execution profile should be used.
@@ -652,13 +652,13 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     // I think that failing explicitly is a better idea, so I decided to return
     // an error.
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about serial consistency.
             // Then, the default from the cluster/execution profile should be used.
@@ -711,7 +711,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     };
 
     let maybe_unset_timeout =
-        MaybeUnsetConfig::<RequestTimeout>::from_c_value_infallible(timeout_ms);
+        MaybeUnsetConfig::<_, RequestTimeout>::from_c_value_infallible(timeout_ms);
 
     // `Statement::set_request_timeout` expects an Option<Duration> with unusual semantics:
     // - `None` means "ignore me and use the default timeout from the cluster/execution profile" - this is
@@ -720,7 +720,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     // - `Some(timeout)` means "use timeout of given value".
     // Therefore, to acquire "no timeout" semantics, we need to emulate it with an extremely long timeout.
     let timeout = match maybe_unset_timeout {
-        MaybeUnsetConfig::Unset => None,
+        MaybeUnsetConfig::Unset(_) => None,
         MaybeUnsetConfig::Set(RequestTimeout(timeout)) => {
             Some(timeout.unwrap_or(RequestTimeout::INFINITE))
         }

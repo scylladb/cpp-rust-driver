@@ -1524,14 +1524,14 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
             return CassError::CASS_ERROR_LIB_BAD_PARAMS;
         }
@@ -1557,14 +1557,14 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     };
 
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         // Invalid serial consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
             return CassError::CASS_ERROR_LIB_BAD_PARAMS;
         }

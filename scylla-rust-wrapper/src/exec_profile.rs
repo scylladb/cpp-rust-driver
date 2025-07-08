@@ -341,14 +341,14 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // This will make the profile inherit the consistency from the cluster's default profile.
             // This works around the problem that the Rust Driver's API does not allow
             // unsetting the consistency in the execution profile.
@@ -732,8 +732,8 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    match MaybeUnsetConfig::<RequestTimeout>::from_c_value_infallible(timeout_ms) {
-        MaybeUnsetConfig::Unset => {
+    match MaybeUnsetConfig::<_, RequestTimeout>::from_c_value_infallible(timeout_ms) {
+        MaybeUnsetConfig::Unset(_) => {
             // CASS_UINT64_MAX
             // This will make the profile inherit the request timeout from the cluster's default profile.
             profile_builder.overrides.request_timeout = false;
@@ -799,13 +799,13 @@ pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
     };
 
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // CASS_CONSISTENCY_UNKNOWN
             // This will make the profile inherit the serial consistency from the cluster's default profile.
             // This works around the problem that the Rust Driver's API does not allow
@@ -1392,10 +1392,10 @@ mod tests {
 
                 assert_eq!(
                     built_profile.get_consistency(),
-                    match MaybeUnsetConfig::<Consistency>::from_c_value(custom_cass_consistency)
+                    match MaybeUnsetConfig::<_, Consistency>::from_c_value(custom_cass_consistency)
                         .unwrap()
                     {
-                        MaybeUnsetConfig::Unset => panic!(
+                        MaybeUnsetConfig::Unset(_) => panic!(
                             "Unexpected Unset, which should only happen for CASS_CONSISTENCY_UNKNOWN"
                         ),
                         MaybeUnsetConfig::Set(c) => c,
@@ -1404,12 +1404,12 @@ mod tests {
 
                 assert_eq!(
                     built_profile.get_serial_consistency(),
-                    match MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(
+                    match MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(
                         custom_serial_cass_consistency
                     )
                     .unwrap()
                     {
-                        MaybeUnsetConfig::Unset => panic!(
+                        MaybeUnsetConfig::Unset(_) => panic!(
                             "Unexpected Unset, which should only happen for CASS_CONSISTENCY_UNKNOWN"
                         ),
                         MaybeUnsetConfig::Set(sc) => sc,
