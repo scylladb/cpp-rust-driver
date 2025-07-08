@@ -13,7 +13,7 @@ use crate::metadata::{CassKeyspaceMeta, CassMaterializedViewMeta, CassSchemaMeta
 use crate::prepared::CassPrepared;
 use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
 use crate::statement::{BoundStatement, CassStatement, SimpleQueryRowSerializer};
-use crate::types::{cass_uint64_t, size_t};
+use crate::types::size_t;
 use crate::uuid::CassUuid;
 use scylla::client::execution_profile::ExecutionProfileHandle;
 use scylla::client::session::Session;
@@ -30,7 +30,6 @@ use std::future::Future;
 use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
 
 pub(crate) struct CassConnectedSession {
@@ -271,7 +270,6 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     };
 
     let mut state = batch_from_raw.state.clone();
-    let request_timeout_ms = batch_from_raw.batch_request_timeout_ms;
 
     // DO NOT refer to `batch_from_raw` inside the async block, as I've done just to face a segfault.
     let batch_exec_profile = batch_from_raw.exec_profile.clone();
@@ -310,30 +308,11 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         }
     };
 
-    match request_timeout_ms {
-        Some(timeout_ms) => CassFuture::make_raw(
-            async move { request_with_timeout(timeout_ms, future).await },
-            #[cfg(cpp_integration_testing)]
-            None,
-        ),
-        None => CassFuture::make_raw(
-            future,
-            #[cfg(cpp_integration_testing)]
-            None,
-        ),
-    }
-}
-
-async fn request_with_timeout(
-    request_timeout_ms: cass_uint64_t,
-    future: impl Future<Output = Result<CassResultValue, (CassError, String)>>,
-) -> Result<CassResultValue, (CassError, String)> {
-    match tokio::time::timeout(Duration::from_millis(request_timeout_ms), future).await {
-        Ok(result) => result,
-        Err(_timeout_err) => Ok(CassResultValue::QueryError(Arc::new(
-            ExecutionError::RequestTimeout(Duration::from_millis(request_timeout_ms)).into(),
-        ))),
-    }
+    CassFuture::make_raw(
+        future,
+        #[cfg(cpp_integration_testing)]
+        None,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -354,8 +333,6 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
-    let request_timeout_ms = statement_opt.request_timeout_ms;
-
     let mut statement = statement_opt.statement.clone();
 
     #[cfg(cpp_integration_testing)]
@@ -491,18 +468,11 @@ pub unsafe extern "C" fn cass_session_execute(
         }
     };
 
-    match request_timeout_ms {
-        Some(timeout_ms) => CassFuture::make_raw(
-            async move { request_with_timeout(timeout_ms, future).await },
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-        None => CassFuture::make_raw(
-            future,
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
-        ),
-    }
+    CassFuture::make_raw(
+        future,
+        #[cfg(cpp_integration_testing)]
+        recording_listener,
+    )
 }
 
 #[unsafe(no_mangle)]
