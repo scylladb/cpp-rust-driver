@@ -106,6 +106,48 @@ mod pending_requests {
             PendingRequestProof { unpended: false }
         }
 
+        /// Pends a request and makes sure that there was no race with a concurrent
+        /// `cass_session_close`. If the race is detected, i.e., the session was closed
+        /// (which is detected by lack of a connected session or existence of a different
+        /// connected session), the request is unpended, and an error is returned.
+        pub(super) fn try_pend_request_race_immune(
+            self: &Arc<Self>,
+            cass_session: &CassSession,
+        ) -> Result<PendingRequestProof, ()> {
+            let pending_request_proof = self.pend_request();
+
+            // We need to make sure that there's no race with a concurrent `cass_session_close`.
+            // If the session is closed after we loaded the `CassConnectedSession`, but before we pended the request,
+            // the closer may have already seen 0 pending requests, concluded that all requests have finished,
+            // and resolved the close future.
+            // This means we must not start the request if the session is now closed.
+            //
+            // Beware of ABA problem here: if the session is closed, then reopened, we may falsely observe
+            // that the session has not been closed, whereas it's a different session now.
+            // To prevent the ABA problem, let's check pointer equality of the `CassConnectedSession` Arc.
+            // A little paranoia never hurts, especially in the FFI code ;)
+            // This is what Rust devs are known for, right?
+            //
+            // Credits to @lorak-mmk for noticing this bug.
+            let session_opt_now = cass_session.connected.load();
+            if !session_opt_now
+                .as_ref()
+                .is_some_and(|cass_connected_session_now| {
+                    Arc::ptr_eq(cass_connected_session_now, self)
+                })
+            {
+                // A logical race has occured: the session was closed after we loaded it,
+                // but before we pended the request. This means we must not start the request,
+                // but instead return an error that the session is not connected.
+                //
+                // Don't forget to unpend the request.
+                self.unpend_request(pending_request_proof);
+                return Err(());
+            }
+
+            Ok(pending_request_proof)
+        }
+
         /// This requires a proof that the request was pending,
         /// not to allow unpending requests that were not made.
         ///
@@ -444,7 +486,15 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         )));
     };
 
-    let pending_request_proof = cass_connected_session.pend_request();
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let future = async move {
         let res = async {
             let session = &cass_connected_session.session;
@@ -535,7 +585,14 @@ pub unsafe extern "C" fn cass_session_execute(
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
-    let pending_request_proof = cass_connected_session.pend_request();
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
 
     let future = async move {
         let res = async {
@@ -654,10 +711,10 @@ pub unsafe extern "C" fn cass_session_execute(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_prepare_from_existing(
-    cass_session: CassBorrowedSharedPtr<CassSession, CMut>,
+    cass_session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session) = ArcFFI::as_ref(cass_session) else {
+    let Some(cass_session) = ArcFFI::as_ref(cass_session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_prepare_from_existing!");
         return ArcFFI::null();
     };
@@ -668,14 +725,22 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     let statement = cass_statement.statement.clone();
 
-    let session_opt = session.connected.load_full();
-    let Some(connected_session) = session_opt else {
+    let session_opt = cass_session.connected.load_full();
+    let Some(cass_connected_session) = session_opt else {
         return CassFuture::make_ready_raw(Err((
             CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
             "Session is not connected".msg(),
         )));
     };
-    let pending_request_proof = connected_session.pend_request();
+
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
 
     let fut = async move {
         let res = async {
@@ -686,7 +751,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let prepared = connected_session
+            let prepared = cass_connected_session
                 .session
                 .prepare(query.query.clone())
                 .await
@@ -697,7 +762,7 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
             )))
         }
         .await;
-        (connected_session, res)
+        (cass_connected_session, res)
     };
 
     CassConnectedSession::make_request_future(
@@ -737,17 +802,25 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     let query = Statement::new(query_str.to_string());
 
     let session_opt = cass_session.connected.load_full();
-    let Some(connected_session) = session_opt else {
+    let Some(cass_connected_session) = session_opt else {
         return CassFuture::make_ready_raw(Err((
             CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
             "Session is not connected".msg(),
         )));
     };
-    let pending_request_proof = connected_session.pend_request();
+
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
 
     let fut = async move {
         let res = async {
-            let prepared = connected_session
+            let prepared = cass_connected_session
                 .session
                 .prepare(query)
                 .await
@@ -758,7 +831,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
             )))
         }
         .await;
-        (connected_session, res)
+        (cass_connected_session, res)
     };
 
     CassConnectedSession::make_request_future(
