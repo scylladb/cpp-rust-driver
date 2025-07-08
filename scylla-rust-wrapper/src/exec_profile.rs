@@ -28,7 +28,7 @@ use crate::cluster::{
 use crate::config_value::MaybeUnsetConfig;
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
-use crate::session::CassSessionInner;
+use crate::session::CassConnectedSession;
 use crate::statement::CassStatement;
 use crate::types::{
     cass_bool_t, cass_double_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t,
@@ -113,7 +113,7 @@ impl PerStatementExecProfile {
     #[allow(clippy::manual_async_fn)]
     pub(crate) fn get_or_resolve_profile_handle<'a>(
         &'a self,
-        cass_session_inner: &'a CassSessionInner,
+        cass_connected_session: &'a CassConnectedSession,
     ) -> impl Future<Output = Result<ExecutionProfileHandle, (CassError, String)>> + 'a {
         async move {
             let already_resolved = {
@@ -130,7 +130,7 @@ impl PerStatementExecProfile {
                 let inner = &mut *self.0.write().unwrap();
                 match &*inner {
                     PerStatementExecProfileInner::Unresolved(name) => {
-                        let handle = cass_session_inner.resolve_exec_profile(name)?;
+                        let handle = cass_connected_session.resolve_exec_profile(name)?;
                         *inner = PerStatementExecProfileInner::Resolved(handle.clone());
                         handle
                     }
