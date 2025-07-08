@@ -177,7 +177,8 @@ CassError select_from_tuple(CassSession* session) {
         const CassValue* value = cass_iterator_get_value(item);
 
         if (!cass_value_is_null(value)) {
-          if (cass_value_type(value) == CASS_VALUE_TYPE_VARCHAR) {
+          if (cass_value_type(value) == CASS_VALUE_TYPE_VARCHAR ||
+              cass_value_type(value) == CASS_VALUE_TYPE_TEXT) {
             const char* text;
             size_t text_length;
             cass_value_get_string(value, &text, &text_length);
