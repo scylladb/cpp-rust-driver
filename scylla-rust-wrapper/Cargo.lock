@@ -1143,6 +1143,7 @@ dependencies = [
 name = "scylla-cpp-driver-rust"
 version = "0.5.0"
 dependencies = [
+ "arc-swap",
  "assert_matches",
  "bindgen",
  "bytes",

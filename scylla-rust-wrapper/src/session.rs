@@ -1,4 +1,3 @@
-use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -15,6 +14,7 @@ use crate::query_result::{CassResult, CassResultKind, CassResultMetadata};
 use crate::statement::{BoundStatement, CassStatement, SimpleQueryRowSerializer};
 use crate::types::size_t;
 use crate::uuid::CassUuid;
+use arc_swap::ArcSwapOption;
 use scylla::client::execution_profile::ExecutionProfileHandle;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
@@ -29,15 +29,190 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
 use std::os::raw::c_char;
-use std::sync::Arc;
-use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Notify;
 
+/// Represents a session that is connected to the ScyllaDB/Cassandra cluster.
+/// This is atomically stored in the `CassSession` struct upon connection,
+/// and atomically removed when the session is closed.
+/// Even after the session is closed (i.e., `CassConnectedSession` is removed
+/// from `CassSession`), the running request futures can still interact
+/// with the session to complete the requests.
 pub(crate) struct CassConnectedSession {
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
+    pending_requests: std::sync::atomic::AtomicUsize,
+    /// Used to notify the closing future when all requests have finished.
+    // This is a `OnceLock`, because it's only set once, when the session closing is initiated.
+    // Since then, if any request notices that it is the last one, it will notify this,
+    // allowing the closing future to resolve.
+    // Q. Why do we need to put the `Notify` into a `OnceLock`?
+    // A. 1. `Notify`, not to lose any notifiacations in race conditions
+    //    between the notifier and notifiee, must store all past notifications
+    //    that have not yet been handled.
+    //    2. The `Notify` is notified every time the last in-flight request
+    //    completes. In normal operating of the session, there may be times
+    //    that the *temporarily* last in-flight request completes, but the
+    //    session is not even closed. After some time, another request may
+    //    be started, so this was not really the last request. The `Notify`
+    //    would, however, store this notification, and once the session is
+    //    really closed, `Notify::notified().await` would return immediately,
+    //    leading to a false positive. This would not be a correctness problem
+    //    as long as the condition (no more running requests) is checked in
+    //    the loop, but it would nevertheless be a performance problem, because
+    //    the closer task would be woken up `n` times, where `n` is the number
+    //    of times during the whole operation time of the session when the
+    //    "temporarily last" in-flight request completed.
+    //    With `OnceLock`, we have a guarantee that the `Notify` is only
+    //    notified when *the truly last* request completes.
+    requests_finished_notify: OnceLock<Notify>,
 }
 
+/// This module encodes the invariants that guard against mishandling of pending
+/// requests.
+mod pending_requests {
+    use std::sync::atomic::Ordering;
+
+    use super::*;
+
+    /// This struct is used to prove that a request was pended.
+    /// It should be dropped when the request is completed, and it asserts that
+    /// the request was unpended before the proof is dropped.
+    #[derive(Debug)]
+    pub(super) struct PendingRequestProof {
+        unpended: bool,
+    }
+
+    impl Drop for PendingRequestProof {
+        fn drop(&mut self) {
+            assert!(
+                self.unpended,
+                "BUG: PendingRequestProof was dropped without unpending a request!"
+            );
+        }
+    }
+
+    impl CassConnectedSession {
+        /// This returns a proof that the request is pending.
+        /// If the returned `PendingRequestProof` is dropped without
+        /// prior unpending the request, it will panic.
+        ///
+        /// The intended proceeding with the proof is to call
+        /// `CassConnectedSession::make_request_future`, which will call
+        /// `unpend_request` when the request is completed.
+        fn pend_request(&self) -> PendingRequestProof {
+            self.pending_requests.fetch_add(1, Ordering::AcqRel);
+
+            PendingRequestProof { unpended: false }
+        }
+
+        /// Pends a request and makes sure that there was no race with a concurrent
+        /// `cass_session_close`. If the race is detected, i.e., the session was closed
+        /// (which is detected by lack of a connected session or existence of a different
+        /// connected session), the request is unpended, and an error is returned.
+        pub(super) fn try_pend_request_race_immune(
+            self: &Arc<Self>,
+            cass_session: &CassSession,
+        ) -> Result<PendingRequestProof, ()> {
+            let pending_request_proof = self.pend_request();
+
+            // We need to make sure that there's no race with a concurrent `cass_session_close`.
+            // If the session is closed after we loaded the `CassConnectedSession`, but before we pended the request,
+            // the closer may have already seen 0 pending requests, concluded that all requests have finished,
+            // and resolved the close future.
+            // This means we must not start the request if the session is now closed.
+            //
+            // Beware of ABA problem here: if the session is closed, then reopened, we may falsely observe
+            // that the session has not been closed, whereas it's a different session now.
+            // To prevent the ABA problem, let's check pointer equality of the `CassConnectedSession` Arc.
+            // A little paranoia never hurts, especially in the FFI code ;)
+            // This is what Rust devs are known for, right?
+            //
+            // Credits to @lorak-mmk for noticing this bug.
+            let session_opt_now = cass_session.connected.load();
+            if !session_opt_now
+                .as_ref()
+                .is_some_and(|cass_connected_session_now| {
+                    Arc::ptr_eq(cass_connected_session_now, self)
+                })
+            {
+                // A logical race has occured: the session was closed after we loaded it,
+                // but before we pended the request. This means we must not start the request,
+                // but instead return an error that the session is not connected.
+                //
+                // Don't forget to unpend the request.
+                self.unpend_request(pending_request_proof);
+                return Err(());
+            }
+
+            Ok(pending_request_proof)
+        }
+
+        /// This requires a proof that the request was pending,
+        /// not to allow unpending requests that were not made.
+        ///
+        /// This disarms the proof, so it can be dropped safely
+        /// (without a panic).
+        pub(super) fn unpend_request(&self, mut proof: PendingRequestProof) {
+            proof.unpended = true;
+            let pending_requests = self
+                .pending_requests
+                .fetch_sub(1, Ordering::AcqRel)
+                .checked_sub(1) // `fetch_sub` returns the value *before* the decrement.
+                .expect("BUG: more requests unpended than had been pended!");
+
+            if pending_requests == 0 {
+                // If there are no pending requests, notify the closing future.
+                if let Some(notify) = self.requests_finished_notify.get() {
+                    // A single `notify_one` is enough, because there may never be more that a single
+                    // waiter. This is because the session is atomically swapped with `None` when closing,
+                    // so there can be only one thread that waits for the given session to close.
+                    //
+                    // By the virtue of the `Notify`, any possible execution order of `notify_one`
+                    // and `notified().await` will work correctly.
+                    notify.notify_one();
+                } else {
+                    // No need to do anything if the notify is not set, because it means that either:
+                    // 1. the session is not being closed, or
+                    // 2. the session is already closed, but the notify was not set yet.
+                    //
+                    // In both cases, the closing future, at the point when no new requests are accepted,
+                    // will check `has_pending_requests()` and return immediately if there are no pending requests.
+                }
+            }
+        }
+
+        pub(super) fn has_pending_requests(&self) -> bool {
+            self.pending_requests.load(Ordering::Acquire) > 0
+        }
+    }
+}
+use pending_requests::PendingRequestProof;
+
 impl CassConnectedSession {
+    /// Used to create a future that will execute a request against the DB.
+    /// It should be used to wrap any request that session closing should wait
+    /// for completion of. It takes care of unpending the request once finished.
+    fn make_request_future(
+        proof: PendingRequestProof,
+        request_fut: impl Future<Output = (Arc<Self>, CassFutureResult)> + Send + 'static,
+        #[cfg(cpp_integration_testing)] recording_listener: Option<
+            Arc<crate::integration_testing::RecordingHistoryListener>,
+        >,
+    ) -> Arc<CassFuture> {
+        let fut = async move {
+            let (connected_session, res) = request_fut.await;
+            connected_session.unpend_request(proof);
+            res
+        };
+
+        CassFuture::new_from_future(
+            fut,
+            #[cfg(cpp_integration_testing)]
+            recording_listener,
+        )
+    }
+
     pub(crate) fn resolve_exec_profile(
         &self,
         name: &ExecProfileName,
@@ -71,7 +246,7 @@ impl CassConnectedSession {
     }
 
     fn connect(
-        session: Arc<RwLock<CassSessionInner>>,
+        session: Arc<CassSession>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
@@ -79,15 +254,13 @@ impl CassConnectedSession {
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
 
-        let mut session_guard = RUNTIME.block_on(session.write_owned());
-
         if let Some(cluster_client_id) = cluster.get_client_id() {
             // If the user set a client id, use it instead of the random one.
-            session_guard.client_id = cluster_client_id;
+            *session.client_id.lock().unwrap() = cluster_client_id;
         }
 
         let fut = Self::connect_fut(
-            session_guard,
+            session,
             session_builder,
             exec_profile_map,
             host_filter,
@@ -102,19 +275,21 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
-        mut session_guard: OwnedRwLockWriteGuard<CassSessionInner>,
+        cass_session: Arc<CassSession>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
         keyspace: Option<String>,
     ) -> CassFutureResult {
-        // This can sleep for a long time, but only if someone connects/closes session
-        // from more than 1 thread concurrently, which is inherently stupid thing to do.
-        if session_guard.connected.is_some() {
-            return Err((
+        let error = || {
+            (
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
                 "Already connecting, closing, or connected".msg(),
-            ));
+            )
+        };
+
+        if cass_session.connected.load().is_some() {
+            return Err(error());
         }
 
         let mut session_builder = session_builder_fut.await;
@@ -151,50 +326,76 @@ impl CassConnectedSession {
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
-        session_guard.connected = Some(CassConnectedSession {
-            session,
-            exec_profile_map,
-        });
+        let prev = cass_session.connected.compare_and_swap(
+            &None::<Arc<CassConnectedSession>>,
+            Some(Arc::new(CassConnectedSession {
+                session,
+                exec_profile_map,
+                pending_requests: 0.into(),
+                requests_finished_notify: OnceLock::new(),
+            })),
+        );
+        if prev.is_some() {
+            return Err(error());
+        }
+
         Ok(CassResultValue::Empty)
     }
 
-    fn close_fut(session_opt: Arc<RwLock<CassSessionInner>>) -> Arc<CassFuture> {
+    fn close_fut(cass_session: &CassSession) -> Arc<CassFuture> {
+        let prev = cass_session.connected.swap(None);
+        // Since now, no new requests will be accepted.
+
+        let Some(cass_session_connected) = prev else {
+            return CassFuture::new_ready(Err((
+                CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
+                "Already closing or closed".msg(),
+            )));
+        };
+
+        // We start by setting the Notify, so that we won't lose a wakeup
+        // if the last request finishes before we set it.
+        cass_session_connected
+            .requests_finished_notify
+            .set(Notify::new())
+            .expect(
+                "The swap guarantees that only one thread takes the connected session. \
+                And this should never be an issue IRL, because session should be closed \
+                from a single thread, only once",
+            );
+
+        let fut = async move {
+            while cass_session_connected.has_pending_requests() {
+                // Wait for all pending requests to finish.
+                // This will block until the last request finishes and calls `requests_finished_notify.notify_one()`.
+                cass_session_connected
+                    .requests_finished_notify
+                    .get()
+                    .expect("We have initialized the OnceLock prior")
+                    .notified()
+                    .await;
+            }
+
+            Ok(CassResultValue::Empty)
+        };
+
         CassFuture::new_from_future(
-            async move {
-                let mut session_guard = session_opt.write().await;
-                if session_guard.connected.is_none() {
-                    return Err((
-                        CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                        "Already closing or closed".msg(),
-                    ));
-                }
-
-                session_guard.connected = None;
-
-                Ok(CassResultValue::Empty)
-            },
+            fut,
             #[cfg(cpp_integration_testing)]
             None,
         )
     }
 }
 
-// Technically, we should not allow this struct to be public,
-// but this would require a lot of changes in the codebase:
-// CassSession would need to be a newtype wrapper around this struct
-// instead of a type alias.
-#[expect(unnameable_types)]
-pub struct CassSessionInner {
+pub struct CassSession {
     // This is an `Option` to allow the session to be closed.
     // If it is `None`, the session is closed.
-    connected: Option<CassConnectedSession>,
+    connected: ArcSwapOption<CassConnectedSession>,
     // This is the same that the CPP Driver does: it generates a random UUID v4
     // and stores it in the session. Upon connection, if the CassCluster
     // has a client_id set, it will be used instead.
-    client_id: uuid::Uuid,
+    client_id: std::sync::Mutex<uuid::Uuid>,
 }
-
-pub type CassSession = RwLock<CassSessionInner>;
 
 impl FFI for CassSession {
     type Origin = FromArc;
@@ -202,10 +403,10 @@ impl FFI for CassSession {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_new() -> CassOwnedSharedPtr<CassSession, CMut> {
-    let session = Arc::new(RwLock::new(CassSessionInner {
-        connected: None,
-        client_id: uuid::Uuid::new_v4(),
-    }));
+    let session = Arc::new(CassSession {
+        connected: ArcSwapOption::new(None),
+        client_id: std::sync::Mutex::new(uuid::Uuid::new_v4()),
+    });
     ArcFFI::into_ptr(session)
 }
 
@@ -260,7 +461,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     batch_raw: CassBorrowedSharedPtr<CassBatch, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+    let Some(cass_session) = ArcFFI::as_ref(session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_execute_batch!");
         return ArcFFI::null();
     };
@@ -276,43 +477,58 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     #[allow(unused, clippy::let_unit_value)]
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
-    let future = async move {
-        let session_guard = session_opt.read().await;
-        if session_guard.connected.is_none() {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        }
+    let session_opt = cass_session.connected.load_full();
 
-        let cass_connected_session = session_guard.connected.as_ref().unwrap();
-        let session = &cass_connected_session.session;
-
-        let handle = cass_connected_session
-            .get_or_resolve_profile_handle(batch_exec_profile.as_ref())
-            .await?;
-
-        Arc::make_mut(&mut state)
-            .batch
-            .set_execution_profile_handle(handle);
-
-        let query_res = session.batch(&state.batch, &state.bound_values).await;
-        match query_res {
-            Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
-                tracing_id: None,
-                paging_state_response: PagingStateResponse::NoMorePages,
-                kind: CassResultKind::NonRows,
-                coordinator: Some(result.request_coordinator().clone()),
-            }))),
-            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
-        }
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
     };
 
-    CassFuture::make_raw(
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
+    let future = async move {
+        let res = async {
+            let session = &cass_connected_session.session;
+
+            let handle = cass_connected_session
+                .get_or_resolve_profile_handle(batch_exec_profile.as_ref())
+                .await?;
+
+            Arc::make_mut(&mut state)
+                .batch
+                .set_execution_profile_handle(handle);
+
+            let query_res = session.batch(&state.batch, &state.bound_values).await;
+            match query_res {
+                Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(CassResult {
+                    tracing_id: None,
+                    paging_state_response: PagingStateResponse::NoMorePages,
+                    kind: CassResultKind::NonRows,
+                    coordinator: Some(result.request_coordinator().clone()),
+                }))),
+                Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
+            }
+        }
+        .await;
+        (cass_connected_session, res)
+    };
+
+    CassConnectedSession::make_request_future(
+        pending_request_proof,
         future,
         #[cfg(cpp_integration_testing)]
         None,
     )
+    .into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -320,7 +536,7 @@ pub unsafe extern "C" fn cass_session_execute(
     session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     statement_raw: CassBorrowedSharedPtr<CassStatement, CConst>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session_opt) = ArcFFI::cloned_from_ptr(session_raw) else {
+    let Some(cass_session) = ArcFFI::as_ref(session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_execute!");
         return ArcFFI::null();
     };
@@ -333,7 +549,16 @@ pub unsafe extern "C" fn cass_session_execute(
 
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
+
     let mut statement = statement_opt.statement.clone();
+
+    let session_opt = cass_session.connected.load_full();
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
 
     #[cfg(cpp_integration_testing)]
     let recording_listener = statement_opt.record_hosts.then(|| {
@@ -360,127 +585,136 @@ pub unsafe extern "C" fn cass_session_execute(
     #[allow(unused, clippy::let_unit_value)]
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
-    let future = async move {
-        let session_guard = session_opt.read().await;
-        let Some(cass_connected_session) = session_guard.connected.as_ref() else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
-        let session = &cass_connected_session.session;
-
-        let handle = cass_connected_session
-            .get_or_resolve_profile_handle(statement_exec_profile.as_ref())
-            .await?;
-
-        match &mut statement {
-            BoundStatement::Simple(query) => query.query.set_execution_profile_handle(handle),
-            BoundStatement::Prepared(prepared) => Arc::make_mut(&mut prepared.statement)
-                .statement
-                .set_execution_profile_handle(handle),
-        }
-
-        // Creating a type alias here to fix clippy lints.
-        // I want this type to be explicit, so future developers can understand
-        // what's going on here (and why we include some weird Option of data types).
-        type QueryRes = Result<
-            (
-                QueryResult,
-                PagingStateResponse,
-                // We unfortunately have to retrieve the metadata here.
-                // Since `query.query` is consumed, we cannot match the statement
-                // after execution, to retrieve the cached metadata in case
-                // of prepared statements.
-                Option<Arc<CassResultMetadata>>,
-            ),
-            ExecutionError,
-        >;
-        let query_res: QueryRes = match statement {
-            BoundStatement::Simple(query) => {
-                // We don't store result metadata for Queries - return None.
-                let maybe_result_metadata = None;
-
-                let bound_values = SimpleQueryRowSerializer {
-                    bound_values: query.bound_values,
-                    name_to_bound_index: query.name_to_bound_index,
-                };
-
-                if paging_enabled {
-                    session
-                        .query_single_page(query.query, bound_values, paging_state)
-                        .await
-                        .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
-                } else {
-                    session
-                        .query_unpaged(query.query, bound_values)
-                        .await
-                        .map(|result| {
-                            (
-                                result,
-                                PagingStateResponse::NoMorePages,
-                                maybe_result_metadata,
-                            )
-                        })
-                }
-            }
-            BoundStatement::Prepared(prepared) => {
-                // Clone result metadata, so we don't need to construct it from scratch in
-                // `CassResultMetadata::from_column_specs` - it requires a lot of allocations for complex types.
-                let maybe_result_metadata = Some(Arc::clone(&prepared.statement.result_metadata));
-
-                if paging_enabled {
-                    session
-                        .execute_single_page(
-                            &prepared.statement.statement,
-                            prepared.bound_values,
-                            paging_state,
-                        )
-                        .await
-                        .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
-                } else {
-                    session
-                        .execute_unpaged(&prepared.statement.statement, prepared.bound_values)
-                        .await
-                        .map(|result| {
-                            (
-                                result,
-                                PagingStateResponse::NoMorePages,
-                                maybe_result_metadata,
-                            )
-                        })
-                }
-            }
-        };
-
-        match query_res {
-            Ok((result, paging_state_response, maybe_result_metadata)) => {
-                match CassResult::from_result_payload(
-                    result,
-                    paging_state_response,
-                    maybe_result_metadata,
-                ) {
-                    Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
-                    Err(e) => Ok(CassResultValue::QueryError(e)),
-                }
-            }
-            Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
-        }
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
     };
 
-    CassFuture::make_raw(
+    let future = async move {
+        let res = async {
+            let session = &cass_connected_session.session;
+
+            let handle = cass_connected_session
+                .get_or_resolve_profile_handle(statement_exec_profile.as_ref())
+                .await?;
+
+            match &mut statement {
+                BoundStatement::Simple(query) => query.query.set_execution_profile_handle(handle),
+                BoundStatement::Prepared(prepared) => Arc::make_mut(&mut prepared.statement)
+                    .statement
+                    .set_execution_profile_handle(handle),
+            }
+
+            // Creating a type alias here to fix clippy lints.
+            // I want this type to be explicit, so future developers can understand
+            // what's going on here (and why we include some weird Option of data types).
+            type QueryRes = Result<
+                (
+                    QueryResult,
+                    PagingStateResponse,
+                    // We unfortunately have to retrieve the metadata here.
+                    // Since `query.query` is consumed, we cannot match the statement
+                    // after execution, to retrieve the cached metadata in case
+                    // of prepared statements.
+                    Option<Arc<CassResultMetadata>>,
+                ),
+                ExecutionError,
+            >;
+            let query_res: QueryRes = match statement {
+                BoundStatement::Simple(query) => {
+                    // We don't store result metadata for Queries - return None.
+                    let maybe_result_metadata = None;
+
+                    let bound_values = SimpleQueryRowSerializer {
+                        bound_values: query.bound_values,
+                        name_to_bound_index: query.name_to_bound_index,
+                    };
+
+                    if paging_enabled {
+                        session
+                            .query_single_page(query.query, bound_values, paging_state)
+                            .await
+                            .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
+                    } else {
+                        session
+                            .query_unpaged(query.query, bound_values)
+                            .await
+                            .map(|result| {
+                                (
+                                    result,
+                                    PagingStateResponse::NoMorePages,
+                                    maybe_result_metadata,
+                                )
+                            })
+                    }
+                }
+                BoundStatement::Prepared(prepared) => {
+                    // Clone result metadata, so we don't need to construct it from scratch in
+                    // `CassResultMetadata::from_column_specs` - it requires a lot of allocations for complex types.
+                    let maybe_result_metadata =
+                        Some(Arc::clone(&prepared.statement.result_metadata));
+
+                    if paging_enabled {
+                        session
+                            .execute_single_page(
+                                &prepared.statement.statement,
+                                prepared.bound_values,
+                                paging_state,
+                            )
+                            .await
+                            .map(|(qr, psr)| (qr, psr, maybe_result_metadata))
+                    } else {
+                        session
+                            .execute_unpaged(&prepared.statement.statement, prepared.bound_values)
+                            .await
+                            .map(|result| {
+                                (
+                                    result,
+                                    PagingStateResponse::NoMorePages,
+                                    maybe_result_metadata,
+                                )
+                            })
+                    }
+                }
+            };
+
+            match query_res {
+                Ok((result, paging_state_response, maybe_result_metadata)) => {
+                    match CassResult::from_result_payload(
+                        result,
+                        paging_state_response,
+                        maybe_result_metadata,
+                    ) {
+                        Ok(result) => Ok(CassResultValue::QueryResult(Arc::new(result))),
+                        Err(e) => Ok(CassResultValue::QueryError(e)),
+                    }
+                }
+                Err(err) => Ok(CassResultValue::QueryError(Arc::new(err.into()))),
+            }
+        }
+        .await;
+        (cass_connected_session, res)
+    };
+
+    CassConnectedSession::make_request_future(
+        pending_request_proof,
         future,
         #[cfg(cpp_integration_testing)]
         recording_listener,
     )
+    .into_raw()
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_prepare_from_existing(
-    cass_session: CassBorrowedSharedPtr<CassSession, CMut>,
+    cass_session_raw: CassBorrowedSharedPtr<CassSession, CMut>,
     statement: CassBorrowedSharedPtr<CassStatement, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session) = ArcFFI::cloned_from_ptr(cass_session) else {
+    let Some(cass_session) = ArcFFI::as_ref(cass_session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_prepare_from_existing!");
         return ArcFFI::null();
     };
@@ -491,8 +725,25 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
 
     let statement = cass_statement.statement.clone();
 
-    CassFuture::make_raw(
-        async move {
+    let session_opt = cass_session.connected.load_full();
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
+    let fut = async move {
+        let res = async {
             let query = match &statement {
                 BoundStatement::Simple(q) => q,
                 BoundStatement::Prepared(ps) => {
@@ -500,15 +751,8 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let session_guard = session.read().await;
-            if session_guard.connected.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                    "Session is not connected".msg(),
-                ));
-            }
-            let session = &session_guard.connected.as_ref().unwrap().session;
-            let prepared = session
+            let prepared = cass_connected_session
+                .session
                 .prepare(query.query.clone())
                 .await
                 .map_err(|err| (err.to_cass_error(), err.msg()))?;
@@ -516,10 +760,18 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
             Ok(CassResultValue::Prepared(Arc::new(
                 CassPrepared::new_from_prepared_statement(prepared),
             )))
-        },
+        }
+        .await;
+        (cass_connected_session, res)
+    };
+
+    CassConnectedSession::make_request_future(
+        pending_request_proof,
+        fut,
         #[cfg(cpp_integration_testing)]
         None,
     )
+    .into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -536,7 +788,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     query: *const c_char,
     query_length: size_t,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(cass_session) = ArcFFI::cloned_from_ptr(cass_session_raw) else {
+    let Some(cass_session) = ArcFFI::as_ref(cass_session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_prepare_n!");
         return ArcFFI::null();
     };
@@ -549,31 +801,46 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         .unwrap_or_default();
     let query = Statement::new(query_str.to_string());
 
-    let fut = async move {
-        let session_guard = cass_session.read().await;
-        if session_guard.connected.is_none() {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        }
-        let session = &session_guard.connected.as_ref().unwrap().session;
-
-        let prepared = session
-            .prepare(query)
-            .await
-            .map_err(|err| (err.to_cass_error(), err.msg()))?;
-
-        Ok(CassResultValue::Prepared(Arc::new(
-            CassPrepared::new_from_prepared_statement(prepared),
-        )))
+    let session_opt = cass_session.connected.load_full();
+    let Some(cass_connected_session) = session_opt else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
     };
 
-    CassFuture::make_raw(
+    let Ok(pending_request_proof) =
+        cass_connected_session.try_pend_request_race_immune(cass_session)
+    else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
+    let fut = async move {
+        let res = async {
+            let prepared = cass_connected_session
+                .session
+                .prepare(query)
+                .await
+                .map_err(|err| (err.to_cass_error(), err.msg()))?;
+
+            Ok::<_, (CassError, String)>(CassResultValue::Prepared(Arc::new(
+                CassPrepared::new_from_prepared_statement(prepared),
+            )))
+        }
+        .await;
+        (cass_connected_session, res)
+    };
+
+    CassConnectedSession::make_request_future(
+        pending_request_proof,
         fut,
         #[cfg(cpp_integration_testing)]
         None,
     )
+    .into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -583,39 +850,27 @@ pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassS
         return;
     };
 
-    let close_fut = CassConnectedSession::close_fut(session_opt);
-    close_fut.with_waited_result(|_| ());
+    let close_fut = CassConnectedSession::close_fut(&session_opt);
+    close_fut.with_waited_result(|_| {
+        // The future may return an error, but we don't care about it here,
+        // because we are just cleaning up the session.
+        // If the future returned, no matter if it was successful or not,
+        // the session is now closed, and we can safely drop it.
+    });
 
-    // We don't have to drop the session's Arc explicitly, because it has been moved
-    // into the CassFuture, which is dropped here with the end of the scope.
+    // The CassSession's Arc is dropped here with the end of the scope.
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_session_close(
     session: CassBorrowedSharedPtr<CassSession, CMut>,
 ) -> CassOwnedSharedPtr<CassFuture, CMut> {
-    let Some(session_opt) = ArcFFI::cloned_from_ptr(session) else {
+    let Some(session_opt) = ArcFFI::as_ref(session) else {
         tracing::error!("Provided null session pointer to cass_session_close!");
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(
-        async move {
-            let mut session_guard = session_opt.write().await;
-            if session_guard.connected.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
-
-            session_guard.connected = None;
-
-            Ok(CassResultValue::Empty)
-        },
-        #[cfg(cpp_integration_testing)]
-        None,
-    )
+    CassConnectedSession::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -627,7 +882,7 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().client_id;
+    let client_id: uuid::Uuid = *cass_session.client_id.lock().unwrap();
     client_id.into()
 }
 
@@ -635,14 +890,18 @@ pub unsafe extern "C" fn cass_session_get_client_id(
 pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: CassBorrowedSharedPtr<CassSession, CConst>,
 ) -> CassOwnedExclusivePtr<CassSchemaMeta, CConst> {
-    let cass_session = ArcFFI::as_ref(session).unwrap();
+    let Some(cass_session) = ArcFFI::as_ref(session) else {
+        tracing::error!("Provided null session pointer to `cass_session_get_schema_meta`!");
+        return CassPtr::null();
+    };
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
-    for (keyspace_name, keyspace) in cass_session
-        .blocking_read()
-        .connected
-        .as_ref()
-        .unwrap()
+    let Some(ref connected_session) = *cass_session.connected.load() else {
+        tracing::warn!("Called `cass_session_get_schema_meta` on disconnected session!");
+        return CassPtr::null();
+    };
+
+    for (keyspace_name, keyspace) in connected_session
         .session
         .get_cluster_state()
         .keyspaces_iter()
@@ -707,7 +966,7 @@ pub unsafe extern "C" fn cass_session_get_metrics(
     session_raw: CassBorrowedSharedPtr<CassSession, CConst>,
     metrics: *mut CassMetrics,
 ) {
-    let Some(maybe_session_lock) = ArcFFI::as_ref(session_raw) else {
+    let Some(cass_session) = ArcFFI::as_ref(session_raw) else {
         tracing::error!("Provided null session pointer to cass_session_get_metrics!");
         return;
     };
@@ -716,14 +975,12 @@ pub unsafe extern "C" fn cass_session_get_metrics(
         return;
     }
 
-    let maybe_session_guard = maybe_session_lock.blocking_read();
-    let maybe_session = maybe_session_guard.connected.as_ref();
-    let Some(session) = maybe_session else {
-        tracing::warn!("Attempted to get metrics before connecting session object");
+    let Some(ref connected_session) = *cass_session.connected.load() else {
+        tracing::warn!("Called `cass_session_get_metrics` on disconnected session!");
         return;
     };
 
-    let rust_metrics = session.session.get_metrics();
+    let rust_metrics = connected_session.session.get_metrics();
     // TODO (rust-driver): Add Snapshot::default() or Snapshot::empty() with 0-initialized snapshot.
     let (
         min,
@@ -818,7 +1075,8 @@ mod tests {
             cass_statement_set_execution_profile_n,
         },
         future::{
-            cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
+            cass_future_error_code, cass_future_error_message, cass_future_free,
+            cass_future_set_callback, cass_future_wait,
         },
         retry_policy::{
             CassRetryPolicy, cass_retry_policy_default_new, cass_retry_policy_fallthrough_new,
@@ -830,8 +1088,10 @@ mod tests {
     use std::{
         collections::HashSet,
         convert::{TryFrom, TryInto},
+        ffi::{CStr, c_void},
         iter,
         net::SocketAddr,
+        sync::atomic::{AtomicUsize, Ordering},
     };
 
     // This is for convenient logs from failing tests. Just call it at the beginning of a test.
@@ -951,8 +1211,8 @@ mod tests {
                 assert!(
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
-                        .blocking_read()
                         .connected
+                        .load()
                         .as_ref()
                         .unwrap()
                         .exec_profile_map
@@ -968,8 +1228,8 @@ mod tests {
                 assert!(
                     ArcFFI::as_ref(session_raw.borrow())
                         .unwrap()
-                        .blocking_read()
                         .connected
+                        .load()
                         .as_ref()
                         .unwrap()
                         .exec_profile_map
@@ -985,8 +1245,8 @@ mod tests {
                 ));
                 let profile_map_keys = ArcFFI::as_ref(session_raw.borrow())
                     .unwrap()
-                    .blocking_read()
                     .connected
+                    .load()
                     .as_ref()
                     .unwrap()
                     .exec_profile_map
@@ -1812,5 +2072,131 @@ mod tests {
             cass_session_free(session_raw);
             cass_cluster_free(cluster_raw)
         }
+    }
+
+    #[tokio::test]
+    #[ntest::timeout(5000)]
+    async fn session_free_waits_for_requests_to_complete() {
+        init_logger();
+        test_with_one_proxy_one(
+            session_free_waits_for_requests_to_complete_do,
+            handshake_rules()
+                .into_iter()
+                .chain(std::iter::once(RequestRule(
+                    Condition::RequestOpcode(RequestOpcode::Query)
+                        .or(Condition::RequestOpcode(RequestOpcode::Prepare))
+                        .or(Condition::RequestOpcode(RequestOpcode::Batch)),
+                    // We won't respond to any queries (including metadata fetch),
+                    // but the driver will manage to continue with dummy metadata.
+                    RequestReaction::forge().server_error(),
+                ))),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn session_free_waits_for_requests_to_complete_do(
+        node_addr: SocketAddr,
+        proxy: RunningProxy,
+    ) -> RunningProxy {
+        unsafe {
+            let mut cluster_raw = cass_cluster_new();
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw.borrow_mut(), c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+            let session_raw = cass_session_new();
+            cass_future_wait_check_and_free(cass_session_connect(
+                session_raw.borrow(),
+                cluster_raw.borrow().into_c_const(),
+            ));
+
+            tracing::debug!("Session connected, starting to execute requests...");
+
+            let statement = c"SELECT host_id FROM system.local WHERE key='local'" as *const CStr
+                as *const c_char;
+            let statement_raw = cass_statement_new(statement, 0);
+
+            let mut batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            // This batch is obviously invalid, because it contains a SELECT statement. This is OK for us,
+            // because we anyway expect the batch to fail. The goal is to have the future set, no matter if it's
+            // set with a success or an error.
+            cass_batch_add_statement(batch_raw.borrow_mut(), statement_raw.borrow());
+
+            let finished_executions = AtomicUsize::new(0);
+            unsafe extern "C" fn finished_execution_callback(
+                _future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
+                data: *mut c_void,
+            ) {
+                let finished_executions = unsafe { &*(data as *const AtomicUsize) };
+                finished_executions.fetch_add(1, Ordering::SeqCst);
+            }
+
+            const ITERATIONS: usize = 1;
+            const EXECUTIONS: usize = 3 * ITERATIONS; // One prepare, one statement and one batch per iteration.
+
+            let futures = (0..ITERATIONS)
+                .flat_map(|_| {
+                    // Prepare a statement
+                    let prepare_fut = cass_session_prepare(session_raw.borrow(), statement);
+
+                    // Execute a statement
+                    let statement_fut = cass_session_execute(
+                        session_raw.borrow(),
+                        statement_raw.borrow().into_c_const(),
+                    );
+
+                    // Execute a batch
+                    let batch_fut = cass_session_execute_batch(
+                        session_raw.borrow(),
+                        batch_raw.borrow().into_c_const(),
+                    );
+                    for fut in [
+                        prepare_fut.borrow(),
+                        statement_fut.borrow(),
+                        batch_fut.borrow(),
+                    ] {
+                        cass_future_set_callback(
+                            fut,
+                            Some(finished_execution_callback),
+                            std::ptr::addr_of!(finished_executions) as _,
+                        );
+                    }
+
+                    [prepare_fut, statement_fut, batch_fut]
+                })
+                .collect::<Vec<_>>();
+
+            tracing::debug!("Started all requests. Now, freeing statements and session...");
+
+            // Free the statement
+            cass_statement_free(statement_raw);
+            // Free the batch
+            cass_batch_free(batch_raw);
+
+            // Session is freed, but the requests may still be in-flight.
+            cass_session_free(session_raw);
+
+            tracing::debug!("Session freed.");
+
+            // Assert that the session awaited completion of all requests.
+            let actually_finished_executions = finished_executions.load(Ordering::SeqCst);
+            assert_eq!(
+                actually_finished_executions, EXECUTIONS,
+                "Expected {} requests to complete before the session was freed, but only {} did.",
+                EXECUTIONS, actually_finished_executions
+            );
+
+            futures.into_iter().for_each(|fut| {
+                // As per cassandra.h, "a future can be freed anytime".
+                cass_future_free(fut);
+            });
+
+            cass_cluster_free(cluster_raw);
+        }
+        proxy
     }
 }
