@@ -11,7 +11,6 @@ use scylla::client::execution_profile::{
     ExecutionProfile, ExecutionProfileBuilder, ExecutionProfileHandle,
 };
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
-use scylla::policies::retry::RetryPolicy;
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::{Consistency, SerialConsistency};
 
@@ -25,7 +24,7 @@ use crate::cass_types::CassConsistency;
 use crate::cluster::{
     set_load_balance_dc_aware_n, set_load_balance_rack_aware_n, update_comma_delimited_list,
 };
-use crate::config_value::MaybeUnsetConfig;
+use crate::config_value::{MaybeUnsetConfig, RequestTimeout};
 use crate::load_balancing::{LoadBalancingConfig, LoadBalancingKind};
 use crate::retry_policy::CassRetryPolicy;
 use crate::session::CassConnectedSession;
@@ -34,9 +33,24 @@ use crate::types::{
     cass_bool_t, cass_double_t, cass_int32_t, cass_int64_t, cass_uint32_t, cass_uint64_t, size_t,
 };
 
+/// Holds information about which execution profile settings were overridden.
+/// This is used to determine whether the execution profile should use the
+/// overriden settings or the defaults from the cluster's default profile.
+// See `use_cluster_defaults_for_unset_settings` for more information.
+#[derive(Clone, Debug, Default)]
+struct ExecutionProfileOverrides {
+    consistency: bool,
+    serial_consistency: bool,
+    request_timeout: bool,
+    retry_policy: bool,
+    speculative_execution_policy: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct CassExecProfile {
     inner: ExecutionProfileBuilder,
+    /// Which settings were overridden (explicitly set) in this execution profile.
+    overrides: ExecutionProfileOverrides,
     pub(crate) load_balancing_config: LoadBalancingConfig,
 }
 
@@ -48,23 +62,77 @@ impl CassExecProfile {
     fn new() -> Self {
         Self {
             inner: ExecutionProfile::builder(),
+            overrides: ExecutionProfileOverrides::default(),
             load_balancing_config: Default::default(),
         }
     }
 
+    /// Populates the settings that have not been explicitly set in the execution profile
+    /// with the defaults from the cluster's default profile.
+    //
+    // See `config.cpp:21` - `Config::init_profiles()` in the CPP Driver.
+    // Consistency is handled elsewhere: `config.hpp:384` - `Config::set_default_consistency()`.
+    fn use_cluster_defaults_for_unset_settings(&mut self, default_profile: &ExecutionProfile) {
+        // The reason for separate handling of consistency is that the default consistency
+        // depends on the kind of the cluster that the CPP Driver connected to (DataStax DBAAS has
+        // a different default than the ordinary Cassandra/ScyllaDB).
+        //
+        // It would be plausible to believe that we don't have to worry about that, because we treat
+        // all DBs the same way wrt the default consistency. This is **wrong**. Consistency, unlike
+        // other settings, is not inherited from the cluster's default profile if not specified in the
+        // execution profile, but rather set to the hardcoded default consistency.
+        // TODO: consider changing this behaviour by unifying consistency handling with other settings.
+        //
+        if !self.overrides.consistency {
+            self.modify_in_place(|builder| {
+                builder.consistency(crate::cluster::DEFAULT_CONSISTENCY)
+            });
+        }
+
+        if !self.overrides.serial_consistency {
+            self.modify_in_place(|builder| {
+                builder.serial_consistency(default_profile.get_serial_consistency())
+            });
+        }
+
+        if !self.overrides.request_timeout {
+            self.modify_in_place(|builder| {
+                builder.request_timeout(default_profile.get_request_timeout())
+            });
+        }
+
+        if !self.overrides.retry_policy {
+            self.modify_in_place(|builder| {
+                builder.retry_policy(Arc::clone(default_profile.get_retry_policy()))
+            });
+        }
+
+        if !self.overrides.speculative_execution_policy {
+            self.modify_in_place(|builder| {
+                builder.speculative_execution_policy(
+                    default_profile
+                        .get_speculative_execution_policy()
+                        .map(Arc::clone),
+                )
+            });
+        }
+    }
+
     pub(crate) async fn build(
-        self,
+        mut self,
         cluster_default_profile: &ExecutionProfile,
     ) -> ExecutionProfile {
-        let load_balacing = if self.load_balancing_config.load_balancing_kind.is_some() {
+        self.use_cluster_defaults_for_unset_settings(cluster_default_profile);
+
+        let load_balancing = if self.load_balancing_config.load_balancing_kind.is_some() {
             self.load_balancing_config.build().await
         } else {
             // If load balancing config does not have LB kind defined,
             // we make use of cluster's LBP.
-            cluster_default_profile.get_load_balancing_policy().clone()
+            Arc::clone(cluster_default_profile.get_load_balancing_policy())
         };
 
-        self.inner.load_balancing_policy(load_balacing).build()
+        self.inner.load_balancing_policy(load_balancing).build()
     }
 }
 
@@ -272,30 +340,22 @@ pub unsafe extern "C" fn cass_execution_profile_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
-            // CASS_CONSISTENCY_UNKNOWN
-            // TODO: implement semantics of this.
-            // A workaround is needed, because Rust Driver's ExecutionProfileBuilder
-            // does not expose API to unset consistency (enabling semantics:
-            // "ignore me and use the default profile's setting").
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_exec_profile_set_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some consistency \
-                on an execution profile, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting consistency on an execution profile, \
-                which will make the driver use the consistency set on cluster level."
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        MaybeUnsetConfig::Unset(_) => {
+            // This will make the profile inherit the consistency from the cluster's default profile.
+            // This works around the problem that the Rust Driver's API does not allow
+            // unsetting the consistency in the execution profile.
+            profile_builder.overrides.consistency = false;
         }
         MaybeUnsetConfig::Set(consistency) => {
             profile_builder.modify_in_place(|builder| builder.consistency(consistency));
+            profile_builder.overrides.consistency = true;
         }
     }
 
@@ -314,6 +374,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_no_speculative_execution_pol
     };
 
     profile_builder.modify_in_place(|builder| builder.speculative_execution_policy(None));
+    profile_builder.overrides.speculative_execution_policy = true;
 
     CassError::CASS_OK
 }
@@ -342,6 +403,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_constant_speculative_executi
 
     profile_builder
         .modify_in_place(|builder| builder.speculative_execution_policy(Some(Arc::new(policy))));
+    profile_builder.overrides.speculative_execution_policy = true;
 
     CassError::CASS_OK
 }
@@ -669,9 +731,17 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    profile_builder.modify_in_place(|builder| {
-        builder.request_timeout(Some(std::time::Duration::from_millis(timeout_ms)))
-    });
+    match MaybeUnsetConfig::<_, RequestTimeout>::from_c_value_infallible(timeout_ms) {
+        MaybeUnsetConfig::Unset(_) => {
+            // CASS_UINT64_MAX
+            // This will make the profile inherit the request timeout from the cluster's default profile.
+            profile_builder.overrides.request_timeout = false;
+        }
+        MaybeUnsetConfig::Set(RequestTimeout(maybe_timeout)) => {
+            profile_builder.modify_in_place(|builder| builder.request_timeout(maybe_timeout));
+            profile_builder.overrides.request_timeout = true;
+        }
+    }
 
     CassError::CASS_OK
 }
@@ -679,7 +749,7 @@ pub unsafe extern "C" fn cass_execution_profile_set_request_timeout(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
     profile: CassBorrowedExclusivePtr<CassExecProfile, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let Some(profile_builder) = BoxFFI::as_mut_ref(profile) else {
         tracing::error!(
@@ -687,22 +757,22 @@ pub unsafe extern "C" fn cass_execution_profile_set_retry_policy(
         );
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
-    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
-        Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
-        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
-        #[cfg(cpp_integration_testing)]
-        Some(CassRetryPolicy::Ignoring(ignoring)) => Arc::clone(ignoring) as _,
-        None => {
-            tracing::error!(
-                "Provided null retry policy pointer to cass_execution_profile_set_retry_policy!"
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    match MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy) {
+        MaybeUnsetConfig::Set(retry_policy) => {
+            // If the retry policy is set, we use it.
+            profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
+            profile_builder.overrides.retry_policy = true;
+        }
+        MaybeUnsetConfig::Unset(_) => {
+            // If the retry policy is not set, we set to use the retry policy from the cluster's
+            // default profile.
+            // This works around the problem that the Rust Driver's API does not allow
+            // unsetting the retry policy in the execution profile.
+            profile_builder.overrides.retry_policy = false;
         }
     };
-
-    profile_builder.modify_in_place(|builder| builder.retry_policy(retry_policy));
 
     CassError::CASS_OK
 }
@@ -720,32 +790,25 @@ pub unsafe extern "C" fn cass_execution_profile_set_serial_consistency(
     };
 
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // CASS_CONSISTENCY_UNKNOWN
-            // TODO: implement semantics of this.
-            // A workaround is needed, because Rust Driver's ExecutionProfileBuilder
-            // does not expose API to unset serial consistency (enabling semantics:
-            // "ignore me and use the default profile's setting").
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_exec_profile_set_serial_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some consistency \
-                on an execution profile, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting serial consistency on an execution profile, \
-                which will make the driver use the consistency set on cluster level."
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            // This will make the profile inherit the serial consistency from the cluster's default profile.
+            // This works around the problem that the Rust Driver's API does not allow
+            // unsetting the consistency in the execution profile.
+            profile_builder.overrides.serial_consistency = false;
         }
         MaybeUnsetConfig::Set(maybe_serial_consistency) => {
             // CASS_CONSISTENCY_ANY -> None
             // other consistency -> Some()
             profile_builder
                 .modify_in_place(|builder| builder.serial_consistency(maybe_serial_consistency));
+            profile_builder.overrides.serial_consistency = true;
         }
     }
 
@@ -796,6 +859,10 @@ mod tests {
 
     use super::*;
 
+    use crate::argconv::CassPtr;
+    use crate::retry_policy::{
+        cass_retry_policy_downgrading_consistency_new, cass_retry_policy_free,
+    };
     use crate::testing::{assert_cass_error_eq, setup_tracing};
     use crate::{
         argconv::{make_c_str, str_to_c_str_n},
@@ -805,6 +872,8 @@ mod tests {
     };
 
     use assert_matches::assert_matches;
+    use scylla::policies::retry::{FallthroughRetryPolicy, RetryPolicy};
+    use scylla::statement::SerialConsistency;
 
     #[test]
     fn test_exec_profile_whitelist_blacklist_filtering_config() {
@@ -1192,6 +1261,229 @@ mod tests {
 
             cass_statement_free(statement_raw);
             cass_batch_free(batch_raw);
+        }
+    }
+
+    #[test]
+    fn exec_profile_fetches_unset_settings_from_default_profile() {
+        // Needed to run async functions in this test.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        // Create a default profile with some custom settings.
+        let default_profile_consistency = Consistency::All;
+        let default_profile_serial_consistency = Some(SerialConsistency::Serial);
+        let default_profile_request_timeout = Some(Duration::from_millis(2137));
+        let default_profile_retry_policy = Arc::new(FallthroughRetryPolicy::new());
+        let default_profile_speculative_execution_policy =
+            Arc::new(SimpleSpeculativeExecutionPolicy {
+                max_retry_count: 3,
+                retry_interval: Duration::from_millis(100),
+            });
+
+        let default_exec_profile = ExecutionProfile::builder()
+            .consistency(default_profile_consistency)
+            .serial_consistency(default_profile_serial_consistency)
+            .request_timeout(default_profile_request_timeout)
+            .retry_policy(default_profile_retry_policy.clone())
+            .speculative_execution_policy(Some(default_profile_speculative_execution_policy))
+            .build();
+
+        unsafe {
+            // Create a new execution profile that does not set any of the above settings.
+            let mut cass_exec_profile_raw = cass_execution_profile_new();
+
+            // 1. Check that the settings are inherited from the default profile if have never been set.
+            {
+                let cass_exec_profile = BoxFFI::as_ref(cass_exec_profile_raw.borrow())
+                    .unwrap()
+                    .clone();
+                let built_profile =
+                    runtime.block_on(cass_exec_profile.build(&default_exec_profile));
+                // Consistency is treated specially in CPP Driver (the long story is described in
+                // `use_cluster_defaults_for_unset_settings`).
+                // In short, if the consistency is not set in the execution profile,
+                // the hardcoded default consistency is used instead of the default profile's consistency.
+                assert_eq!(
+                    built_profile.get_consistency(),
+                    crate::cluster::DEFAULT_CONSISTENCY
+                );
+
+                assert_eq!(
+                    built_profile.get_serial_consistency(),
+                    default_profile_serial_consistency
+                );
+
+                assert_eq!(
+                    built_profile.get_request_timeout(),
+                    default_profile_request_timeout
+                );
+
+                assert!(Arc::ptr_eq(
+                    built_profile.get_retry_policy(),
+                    &(default_profile_retry_policy.clone() as Arc<dyn RetryPolicy>),
+                ));
+
+                // For speculative execution policy, we can at least check that it is set.
+                assert_matches::assert_matches!(
+                    built_profile.get_speculative_execution_policy(),
+                    Some(_)
+                );
+            }
+
+            // 2. Check that the settings are not inherited from the default profile if they have been set.
+            {
+                let custom_cass_consistency = CassConsistency::CASS_CONSISTENCY_THREE;
+                // This will be converted to `None` in the Rust Driver.
+                let custom_serial_cass_consistency = CassConsistency::CASS_CONSISTENCY_ANY;
+                let custom_request_timeout = 0 as cass_uint64_t;
+
+                // Set custom settings.
+                {
+                    // Set the consistency to something different.
+                    cass_execution_profile_set_consistency(
+                        cass_exec_profile_raw.borrow_mut(),
+                        custom_cass_consistency,
+                    );
+
+                    // Set the serial consistency to something different.
+                    cass_execution_profile_set_serial_consistency(
+                        cass_exec_profile_raw.borrow_mut(),
+                        custom_serial_cass_consistency,
+                    );
+
+                    // Set the request timeout to no timeout.
+                    cass_execution_profile_set_request_timeout(
+                        cass_exec_profile_raw.borrow_mut(),
+                        custom_request_timeout,
+                    );
+
+                    // Set the retry policy to something different.
+                    {
+                        let custom_retry_policy = cass_retry_policy_downgrading_consistency_new();
+                        cass_execution_profile_set_retry_policy(
+                            cass_exec_profile_raw.borrow_mut(),
+                            custom_retry_policy.borrow(),
+                        );
+                        cass_retry_policy_free(custom_retry_policy);
+                    }
+
+                    cass_execution_profile_set_no_speculative_execution_policy(
+                        cass_exec_profile_raw.borrow_mut(),
+                    );
+                }
+
+                let cass_exec_profile = BoxFFI::as_ref(cass_exec_profile_raw.borrow())
+                    .unwrap()
+                    .clone();
+                let built_profile =
+                    runtime.block_on(cass_exec_profile.build(&default_exec_profile));
+
+                assert_eq!(
+                    built_profile.get_consistency(),
+                    match MaybeUnsetConfig::<_, Consistency>::from_c_value(custom_cass_consistency)
+                        .unwrap()
+                    {
+                        MaybeUnsetConfig::Unset(_) => panic!(
+                            "Unexpected Unset, which should only happen for CASS_CONSISTENCY_UNKNOWN"
+                        ),
+                        MaybeUnsetConfig::Set(c) => c,
+                    }
+                );
+
+                assert_eq!(
+                    built_profile.get_serial_consistency(),
+                    match MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(
+                        custom_serial_cass_consistency
+                    )
+                    .unwrap()
+                    {
+                        MaybeUnsetConfig::Unset(_) => panic!(
+                            "Unexpected Unset, which should only happen for CASS_CONSISTENCY_UNKNOWN"
+                        ),
+                        MaybeUnsetConfig::Set(sc) => sc,
+                    }
+                );
+
+                assert_eq!(built_profile.get_request_timeout(), None,);
+
+                // No idea how to check the retry policy in such a simple unit test.
+                // At least check that it is different (wrt pointer equality) than the default one.
+                assert!(!Arc::ptr_eq(
+                    built_profile.get_retry_policy(),
+                    &(default_profile_retry_policy.clone() as Arc<dyn RetryPolicy>),
+                ));
+
+                assert_matches::assert_matches!(
+                    built_profile.get_speculative_execution_policy(),
+                    None
+                );
+            }
+
+            // 3. Check that the settings are inherited from the default profile if have been once set,
+            //    but later unset.
+            {
+                // Unset settings.
+                {
+                    cass_execution_profile_set_consistency(
+                        cass_exec_profile_raw.borrow_mut(),
+                        CassConsistency::CASS_CONSISTENCY_UNKNOWN,
+                    );
+
+                    cass_execution_profile_set_serial_consistency(
+                        cass_exec_profile_raw.borrow_mut(),
+                        CassConsistency::CASS_CONSISTENCY_UNKNOWN,
+                    );
+
+                    cass_execution_profile_set_request_timeout(
+                        cass_exec_profile_raw.borrow_mut(),
+                        cass_uint64_t::MAX,
+                    );
+
+                    cass_execution_profile_set_retry_policy(
+                        cass_exec_profile_raw.borrow_mut(),
+                        CassPtr::null(),
+                    );
+
+                    // Currently no way to unset the speculative execution policy in the CPP Driver.
+                }
+
+                let cass_exec_profile = BoxFFI::as_ref(cass_exec_profile_raw.borrow())
+                    .unwrap()
+                    .clone();
+                let built_profile =
+                    runtime.block_on(cass_exec_profile.build(&default_exec_profile));
+
+                // Consistency is treated specially in CPP Driver (the long story is described in
+                // `use_cluster_defaults_for_unset_settings`).
+                // In short, if the consistency is not set in the execution profile,
+                // the hardcoded default consistency is used instead of the default profile's consistency.
+                assert_eq!(
+                    built_profile.get_consistency(),
+                    crate::cluster::DEFAULT_CONSISTENCY
+                );
+
+                assert_eq!(
+                    built_profile.get_serial_consistency(),
+                    default_profile_serial_consistency
+                );
+
+                assert_eq!(
+                    built_profile.get_request_timeout(),
+                    default_profile_request_timeout
+                );
+
+                assert!(Arc::ptr_eq(
+                    built_profile.get_retry_policy(),
+                    &(default_profile_retry_policy as Arc<dyn RetryPolicy>),
+                ));
+
+                // Currently no way to unset the speculative execution policy in the CPP Driver.
+            }
+
+            cass_execution_profile_free(cass_exec_profile_raw);
         }
     }
 }

@@ -1614,7 +1614,7 @@ cass_cluster_set_local_address_n(CassCluster* cluster,
  * used when establishing the shard-aware connections. This is
  * applicable when the routing of connection to shard is based on
  * the client-side port number.
- * 
+ *
  * When application connects to multiple CassCluster-s it is advised
  * to assign mutually non-overlapping port intervals to each. It is assumed
  * that the supplied range is allowed by the OS (e.g. it fits inside
@@ -1803,7 +1803,7 @@ cass_cluster_set_core_connections_per_host(CassCluster* cluster,
  * Sets the number of connections opened by the driver to each shard.
  *
  * Cassandra nodes are treated as if they have one shard.
- * 
+ *
  * This will override the `cass_cluster_set_core_connections_per_host`, if set.
  *
  * <b>Default:</b> 1
@@ -1908,11 +1908,11 @@ cass_cluster_set_exponential_reconnect(CassCluster* cluster,
  * request's roundtrip time. Larger values should be used for throughput
  * bound workloads and lower values should be used for latency bound
  * workloads.
- * 
+ *
  * Notice that underlying Rust tokio timer has a granularity of millisecond.
  * Thus, the sub-millisecond delays are implemented in a non-deterministic way
  * by yielding the current tokio task.
- * 
+ *
  * The semantics of mapping the provided number microseconds to the delay
  * on rust-driver side:
  * - 0us -> no delay, i.e. the delay is disabled
@@ -11108,8 +11108,6 @@ cass_uuid_from_string_n(const char* str,
  * Creates a new server-side timestamp generator. This generator allows Cassandra
  * to assign timestamps server-side.
  *
- * <b>Note:</b> This is the default timestamp generator.
- *
  * @cassandra{2.1+}
  *
  * @public @memberof CassTimestampGen
@@ -11136,6 +11134,8 @@ cass_timestamp_gen_server_side_new();
  * the clock skew is resolved. These settings can be changed by using
  * `cass_timestamp_gen_monotonic_new_with_settings()` to create the generator
  * instance.
+ *
+ * <b>Note:</b> This is the default timestamp generator.
  *
  * <b>Note:</b> This generator is thread-safe and can be shared by multiple
  * sessions.
@@ -11488,7 +11488,7 @@ cass_log_set_callback(CassLogCallback callback,
 
 /**
  * Analogous getter - useful for restoring logger to previous values.
- * 
+ *
  * @param[out] callback_out Current logging callback. Must point to a valid memory area.
  * @param[out] data_out Current Logger instance. Must point to a valid memory area.
  */

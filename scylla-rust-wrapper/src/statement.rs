@@ -332,34 +332,23 @@ pub unsafe extern "C" fn cass_statement_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" consistency from a statement at the moment.
-            //
-            // FIXME: Implement unsetting consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some consistency \
-                on a statement, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting consistency on a statement, which \
-                will make the driver use the consistency set on execution profile or cluster level."
-            );
-
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            match &mut statement.statement {
+                BoundStatement::Simple(inner) => inner.query.unset_consistency(),
+                BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                    .statement
+                    .unset_consistency(),
+            }
         }
         MaybeUnsetConfig::Set(consistency) => match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_consistency(consistency),
@@ -613,30 +602,25 @@ pub unsafe extern "C" fn cass_statement_set_node(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_statement_set_retry_policy(
     statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) -> CassError {
     let Some(statement) = BoxFFI::as_mut_ref(statement) else {
         tracing::error!("Provided null statement pointer to cass_statement_set_retry_policy!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let maybe_arced_retry_policy: Option<Arc<dyn scylla::policies::retry::RetryPolicy>> =
-        ArcFFI::as_ref(retry_policy).map(|policy| match policy {
-            CassRetryPolicy::Default(default) => {
-                default.clone() as Arc<dyn scylla::policies::retry::RetryPolicy>
-            }
-            CassRetryPolicy::Fallthrough(fallthrough) => fallthrough.clone(),
-            CassRetryPolicy::DowngradingConsistency(downgrading) => downgrading.clone(),
-            CassRetryPolicy::Logging(logging) => Arc::clone(logging) as _,
-            #[cfg(cpp_integration_testing)]
-            CassRetryPolicy::Ignoring(ignoring) => Arc::clone(ignoring) as _,
-        });
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    let retry_policy_opt =
+        match MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy) {
+            MaybeUnsetConfig::Set(retry_policy) => Some(retry_policy),
+            MaybeUnsetConfig::Unset(_) => None,
+        };
 
     match &mut statement.statement {
-        BoundStatement::Simple(inner) => inner.query.set_retry_policy(maybe_arced_retry_policy),
+        BoundStatement::Simple(inner) => inner.query.set_retry_policy(retry_policy_opt),
         BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
             .statement
-            .set_retry_policy(maybe_arced_retry_policy),
+            .set_retry_policy(retry_policy_opt),
     }
 
     CassError::CASS_OK
@@ -663,32 +647,22 @@ pub unsafe extern "C" fn cass_statement_set_serial_consistency(
     // I think that failing explicitly is a better idea, so I decided to return
     // an error.
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // The correct semantics for `CASS_CONSISTENCY_UNKNOWN` is to
             // make statement not have any opinion at all about serial consistency.
             // Then, the default from the cluster/execution profile should be used.
-            // Unfortunately, the Rust Driver does not support
-            // "unsetting" serial consistency from a statement at the moment.
-            //
-            // FIXME: Implement unsetting serial consistency in the Rust Driver.
-            // Then, fix this code.
-            //
-            // For now, we will throw an error in order to warn the user
-            // about this limitation.
-            tracing::warn!(
-                "Passed `CASS_CONSISTENCY_UNKNOWN` to `cass_statement_set_serial_consistency`. \
-                This is not supported by the CPP Rust Driver yet: once you set some serial consistency \
-                on a statement, you cannot unset it. This limitation will be fixed in the future. \
-                As a workaround, you can refrain from setting serial consistency on a statement, which \
-                will make the driver use the serial consistency set on execution profile or cluster level."
-            );
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+            match &mut statement.statement {
+                BoundStatement::Simple(inner) => inner.query.unset_serial_consistency(),
+                BoundStatement::Prepared(inner) => Arc::make_mut(&mut inner.statement)
+                    .statement
+                    .unset_serial_consistency(),
+            }
         }
         MaybeUnsetConfig::Set(serial_consistency) => match &mut statement.statement {
             BoundStatement::Simple(inner) => inner.query.set_serial_consistency(serial_consistency),
@@ -732,7 +706,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     };
 
     let maybe_unset_timeout =
-        MaybeUnsetConfig::<RequestTimeout>::from_c_value_infallible(timeout_ms);
+        MaybeUnsetConfig::<_, RequestTimeout>::from_c_value_infallible(timeout_ms);
 
     // `Statement::set_request_timeout` expects an Option<Duration> with unusual semantics:
     // - `None` means "ignore me and use the default timeout from the cluster/execution profile" - this is
@@ -741,7 +715,7 @@ pub unsafe extern "C" fn cass_statement_set_request_timeout(
     // - `Some(timeout)` means "use timeout of given value".
     // Therefore, to acquire "no timeout" semantics, we need to emulate it with an extremely long timeout.
     let timeout = match maybe_unset_timeout {
-        MaybeUnsetConfig::Unset => None,
+        MaybeUnsetConfig::Unset(_) => None,
         MaybeUnsetConfig::Set(RequestTimeout(timeout)) => {
             Some(timeout.unwrap_or(RequestTimeout::INFINITE))
         }

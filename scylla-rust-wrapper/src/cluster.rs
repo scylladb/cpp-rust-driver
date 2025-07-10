@@ -20,9 +20,9 @@ use scylla::client::{PoolSize, SelfIdentity, WriteCoalescingDelay};
 use scylla::frame::Compression;
 use scylla::policies::host_filter::HostFilter;
 use scylla::policies::load_balancing::LatencyAwarenessBuilder;
-use scylla::policies::retry::RetryPolicy;
+use scylla::policies::retry::{DefaultRetryPolicy, RetryPolicy};
 use scylla::policies::speculative_execution::SimpleSpeculativeExecutionPolicy;
-use scylla::policies::timestamp_generator::TimestampGenerator;
+use scylla::policies::timestamp_generator::{MonotonicTimestampGenerator, TimestampGenerator};
 use scylla::routing::ShardAwarePortRange;
 use scylla::statement::{Consistency, SerialConsistency};
 use std::collections::HashMap;
@@ -39,7 +39,7 @@ use crate::cass_compression_types::CassCompressionType;
 
 // According to `cassandra.h` the defaults for
 // - consistency for statements is LOCAL_ONE,
-const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
+pub(crate) const DEFAULT_CONSISTENCY: Consistency = Consistency::LocalOne;
 // - serial consistency for statements is ANY, which corresponds to None in Rust Driver.
 const DEFAULT_SERIAL_CONSISTENCY: Option<SerialConsistency> = None;
 // - request client timeout is 12000 millis,
@@ -66,6 +66,13 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 // - keepalive timeout is 60 secs
 const DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+// - TCP keepalive interval (actually: delay before the first keepalive
+//   probe is sent) is 0 sec in the CPP Driver. However, libuv started
+//   to reject such configuration on purpose since 1.49, so let's follow
+//   its reasoning and set it to more.
+//   1 sec could make sense, but Rust driver warns if it's not greater
+//   than 1 sec (for performance reasons), so let's set 2 secs..
+const DEFAULT_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(2);
 // - default local ip address is arbitrary
 const DEFAULT_LOCAL_IP_ADDRESS: Option<IpAddr> = None;
 // - default shard aware local port range is ephemeral range
@@ -148,27 +155,28 @@ impl FFI for CassCluster {
 
 pub struct CassCustomPayload;
 
-// We want to make sure that the returned future does not depend
-// on the provided &CassCluster, hence the `static here.
-pub(crate) fn build_session_builder(
-    cluster: &CassCluster,
-) -> impl Future<Output = SessionBuilder> + 'static {
-    let known_nodes = cluster
-        .contact_points
-        .iter()
-        .map(|cp| format!("{}:{}", cp, cluster.port));
-    let mut execution_profile_builder = cluster.default_execution_profile_builder.clone();
-    let load_balancing_config = cluster.load_balancing_config.clone();
-    let mut session_builder = cluster.session_builder.clone().known_nodes(known_nodes);
-    if let (Some(username), Some(password)) = (&cluster.auth_username, &cluster.auth_password) {
-        session_builder = session_builder.user(username, password)
-    }
+impl CassCluster {
+    // We want to make sure that the returned future does not depend
+    // on the provided &CassCluster, hence the `static here.
+    pub(crate) fn build_session_builder(&self) -> impl Future<Output = SessionBuilder> + 'static {
+        let known_nodes = self
+            .contact_points
+            .iter()
+            .map(|cp| format!("{}:{}", cp, self.port));
+        let mut execution_profile_builder = self.default_execution_profile_builder.clone();
+        let load_balancing_config = self.load_balancing_config.clone();
+        let mut session_builder = self.session_builder.clone().known_nodes(known_nodes);
+        if let (Some(username), Some(password)) = (&self.auth_username, &self.auth_password) {
+            session_builder = session_builder.user(username, password)
+        }
 
-    async move {
-        let load_balancing = load_balancing_config.clone().build().await;
-        execution_profile_builder = execution_profile_builder.load_balancing_policy(load_balancing);
-        session_builder
-            .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        async move {
+            let load_balancing = load_balancing_config.clone().build().await;
+            execution_profile_builder =
+                execution_profile_builder.load_balancing_policy(load_balancing);
+            session_builder
+                .default_execution_profile_handle(execution_profile_builder.build().into_handle())
+        }
     }
 }
 
@@ -177,9 +185,109 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
         .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
-        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT));
+        .request_timeout(Some(DEFAULT_REQUEST_TIMEOUT))
+        .retry_policy(Arc::new(DefaultRetryPolicy::new()))
+        .speculative_execution_policy(None);
+    // Load balancing is set in LoadBalancingConfig::build().
+    // The default load balancing policy is DCAware in CPP Driver.
+    // NOTE: CPP Driver initializes the local DC to the first node the client
+    // connects to. This is tricky, a possible footgun, and hard to be done with
+    // the current Rust driver implementation, which is why do don't use DC awareness
+    // by default.
 
-    // Default config options - according to cassandra.h
+    /* Default config options - according to `cassandra.h`:
+     * ```c++
+     * // Cluster-level defaults
+     * #define CASS_DEFAULT_CONNECT_TIMEOUT_MS 5000
+     * #define CASS_DEFAULT_HEARTBEAT_INTERVAL_SECS 30
+     * #define CASS_DEFAULT_HOSTNAME_RESOLUTION_ENABLED false
+     * #define CASS_DEFAULT_IDLE_TIMEOUT_SECS 60
+     * #define CASS_DEFAULT_LOG_LEVEL CASS_LOG_WARN
+     * #define CASS_DEFAULT_MAX_PREPARES_PER_FLUSH 128
+     * #define CASS_DEFAULT_MAX_REUSABLE_WRITE_OBJECTS UINT_MAX
+     * #define CASS_DEFAULT_MAX_SCHEMA_WAIT_TIME_MS 10000
+     * #define CASS_DEFAULT_NUM_CONNECTIONS_PER_HOST 1
+     * #define CASS_DEFAULT_PREPARE_ON_ALL_HOSTS true
+     * #define CASS_DEFAULT_PREPARE_ON_UP_OR_ADD_HOST true
+     * #define CASS_DEFAULT_PORT 9042
+     * #define CASS_DEFAULT_QUEUE_SIZE_IO 8192
+     * #define CASS_DEFAULT_CONSTANT_RECONNECT_WAIT_TIME_MS 2000u
+     * #define CASS_DEFAULT_EXPONENTIAL_RECONNECT_BASE_DELAY_MS \
+     *   CASS_DEFAULT_CONSTANT_RECONNECT_WAIT_TIME_MS
+     * #define CASS_DEFAULT_EXPONENTIAL_RECONNECT_MAX_DELAY_MS 600000u // 10 minutes
+     * #define CASS_DEFAULT_RESOLVE_TIMEOUT_MS 5000
+     * #define CASS_DEFAULT_TCP_KEEPALIVE_DELAY_SECS 0
+     * #define CASS_DEFAULT_TCP_KEEPALIVE_ENABLED true
+     * #define CASS_DEFAULT_TCP_NO_DELAY_ENABLED true
+     * #define CASS_DEFAULT_THREAD_COUNT_IO 1
+     * #define CASS_DEFAULT_USE_TOKEN_AWARE_ROUTING true
+     * #define CASS_DEFAULT_USE_SNI_ROUTING false
+     * #define CASS_DEFAULT_USE_BETA_PROTOCOL_VERSION false
+     * #define CASS_DEFAULT_USE_RANDOMIZED_CONTACT_POINTS true
+     * #define CASS_DEFAULT_USE_SCHEMA true
+     * #define CASS_DEFAULT_COALESCE_DELAY 200
+     * #define CASS_DEFAULT_NEW_REQUEST_RATIO 50
+     * #define CASS_DEFAULT_NO_COMPACT false
+     * #define CASS_DEFAULT_CQL_VERSION "3.0.0"
+     * #define CASS_DEFAULT_MAX_TRACING_DATA_WAIT_TIME_MS 15
+     * #define CASS_DEFAULT_RETRY_TRACING_DATA_WAIT_TIME_MS 3
+     * #define CASS_DEFAULT_TRACING_CONSISTENCY CASS_CONSISTENCY_ONE
+     * #define CASS_DEFAULT_HISTOGRAM_REFRESH_INTERVAL_NO_REFRESH 0
+     *
+     * // Request-level defaults
+     * #define CASS_DEFAULT_CONSISTENCY CASS_CONSISTENCY_LOCAL_ONE
+     * #define CASS_DEFAULT_REQUEST_TIMEOUT_MS 12000u
+     * #define CASS_DEFAULT_SERIAL_CONSISTENCY CASS_CONSISTENCY_ANY
+     *
+     *  Config()
+     *    : port_(CASS_DEFAULT_PORT)
+     *    , protocol_version_(ProtocolVersion::highest_supported())
+     *    , use_beta_protocol_version_(CASS_DEFAULT_USE_BETA_PROTOCOL_VERSION)
+     *    , thread_count_io_(CASS_DEFAULT_THREAD_COUNT_IO)
+     *    , queue_size_io_(CASS_DEFAULT_QUEUE_SIZE_IO)
+     *    , core_connections_per_host_(CASS_DEFAULT_NUM_CONNECTIONS_PER_HOST)
+     *    , reconnection_policy_(new ExponentialReconnectionPolicy())
+     *    , connect_timeout_ms_(CASS_DEFAULT_CONNECT_TIMEOUT_MS)
+     *    , resolve_timeout_ms_(CASS_DEFAULT_RESOLVE_TIMEOUT_MS)
+     *    , max_schema_wait_time_ms_(CASS_DEFAULT_MAX_SCHEMA_WAIT_TIME_MS)
+     *    , max_tracing_wait_time_ms_(CASS_DEFAULT_MAX_TRACING_DATA_WAIT_TIME_MS)
+     *    , retry_tracing_wait_time_ms_(CASS_DEFAULT_RETRY_TRACING_DATA_WAIT_TIME_MS)
+     *    , tracing_consistency_(CASS_DEFAULT_TRACING_CONSISTENCY)
+     *    , coalesce_delay_us_(CASS_DEFAULT_COALESCE_DELAY)
+     *    , new_request_ratio_(CASS_DEFAULT_NEW_REQUEST_RATIO)
+     *    , log_level_(CASS_DEFAULT_LOG_LEVEL)
+     *    , log_callback_(stderr_log_callback)
+     *    , log_data_(NULL)
+     *    , auth_provider_(new AuthProvider())
+     *    , tcp_nodelay_enable_(CASS_DEFAULT_TCP_NO_DELAY_ENABLED)
+     *    , tcp_keepalive_enable_(CASS_DEFAULT_TCP_KEEPALIVE_ENABLED)
+     *    , tcp_keepalive_delay_secs_(CASS_DEFAULT_TCP_KEEPALIVE_DELAY_SECS)
+     *    , connection_idle_timeout_secs_(CASS_DEFAULT_IDLE_TIMEOUT_SECS)
+     *    , connection_heartbeat_interval_secs_(CASS_DEFAULT_HEARTBEAT_INTERVAL_SECS)
+     *    , timestamp_gen_(new MonotonicTimestampGenerator())
+     *    , use_schema_(CASS_DEFAULT_USE_SCHEMA)
+     *    , use_hostname_resolution_(CASS_DEFAULT_HOSTNAME_RESOLUTION_ENABLED)
+     *    , use_randomized_contact_points_(CASS_DEFAULT_USE_RANDOMIZED_CONTACT_POINTS)
+     *    , max_reusable_write_objects_(CASS_DEFAULT_MAX_REUSABLE_WRITE_OBJECTS)
+     *    , prepare_on_all_hosts_(CASS_DEFAULT_PREPARE_ON_ALL_HOSTS)
+     *    , prepare_on_up_or_add_host_(CASS_DEFAULT_PREPARE_ON_UP_OR_ADD_HOST)
+     *    , no_compact_(CASS_DEFAULT_NO_COMPACT)
+     *    , is_client_id_set_(false)
+     *    , host_listener_(new DefaultHostListener())
+     *    , monitor_reporting_interval_secs_(CASS_DEFAULT_CLIENT_MONITOR_EVENTS_INTERVAL_SECS)
+     *    , cluster_metadata_resolver_factory_(new DefaultClusterMetadataResolverFactory())
+     *    , histogram_refresh_interval_(CASS_DEFAULT_HISTOGRAM_REFRESH_INTERVAL_NO_REFRESH) {
+     *    profiles_.set_empty_key(String());
+     *
+     *    // Assign the defaults to the cluster profile
+     *    default_profile_.set_serial_consistency(CASS_DEFAULT_SERIAL_CONSISTENCY);
+     *    default_profile_.set_request_timeout(CASS_DEFAULT_REQUEST_TIMEOUT_MS);
+     *    default_profile_.set_load_balancing_policy(new DCAwarePolicy());
+     *    default_profile_.set_retry_policy(new DefaultRetryPolicy());
+     *    default_profile_.set_speculative_execution_policy(new NoSpeculativeExecutionPolicy());
+     *  }
+     * ```
+     */
     let default_session_builder = {
         // Set DRIVER_NAME and DRIVER_VERSION of cpp-rust driver.
         let custom_identity = SelfIdentity::new()
@@ -192,6 +300,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .schema_agreement_timeout(DEFAULT_MAX_SCHEMA_WAIT_TIME)
             .schema_agreement_interval(DEFAULT_SCHEMA_AGREEMENT_INTERVAL)
             .tcp_nodelay(DEFAULT_SET_TCP_NO_DELAY)
+            .tcp_keepalive_interval(DEFAULT_TCP_KEEPALIVE_INTERVAL)
             .connection_timeout(DEFAULT_CONNECT_TIMEOUT)
             .pool_size(DEFAULT_CONNECTION_POOL_SIZE)
             .write_coalescing(DEFAULT_ENABLE_WRITE_COALESCING)
@@ -200,6 +309,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
             .keepalive_timeout(DEFAULT_KEEPALIVE_TIMEOUT)
             .local_ip_address(DEFAULT_LOCAL_IP_ADDRESS)
             .shard_aware_local_port_range(DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE)
+            .timestamp_generator(Arc::new(MonotonicTimestampGenerator::new()))
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
@@ -1165,24 +1275,19 @@ pub unsafe extern "C" fn cass_cluster_set_token_aware_routing_shuffle_replicas(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_set_retry_policy(
     cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
-    retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
+    cass_retry_policy: CassBorrowedSharedPtr<CassRetryPolicy, CMut>,
 ) {
     let Some(cluster) = BoxFFI::as_mut_ref(cluster_raw) else {
         tracing::error!("Provided null cluster pointer to cass_cluster_set_retry_policy!");
         return;
     };
 
-    let retry_policy: Arc<dyn RetryPolicy> = match ArcFFI::as_ref(retry_policy) {
-        Some(CassRetryPolicy::Default(default)) => Arc::clone(default) as _,
-        Some(CassRetryPolicy::Fallthrough(fallthrough)) => Arc::clone(fallthrough) as _,
-        Some(CassRetryPolicy::DowngradingConsistency(downgrading)) => Arc::clone(downgrading) as _,
-        Some(CassRetryPolicy::Logging(logging)) => Arc::clone(logging) as _,
-        #[cfg(cpp_integration_testing)]
-        Some(CassRetryPolicy::Ignoring(ignoring)) => Arc::clone(ignoring) as _,
-        None => {
-            tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
-            return;
-        }
+    let maybe_unset_cass_retry_policy = ArcFFI::as_ref(cass_retry_policy);
+    let MaybeUnsetConfig::Set(retry_policy): MaybeUnsetConfig<_, Arc<dyn RetryPolicy>> =
+        MaybeUnsetConfig::from_c_value_infallible(maybe_unset_cass_retry_policy)
+    else {
+        tracing::error!("Provided null retry policy pointer to cass_cluster_set_retry_policy!");
+        return;
     };
 
     exec_profile_builder_modify(&mut cluster.default_execution_profile_builder, |builder| {
@@ -1414,14 +1519,14 @@ pub unsafe extern "C" fn cass_cluster_set_consistency(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<Consistency>::from_c_value(consistency)
+    let Ok(maybe_set_consistency) = MaybeUnsetConfig::<_, Consistency>::from_c_value(consistency)
     else {
         // Invalid consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
             return CassError::CASS_ERROR_LIB_BAD_PARAMS;
         }
@@ -1447,14 +1552,14 @@ pub unsafe extern "C" fn cass_cluster_set_serial_consistency(
     };
 
     let Ok(maybe_set_serial_consistency) =
-        MaybeUnsetConfig::<Option<SerialConsistency>>::from_c_value(serial_consistency)
+        MaybeUnsetConfig::<_, Option<SerialConsistency>>::from_c_value(serial_consistency)
     else {
         // Invalid serial consistency value provided.
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
     match maybe_set_serial_consistency {
-        MaybeUnsetConfig::Unset => {
+        MaybeUnsetConfig::Unset(_) => {
             // `CASS_CONSISTENCY_UNKNOWN` is not supported in the cluster settings.
             return CassError::CASS_ERROR_LIB_BAD_PARAMS;
         }
