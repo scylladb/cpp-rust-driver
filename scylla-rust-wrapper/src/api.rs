@@ -60,7 +60,7 @@ pub mod cluster {
         cass_cluster_set_blacklist_filtering_n,
         cass_cluster_set_client_id,
         // cass_cluster_set_cloud_secure_connection_bundle, UNIMPLEMENTED
-        cass_cluster_set_cloud_secure_connection_bundle_n, // FIXME: shouldn't this be unimplemented?
+        // cass_cluster_set_cloud_secure_connection_bundle_n, UNIMPLEMENTED, stub present
         // cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init, UNIMPLEMENTED
         // cass_cluster_set_cloud_secure_connection_bundle_no_ssl_lib_init_n, UNIMPLEMENTED
         cass_cluster_set_coalesce_delay,
@@ -79,7 +79,7 @@ pub mod cluster {
         cass_cluster_set_credentials_n,
         cass_cluster_set_execution_profile,
         cass_cluster_set_execution_profile_n,
-        cass_cluster_set_exponential_reconnect, // FIXME: Should be unimplemented!
+        // cass_cluster_set_exponential_reconnect, UNIMPLEMENTED, stub present
         // cass_cluster_set_host_listener_callback, UNIMPLEMENTED
         cass_cluster_set_latency_aware_routing,
         cass_cluster_set_latency_aware_routing_settings,
@@ -125,7 +125,7 @@ pub mod cluster {
         // cass_cluster_set_tracing_consistency, UNIMPLEMENTED
         cass_cluster_set_use_beta_protocol_version,
         // cass_cluster_set_use_hostname_resolution, UNIMPLEMENTED
-        cass_cluster_set_use_randomized_contact_points, // FIXME: Should be unimplemented!
+        // cass_cluster_set_use_randomized_contact_points, UNIMPLEMENTED, stub present
         cass_cluster_set_use_schema,
         cass_cluster_set_whitelist_dc_filtering,
         cass_cluster_set_whitelist_dc_filtering_n,
@@ -347,6 +347,8 @@ pub mod future {
         CassFuture,
         CassFutureCallback,
         cass_future_coordinator,
+        // cass_future_custom_payload_item, UNIMPLEMENTED, stub present
+        // cass_future_custom_payload_item_count,  UNIMPLEMENTED, stub present
         cass_future_error_code,
         cass_future_error_message,
         cass_future_get_error_result,
@@ -358,12 +360,6 @@ pub mod future {
         cass_future_tracing_id,
         cass_future_wait,
         cass_future_wait_timed,
-    };
-
-    #[rustfmt::skip]
-    pub use crate::cluster::{
-        cass_future_custom_payload_item,  // FIXME: Should be unimplemented!
-        cass_future_custom_payload_item_count,  // FIXME: Should be unimplemented!
     };
 
     #[rustfmt::skip]
@@ -857,17 +853,13 @@ pub mod retry_policy {
 }
 
 pub mod custom_payload {
+    // CassCustomPayload, UNIMPLEMENTED
     // cass_custom_payload_free, UNIMPLEMENTED
-    // cass_custom_payload_new, UNIMPLEMENTED
+    // cass_custom_payload_new, UNIMPLEMENTED, stub present
     // cass_custom_payload_remove, UNIMPLEMENTED
     // cass_custom_payload_remove_n, UNIMPLEMENTED
     // cass_custom_payload_set, UNIMPLEMENTED
     // cass_custom_payload_set_n, UNIMPLEMENTED
-    #[rustfmt::skip]
-    pub use crate::cluster::{
-        CassCustomPayload, // FIXME: Should be unimplemented!
-        cass_custom_payload_new, // FIXME: Should be unimplemented!
-    };
 }
 
 pub mod consistency {
@@ -939,5 +931,19 @@ pub mod integration_testing {
         testing_retry_policy_ignoring_new,
         testing_statement_set_recording_history_listener,
         testing_statement_set_sleeping_history_listener,
+    };
+
+    /// Stubs of functions that must be implemented for the integration tests to compile,
+    /// but the proper implementation is not needed for the tests to run,
+    /// and at the same time the functions are not yet implemented in the wrapper.
+    #[rustfmt::skip]
+    pub use crate::integration_testing::stubs::{
+        CassCustomPayload,
+        cass_cluster_set_cloud_secure_connection_bundle_n,
+        cass_cluster_set_exponential_reconnect,
+        cass_cluster_set_use_randomized_contact_points,
+        cass_custom_payload_new,
+        cass_future_custom_payload_item,
+        cass_future_custom_payload_item_count,
     };
 }

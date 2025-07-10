@@ -361,3 +361,95 @@ pub unsafe extern "C" fn testing_retry_policy_ignoring_new()
         IgnoringRetryPolicy,
     ))))
 }
+
+/// Stubs of functions that must be implemented for the integration tests to compile,
+/// but the proper implementation is not needed for the tests to run,
+/// and at the same time the functions are not yet implemented in the wrapper.
+pub(crate) mod stubs {
+    use super::*;
+    use crate::argconv::ptr_to_cstr_n;
+    use crate::cass_error_types::CassError;
+    use crate::types::cass_byte_t;
+
+    pub struct CassCustomPayload;
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_cluster_set_use_randomized_contact_points(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        _enabled: cass_bool_t,
+    ) -> CassError {
+        // FIXME: should set `use_randomized_contact_points` flag in cluster config
+
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle_n(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        path: *const c_char,
+        path_length: size_t,
+    ) -> CassError {
+        // FIXME: Should unzip file associated with the path
+        let zip_file = unsafe { ptr_to_cstr_n(path, path_length) }.unwrap();
+
+        if zip_file == "invalid_filename" {
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_cluster_set_exponential_reconnect(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        base_delay_ms: cass_uint64_t,
+        max_delay_ms: cass_uint64_t,
+    ) -> CassError {
+        if base_delay_ms <= 1 {
+            // Base delay must be greater than 1
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+
+        if max_delay_ms <= 1 {
+            // Max delay must be greater than 1
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+
+        if max_delay_ms < base_delay_ms {
+            // Max delay cannot be less than base delay
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+
+        // FIXME: should set exponential reconnect with base_delay_ms and max_delay_ms
+        /*
+        cluster->config().set_exponential_reconnect(base_delay_ms, max_delay_ms);
+        */
+
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_custom_payload_new() -> *const CassCustomPayload {
+        // FIXME: should create a new custom payload that must be freed
+        std::ptr::null()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_future_custom_payload_item(
+        _future: CassBorrowedExclusivePtr<CassFuture, CMut>,
+        _i: size_t,
+        _name: *const c_char,
+        _name_length: size_t,
+        _value: *const cass_byte_t,
+        _value_size: size_t,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_future_custom_payload_item_count(
+        _future: CassBorrowedExclusivePtr<CassFuture, CMut>,
+    ) -> size_t {
+        0
+    }
+}
