@@ -840,6 +840,8 @@ mod tests {
         unsafe { cass_future_free(fut) };
     }
 
+    /// A set of rules that are needed to negotiate connections.
+    // All connections are successfully negotiated.
     fn handshake_rules() -> impl IntoIterator<Item = RequestRule> {
         [
             RequestRule(
@@ -866,6 +868,23 @@ mod tests {
             // but the driver will manage to continue with dummy metadata.
             RequestReaction::forge().server_error(),
         )]
+    }
+
+    /// A set of rules that are needed to finish session initialization.
+    // They are used in tests that require a session to be connected.
+    // All connections are successfully negotiated.
+    // All requests are replied with a server error.
+    fn mock_init_rules() -> impl IntoIterator<Item = RequestRule> {
+        handshake_rules()
+            .into_iter()
+            .chain(std::iter::once(RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Query)
+                    .or(Condition::RequestOpcode(RequestOpcode::Prepare))
+                    .or(Condition::RequestOpcode(RequestOpcode::Batch)),
+                // We won't respond to any queries (including metadata fetch),
+                // but the driver will manage to continue with dummy metadata.
+                RequestReaction::forge().server_error(),
+            )))
     }
 
     pub(crate) async fn test_with_one_proxy(
