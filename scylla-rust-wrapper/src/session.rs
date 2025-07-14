@@ -868,7 +868,7 @@ mod tests {
         )]
     }
 
-    pub(crate) async fn test_with_one_proxy_one(
+    pub(crate) async fn test_with_one_proxy(
         test: impl FnOnce(SocketAddr, RunningProxy) -> RunningProxy + Send + 'static,
         rules: impl IntoIterator<Item = RequestRule>,
     ) {
@@ -899,7 +899,7 @@ mod tests {
     #[ntest::timeout(5000)]
     async fn session_clones_and_freezes_exec_profiles_mapping() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             session_clones_and_freezes_exec_profiles_mapping_do,
             handshake_rules()
                 .into_iter()
@@ -994,7 +994,7 @@ mod tests {
     #[ntest::timeout(5000)]
     async fn session_resolves_exec_profile_on_first_query() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             session_resolves_exec_profile_on_first_query_do,
             handshake_rules().into_iter().chain(
                 iter::once(RequestRule(
@@ -1281,7 +1281,7 @@ mod tests {
     #[ntest::timeout(30000)]
     async fn retry_policy_on_statement_and_batch_is_handled_properly() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             retry_policy_on_statement_and_batch_is_handled_properly_do,
             retry_policy_on_statement_and_batch_is_handled_properly_rules(),
         )
