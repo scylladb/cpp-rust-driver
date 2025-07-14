@@ -22,7 +22,7 @@
 
 class SchemaMetadataTest : public Integration {
 public:
-  SchemaMetadataTest() { 
+  SchemaMetadataTest() {
     is_schema_metadata_ = true;
     // Materialized views do not work with tablets.
     disable_tablets_ = true;
@@ -181,11 +181,11 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, VirtualMetadata) {
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "keyspace_name");
   ASSERT_TRUE(column_meta);
-  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "table_name");
   ASSERT_TRUE(column_meta);
-  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "task_id");
   ASSERT_TRUE(column_meta);
@@ -193,7 +193,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, VirtualMetadata) {
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "kind");
   ASSERT_TRUE(column_meta);
-  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "progress");
   ASSERT_TRUE(column_meta);
@@ -205,7 +205,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, VirtualMetadata) {
 
   column_meta = cass_table_meta_column_by_name(table_meta.get(), "unit");
   ASSERT_TRUE(column_meta);
-  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
 }
 
 CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, KeyspaceMetadata) {
@@ -231,10 +231,10 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, KeyspaceMetadata) {
   ASSERT_EQ(user_type_meta_name, "address");
 
   const CassDataType* user_type_field1 = cass_data_type_sub_data_type_by_name(user_type_meta, "street");
-  ASSERT_EQ(cass_data_type_type(user_type_field1), CASS_VALUE_TYPE_TEXT);
+  ASSERT_EQ(cass_data_type_type(user_type_field1), CASS_VALUE_TYPE_VARCHAR);
 
   const CassDataType* user_type_field2 = cass_data_type_sub_data_type_by_name(user_type_meta, "city");
-  ASSERT_EQ(cass_data_type_type(user_type_field2), CASS_VALUE_TYPE_TEXT);
+  ASSERT_EQ(cass_data_type_type(user_type_field2), CASS_VALUE_TYPE_VARCHAR);
 
   // Table Metadata
   const CassTableMeta* table_meta = cass_keyspace_meta_table_by_name(keyspace_meta, table_name_.c_str());
@@ -249,7 +249,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, KeyspaceMetadata) {
   const CassColumnMeta* column_meta;
   column_meta = cass_table_meta_column_by_name(table_meta, "key");
   ASSERT_TRUE(column_meta);
-  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+  EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
 
   column_meta = cass_table_meta_column_by_name(table_meta, "value");
   ASSERT_TRUE(column_meta);
@@ -330,10 +330,10 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, MetadataIterator) {
   ASSERT_EQ(user_type_meta_name, "address");
 
   const CassDataType* user_type_field1 = cass_data_type_sub_data_type_by_name(user_type_meta, "street");
-  ASSERT_EQ(cass_data_type_type(user_type_field1), CASS_VALUE_TYPE_TEXT);
+  ASSERT_EQ(cass_data_type_type(user_type_field1), CASS_VALUE_TYPE_VARCHAR);
 
   const CassDataType* user_type_field2 = cass_data_type_sub_data_type_by_name(user_type_meta, "city");
-  ASSERT_EQ(cass_data_type_type(user_type_field2), CASS_VALUE_TYPE_TEXT);
+  ASSERT_EQ(cass_data_type_type(user_type_field2), CASS_VALUE_TYPE_VARCHAR);
 
   ASSERT_FALSE(cass_iterator_next(keyspace_user_types_iterator));
 
@@ -367,7 +367,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, MetadataIterator) {
   std::string column1_name(column_meta_name, column_meta_name_length);
 
   if (column1_name == "key") {
-    EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+    EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
   } else if (column1_name == "value") {
     EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_BIGINT);
   }
@@ -379,7 +379,7 @@ CASSANDRA_INTEGRATION_TEST_F(SchemaMetadataTest, MetadataIterator) {
   std::string column2_name(column_meta_name, column_meta_name_length);
 
   if (column2_name == "key") {
-    EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_TEXT);
+    EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_VARCHAR);
   } else if (column2_name == "value") {
     EXPECT_EQ(cass_data_type_type(cass_column_meta_data_type(column_meta)), CASS_VALUE_TYPE_BIGINT);
   }

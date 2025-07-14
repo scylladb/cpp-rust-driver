@@ -89,7 +89,7 @@ public:
 
   ValueType value() const { return varchar_; }
 
-  CassValueType value_type() const { return CASS_VALUE_TYPE_TEXT; }
+  CassValueType value_type() const { return CASS_VALUE_TYPE_VARCHAR; }
 
 protected:
   /**
@@ -111,7 +111,7 @@ public:
   std::string cql_type() const { return "text"; }
 
   CassValueType value_type() const {
-    return CASS_VALUE_TYPE_TEXT; // Text (alias is returned as varchar from server)
+    return CASS_VALUE_TYPE_VARCHAR; // Text (alias is returned as varchar from server)
   }
 };
 
