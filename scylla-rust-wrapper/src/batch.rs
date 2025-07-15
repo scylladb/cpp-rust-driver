@@ -33,19 +33,20 @@ pub(crate) struct CassBatchState {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_batch_new(
-    type_: CassBatchType,
+    typ: CassBatchType,
 ) -> CassOwnedExclusivePtr<CassBatch, CMut> {
-    if let Ok(batch_type) = make_batch_type(type_) {
-        BoxFFI::into_ptr(Box::new(CassBatch {
-            state: Arc::new(CassBatchState {
-                batch: Batch::new(batch_type),
-                bound_values: Vec::new(),
-            }),
-            exec_profile: None,
-        }))
-    } else {
-        BoxFFI::null_mut()
-    }
+    let Ok(batch_type) = make_batch_type(typ) else {
+        tracing::error!("Provided invalid batch type to cass_batch_new: {typ:?}");
+        return BoxFFI::null_mut();
+    };
+
+    BoxFFI::into_ptr(Box::new(CassBatch {
+        state: Arc::new(CassBatchState {
+            batch: Batch::new(batch_type),
+            bound_values: Vec::new(),
+        }),
+        exec_profile: None,
+    }))
 }
 
 #[unsafe(no_mangle)]
