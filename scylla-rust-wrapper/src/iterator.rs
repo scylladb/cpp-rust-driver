@@ -13,7 +13,7 @@ use crate::metadata::{
 use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
     CassRawRow, CassResult, CassResultKind, CassResultMetadata, CassRow, CassValue,
-    NonNullDeserializationError, cass_value_type,
+    NonNullDeserializationError,
 };
 use crate::types::{cass_bool_t, cass_false, size_t};
 
@@ -1157,16 +1157,15 @@ pub unsafe extern "C" fn cass_iterator_from_row<'result>(
 pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    if RefFFI::is_null(&value) {
+    let Some(val) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_iterator_from_collection!");
         return BoxFFI::null_mut();
-    }
+    };
 
     // SAFETY: We assume that user provided a valid pointer to the value.
     // The `value.value_type` is a `CassDataType` obtained from `CassResultMetadata`, which is immutable
-    // (thus, underlying `get_unchecked()` is safe).
-    let value_type = unsafe { cass_value_type(value.borrow()) };
-
-    let val = RefFFI::as_ref(value).unwrap();
+    // (thus, `get_unchecked()` is safe).
+    let value_type = unsafe { val.value_type.get_unchecked() }.get_value_type();
 
     let iterator_result = match value_type {
         CassValueType::CASS_VALUE_TYPE_SET | CassValueType::CASS_VALUE_TYPE_LIST => {
