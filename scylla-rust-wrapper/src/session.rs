@@ -59,12 +59,11 @@ impl CassConnectedSession {
     ) -> impl Future<Output = Result<Option<ExecutionProfileHandle>, (CassError, String)>> + 'a
     {
         async move {
-            if let Some(profile) = exec_profile {
-                let handle = profile.get_or_resolve_profile_handle(self).await?;
-                Ok(Some(handle))
-            } else {
-                Ok(None)
-            }
+            let Some(profile) = exec_profile else {
+                return Ok(None);
+            };
+            let handle = profile.get_or_resolve_profile_handle(self).await?;
+            Ok(Some(handle))
         }
     }
 
