@@ -270,7 +270,13 @@ fn native_type_to_cass_value_type(native_type: &NativeType) -> CassValueType {
         Float => CassValueType::CASS_VALUE_TYPE_FLOAT,
         Int => CassValueType::CASS_VALUE_TYPE_INT,
         BigInt => CassValueType::CASS_VALUE_TYPE_BIGINT,
-        Text => CassValueType::CASS_VALUE_TYPE_TEXT,
+        // Rust Driver unifies both VARCHAR and TEXT into NativeType::Text.
+        // CPP Driver, in accordance to the CQL protocol, has separate types for VARCHAR and TEXT.
+        // Even worse, Rust Driver even does not handle CQL TEXT correctly! It errors out on TEXT
+        // type...
+        // As the DBs (Cassandra and ScyllaDB) seem to send the VARCHAR type in the protocol,
+        // we will assume that the NativeType::Text is actually a VARCHAR type.
+        Text => CassValueType::CASS_VALUE_TYPE_VARCHAR,
         Timestamp => CassValueType::CASS_VALUE_TYPE_TIMESTAMP,
         Inet => CassValueType::CASS_VALUE_TYPE_INET,
         SmallInt => CassValueType::CASS_VALUE_TYPE_SMALL_INT,
