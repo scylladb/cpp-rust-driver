@@ -35,7 +35,7 @@ pub(crate) struct CassBatchState {
 pub unsafe extern "C" fn cass_batch_new(
     type_: CassBatchType,
 ) -> CassOwnedExclusivePtr<CassBatch, CMut> {
-    if let Some(batch_type) = make_batch_type(type_) {
+    if let Ok(batch_type) = make_batch_type(type_) {
         BoxFFI::into_ptr(Box::new(CassBatch {
             state: Arc::new(CassBatchState {
                 batch: Batch::new(batch_type),

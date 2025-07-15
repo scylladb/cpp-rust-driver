@@ -898,11 +898,11 @@ pub unsafe extern "C" fn cass_data_type_add_sub_value_type_by_name_n(
     }
 }
 
-pub(crate) fn make_batch_type(type_: CassBatchType) -> Option<BatchType> {
+pub(crate) fn make_batch_type(type_: CassBatchType) -> Result<BatchType, ()> {
     match type_ {
-        CassBatchType::CASS_BATCH_TYPE_LOGGED => Some(BatchType::Logged),
-        CassBatchType::CASS_BATCH_TYPE_UNLOGGED => Some(BatchType::Unlogged),
-        CassBatchType::CASS_BATCH_TYPE_COUNTER => Some(BatchType::Counter),
-        _ => None,
+        CassBatchType::CASS_BATCH_TYPE_LOGGED => Ok(BatchType::Logged),
+        CassBatchType::CASS_BATCH_TYPE_UNLOGGED => Ok(BatchType::Unlogged),
+        CassBatchType::CASS_BATCH_TYPE_COUNTER => Ok(BatchType::Counter),
+        _ => Err(()),
     }
 }
