@@ -717,6 +717,7 @@ pub mod error {
         CassError,
         CassErrorResult,
         CassErrorSource,
+        cass_error_desc,
         cass_error_num_arg_types,
         cass_error_result_arg_type,
         cass_error_result_code,
@@ -730,12 +731,6 @@ pub mod error {
         cass_error_result_responses_required,
         cass_error_result_table,
         cass_error_result_write_type,
-    };
-
-    // Disabling rustfmt to have one item per line for better readability.
-    #[rustfmt::skip]
-    pub use crate::external::{
-        cass_error_desc,
     };
 }
 
