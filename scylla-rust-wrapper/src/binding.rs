@@ -319,10 +319,7 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $consume_v,
             $fn,
             |p: CassBorrowedSharedPtr<crate::collection::CassCollection, CConst>| {
-                match std::convert::TryInto::try_into(BoxFFI::as_ref(p).unwrap()) {
-                    Ok(v) => Ok(Some(v)),
-                    Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
-                }
+                Ok(Some(std::convert::Into::into(BoxFFI::as_ref(p).unwrap())))
             },
             [p @ CassBorrowedSharedPtr<crate::collection::CassCollection, CConst>]
         );
