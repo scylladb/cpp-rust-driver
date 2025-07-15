@@ -1,4 +1,3 @@
-use crate::RUNTIME;
 use crate::argconv::*;
 use crate::batch::CassBatch;
 use crate::cass_error::*;
@@ -29,7 +28,7 @@ use std::future::Future;
 use std::ops::Deref;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use tokio::sync::{OwnedRwLockWriteGuard, RwLock};
+use tokio::sync::RwLock;
 
 pub(crate) struct CassConnectedSession {
     session: Session,
@@ -70,24 +69,19 @@ impl CassConnectedSession {
     }
 
     fn connect(
-        session: Arc<RwLock<CassSessionInner>>,
+        session: Arc<CassSession>,
         cluster: &CassCluster,
         keyspace: Option<String>,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
         let session_builder = cluster.build_session_builder();
         let exec_profile_map = cluster.execution_profile_map().clone();
         let host_filter = cluster.build_host_filter();
-
-        let mut session_guard = RUNTIME.block_on(session.write_owned());
-
-        if let Some(cluster_client_id) = cluster.get_client_id() {
-            // If the user set a client id, use it instead of the random one.
-            session_guard.client_id = cluster_client_id;
-        }
+        let cluster_client_id = cluster.get_client_id();
 
         let fut = Self::connect_fut(
-            session_guard,
+            session,
             session_builder,
+            cluster_client_id,
             exec_profile_map,
             host_filter,
             keyspace,
@@ -101,19 +95,27 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
-        mut session_guard: OwnedRwLockWriteGuard<CassSessionInner>,
+        session: Arc<CassSession>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
+        cluster_client_id: Option<uuid::Uuid>,
         exec_profile_builder_map: HashMap<ExecProfileName, CassExecProfile>,
         host_filter: Arc<dyn HostFilter>,
         keyspace: Option<String>,
     ) -> CassFutureResult {
         // This can sleep for a long time, but only if someone connects/closes session
         // from more than 1 thread concurrently, which is inherently stupid thing to do.
+        let mut session_guard = session.write().await;
+
         if session_guard.connected.is_some() {
             return Err((
                 CassError::CASS_ERROR_LIB_UNABLE_TO_CONNECT,
                 "Already connecting, closing, or connected".msg(),
             ));
+        }
+
+        if let Some(cluster_client_id) = cluster_client_id {
+            // If the user set a client id, use it instead of the random one.
+            session_guard.client_id = cluster_client_id;
         }
 
         let mut session_builder = session_builder_fut.await;
@@ -268,6 +270,13 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         return ArcFFI::null();
     };
 
+    let Ok(session_guard) = session_opt.try_read_owned() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let mut state = batch_from_raw.state.clone();
 
     // DO NOT refer to `batch_from_raw` inside the async block, as I've done just to face a segfault.
@@ -276,7 +285,6 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
-        let session_guard = session_opt.read().await;
         if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -330,6 +338,13 @@ pub unsafe extern "C" fn cass_session_execute(
         return ArcFFI::null();
     };
 
+    let Ok(session_guard) = session_opt.try_read_owned() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
     let mut statement = statement_opt.statement.clone();
@@ -360,7 +375,6 @@ pub unsafe extern "C" fn cass_session_execute(
     let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
-        let session_guard = session_opt.read().await;
         let Some(cass_connected_session) = session_guard.connected.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -488,6 +502,13 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         return ArcFFI::null();
     };
 
+    let Ok(session_guard) = session.try_read_owned() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let statement = cass_statement.statement.clone();
 
     CassFuture::make_raw(
@@ -499,7 +520,6 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let session_guard = session.read().await;
             if session_guard.connected.is_none() {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -546,10 +566,17 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         // to receive a server error in such case (CASS_ERROR_SERVER_SYNTAX_ERROR).
         // There is a test for this: `NullStringApiArgsTest.Integration_Cassandra_PrepareNullQuery`.
         .unwrap_or_default();
+
+    let Ok(session_guard) = cass_session.try_read_owned() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let query = Statement::new(query_str.to_string());
 
     let fut = async move {
-        let session_guard = cass_session.read().await;
         if session_guard.connected.is_none() {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
@@ -598,23 +625,7 @@ pub unsafe extern "C" fn cass_session_close(
         return ArcFFI::null();
     };
 
-    CassFuture::make_raw(
-        async move {
-            let mut session_guard = session_opt.write().await;
-            if session_guard.connected.is_none() {
-                return Err((
-                    CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                    "Already closing or closed".msg(),
-                ));
-            }
-
-            session_guard.connected = None;
-
-            Ok(CassResultValue::Empty)
-        },
-        #[cfg(cpp_integration_testing)]
-        None,
-    )
+    CassConnectedSession::close_fut(session_opt).into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -626,7 +637,15 @@ pub unsafe extern "C" fn cass_session_get_client_id(
         return uuid::Uuid::nil().into();
     };
 
-    let client_id: uuid::Uuid = cass_session.blocking_read().client_id;
+    let Ok(session_guard) = cass_session.try_read() else {
+        tracing::error!(
+            "Called cass_session_get_client_id on a connecting/disconnecting session!\
+            Wait for it to finish first."
+        );
+        return uuid::Uuid::nil().into();
+    };
+
+    let client_id: uuid::Uuid = session_guard.client_id;
     client_id.into()
 }
 
@@ -634,14 +653,27 @@ pub unsafe extern "C" fn cass_session_get_client_id(
 pub unsafe extern "C" fn cass_session_get_schema_meta(
     session: CassBorrowedSharedPtr<CassSession, CConst>,
 ) -> CassOwnedExclusivePtr<CassSchemaMeta, CConst> {
-    let cass_session = ArcFFI::as_ref(session).unwrap();
+    let Some(cass_session) = ArcFFI::as_ref(session) else {
+        tracing::error!("Provided null session pointer to cass_session_get_schema_meta!");
+        return CassPtr::null();
+    };
+
+    let Ok(session_guard) = cass_session.try_read() else {
+        tracing::error!(
+            "Called cass_session_get_schema_meta on a connecting/disconnecting session!\
+            Wait for it to finish first."
+        );
+        return CassPtr::null();
+    };
+
+    let Some(cass_connected_session) = session_guard.connected.as_ref() else {
+        tracing::error!("Called cass_session_get_schema_meta on a disconnected session!");
+        return CassPtr::null();
+    };
+
     let mut keyspaces: HashMap<String, CassKeyspaceMeta> = HashMap::new();
 
-    for (keyspace_name, keyspace) in cass_session
-        .blocking_read()
-        .connected
-        .as_ref()
-        .unwrap()
+    for (keyspace_name, keyspace) in cass_connected_session
         .session
         .get_cluster_state()
         .keyspaces_iter()
@@ -715,9 +747,14 @@ pub unsafe extern "C" fn cass_session_get_metrics(
         return;
     }
 
-    let maybe_session_guard = maybe_session_lock.blocking_read();
-    let maybe_session = maybe_session_guard.connected.as_ref();
-    let Some(session) = maybe_session else {
+    let Ok(session_guard) = maybe_session_lock.try_read() else {
+        tracing::error!(
+            "Called cass_session_get_metrics on a connecting/disconnecting session!\
+            Wait for it to finish first."
+        );
+        return;
+    };
+    let Some(session) = session_guard.connected.as_ref() else {
         tracing::warn!("Attempted to get metrics before connecting session object");
         return;
     };
@@ -817,7 +854,8 @@ mod tests {
             cass_statement_set_execution_profile_n,
         },
         future::{
-            cass_future_error_code, cass_future_error_message, cass_future_free, cass_future_wait,
+            cass_future_error_code, cass_future_error_message, cass_future_free,
+            cass_future_set_callback, cass_future_wait,
         },
         retry_policy::{
             CassRetryPolicy, cass_retry_policy_default_new, cass_retry_policy_fallthrough_new,
@@ -829,8 +867,10 @@ mod tests {
     use std::{
         collections::HashSet,
         convert::{TryFrom, TryInto},
+        ffi::{CStr, c_void},
         iter,
         net::SocketAddr,
+        sync::atomic::{AtomicUsize, Ordering},
     };
 
     // This is for convenient logs from failing tests. Just call it at the beginning of a test.
@@ -856,6 +896,8 @@ mod tests {
         unsafe { cass_future_free(fut) };
     }
 
+    /// A set of rules that are needed to negotiate connections.
+    // All connections are successfully negotiated.
     fn handshake_rules() -> impl IntoIterator<Item = RequestRule> {
         [
             RequestRule(
@@ -884,7 +926,24 @@ mod tests {
         )]
     }
 
-    pub(crate) async fn test_with_one_proxy_one(
+    /// A set of rules that are needed to finish session initialization.
+    // They are used in tests that require a session to be connected.
+    // All connections are successfully negotiated.
+    // All requests are replied with a server error.
+    fn mock_init_rules() -> impl IntoIterator<Item = RequestRule> {
+        handshake_rules()
+            .into_iter()
+            .chain(std::iter::once(RequestRule(
+                Condition::RequestOpcode(RequestOpcode::Query)
+                    .or(Condition::RequestOpcode(RequestOpcode::Prepare))
+                    .or(Condition::RequestOpcode(RequestOpcode::Batch)),
+                // We won't respond to any queries (including metadata fetch),
+                // but the driver will manage to continue with dummy metadata.
+                RequestReaction::forge().server_error(),
+            )))
+    }
+
+    pub(crate) async fn test_with_one_proxy(
         test: impl FnOnce(SocketAddr, RunningProxy) -> RunningProxy + Send + 'static,
         rules: impl IntoIterator<Item = RequestRule>,
     ) {
@@ -915,7 +974,7 @@ mod tests {
     #[ntest::timeout(5000)]
     async fn session_clones_and_freezes_exec_profiles_mapping() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             session_clones_and_freezes_exec_profiles_mapping_do,
             handshake_rules()
                 .into_iter()
@@ -1010,7 +1069,7 @@ mod tests {
     #[ntest::timeout(5000)]
     async fn session_resolves_exec_profile_on_first_query() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             session_resolves_exec_profile_on_first_query_do,
             handshake_rules().into_iter().chain(
                 iter::once(RequestRule(
@@ -1297,7 +1356,7 @@ mod tests {
     #[ntest::timeout(30000)]
     async fn retry_policy_on_statement_and_batch_is_handled_properly() {
         init_logger();
-        test_with_one_proxy_one(
+        test_with_one_proxy(
             retry_policy_on_statement_and_batch_is_handled_properly_do,
             retry_policy_on_statement_and_batch_is_handled_properly_rules(),
         )
@@ -1782,34 +1841,168 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[ntest::timeout(5000)]
-    fn test_cass_session_get_client_id_on_disconnected_session() {
+    async fn test_cass_session_get_client_id_on_disconnected_session() {
         init_logger();
+        test_with_one_proxy(
+            |node_addr: SocketAddr, proxy: RunningProxy| unsafe {
+                let session_raw = cass_session_new();
+
+                // Check that we can get a client ID from a disconnected session.
+                let _random_client_id = cass_session_get_client_id(session_raw.borrow());
+
+                let mut cluster_raw = cass_cluster_new();
+                let ip = node_addr.ip().to_string();
+                let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
+                assert_cass_error_eq!(
+                    cass_cluster_set_contact_points_n(cluster_raw.borrow_mut(), c_ip, c_ip_len),
+                    CassError::CASS_OK
+                );
+
+                let cluster_client_id = CassUuid {
+                    time_and_version: 2137,
+                    clock_seq_and_node: 7312,
+                };
+                cass_cluster_set_client_id(cluster_raw.borrow_mut(), cluster_client_id);
+
+                let connect_fut =
+                    cass_session_connect(session_raw.borrow(), cluster_raw.borrow().into_c_const());
+                assert_cass_error_eq!(cass_future_error_code(connect_fut), CassError::CASS_OK);
+
+                // Verify that the session inherits the client ID from the cluster.
+                let session_client_id = cass_session_get_client_id(session_raw.borrow());
+                assert_eq!(session_client_id, cluster_client_id);
+
+                // Verify that we can still get a client ID after disconnecting.
+                let session_client_id = cass_session_get_client_id(session_raw.borrow());
+                assert_eq!(session_client_id, cluster_client_id);
+
+                cass_session_free(session_raw);
+                cass_cluster_free(cluster_raw);
+
+                proxy
+            },
+            mock_init_rules(),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    #[tokio::test]
+    #[ntest::timeout(5000)]
+    async fn session_free_waits_for_requests_to_complete() {
+        init_logger();
+        test_with_one_proxy(
+            session_free_waits_for_requests_to_complete_do,
+            mock_init_rules(),
+        )
+        .with_current_subscriber()
+        .await;
+    }
+
+    fn session_free_waits_for_requests_to_complete_do(
+        node_addr: SocketAddr,
+        proxy: RunningProxy,
+    ) -> RunningProxy {
         unsafe {
-            let session_raw = cass_session_new();
-
-            // Check that we can get a client ID from a disconnected session.
-            let _random_client_id = cass_session_get_client_id(session_raw.borrow());
-
             let mut cluster_raw = cass_cluster_new();
-            let cluster_client_id = CassUuid {
-                time_and_version: 2137,
-                clock_seq_and_node: 7312,
-            };
-            cass_cluster_set_client_id(cluster_raw.borrow_mut(), cluster_client_id);
+            let ip = node_addr.ip().to_string();
+            let (c_ip, c_ip_len) = str_to_c_str_n(ip.as_str());
 
-            cass_session_connect(session_raw.borrow(), cluster_raw.borrow().into_c_const());
-            // Verify that the session inherits the client ID from the cluster.
-            let session_client_id = cass_session_get_client_id(session_raw.borrow());
-            assert_eq!(session_client_id, cluster_client_id);
+            assert_cass_error_eq!(
+                cass_cluster_set_contact_points_n(cluster_raw.borrow_mut(), c_ip, c_ip_len),
+                CassError::CASS_OK
+            );
+            let session_raw = cass_session_new();
+            cass_future_wait_check_and_free(cass_session_connect(
+                session_raw.borrow(),
+                cluster_raw.borrow().into_c_const(),
+            ));
 
-            // Verify that we can still get a client ID after disconnecting.
-            let session_client_id = cass_session_get_client_id(session_raw.borrow());
-            assert_eq!(session_client_id, cluster_client_id);
+            tracing::debug!("Session connected, starting to execute requests...");
 
+            let statement = c"SELECT host_id FROM system.local WHERE key='local'" as *const CStr
+                as *const c_char;
+            let statement_raw = cass_statement_new(statement, 0);
+
+            let mut batch_raw = cass_batch_new(CassBatchType::CASS_BATCH_TYPE_LOGGED);
+            // This batch is obviously invalid, because it contains a SELECT statement. This is OK for us,
+            // because we anyway expect the batch to fail. The goal is to have the future set, no matter if it's
+            // set with a success or an error.
+            cass_batch_add_statement(batch_raw.borrow_mut(), statement_raw.borrow());
+
+            let finished_executions = AtomicUsize::new(0);
+            unsafe extern "C" fn finished_execution_callback(
+                _future_raw: CassBorrowedSharedPtr<CassFuture, CMut>,
+                data: *mut c_void,
+            ) {
+                let finished_executions = unsafe { &*(data as *const AtomicUsize) };
+                finished_executions.fetch_add(1, Ordering::SeqCst);
+            }
+
+            const ITERATIONS: usize = 1;
+            const EXECUTIONS: usize = 3 * ITERATIONS; // One prepare, one statement and one batch per iteration.
+
+            let futures = (0..ITERATIONS)
+                .flat_map(|_| {
+                    // Prepare a statement
+                    let prepare_fut = cass_session_prepare(session_raw.borrow(), statement);
+
+                    // Execute a statement
+                    let statement_fut = cass_session_execute(
+                        session_raw.borrow(),
+                        statement_raw.borrow().into_c_const(),
+                    );
+
+                    // Execute a batch
+                    let batch_fut = cass_session_execute_batch(
+                        session_raw.borrow(),
+                        batch_raw.borrow().into_c_const(),
+                    );
+                    for fut in [
+                        prepare_fut.borrow(),
+                        statement_fut.borrow(),
+                        batch_fut.borrow(),
+                    ] {
+                        cass_future_set_callback(
+                            fut,
+                            Some(finished_execution_callback),
+                            std::ptr::addr_of!(finished_executions) as _,
+                        );
+                    }
+
+                    [prepare_fut, statement_fut, batch_fut]
+                })
+                .collect::<Vec<_>>();
+
+            tracing::debug!("Started all requests. Now, freeing statements and session...");
+
+            // Free the statement
+            cass_statement_free(statement_raw);
+            // Free the batch
+            cass_batch_free(batch_raw);
+
+            // Session is freed, but the requests may still be in-flight.
             cass_session_free(session_raw);
-            cass_cluster_free(cluster_raw)
+
+            tracing::debug!("Session freed.");
+
+            // Assert that the session awaited completion of all requests.
+            let actually_finished_executions = finished_executions.load(Ordering::SeqCst);
+            assert_eq!(
+                actually_finished_executions, EXECUTIONS,
+                "Expected {} requests to complete before the session was freed, but only {} did.",
+                EXECUTIONS, actually_finished_executions
+            );
+
+            futures.into_iter().for_each(|fut| {
+                // As per cassandra.h, "a future can be freed anytime".
+                cass_future_free(fut);
+            });
+
+            cass_cluster_free(cluster_raw);
         }
+        proxy
     }
 }

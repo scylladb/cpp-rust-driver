@@ -79,6 +79,10 @@ enum FutureError {
 struct JoinHandleTimeout(JoinHandle<()>);
 
 impl CassFuture {
+    pub(crate) fn make_ready_raw(res: CassFutureResult) -> CassOwnedSharedPtr<CassFuture, CMut> {
+        Self::new_ready(res).into_raw()
+    }
+
     pub(crate) fn make_raw(
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
         #[cfg(cpp_integration_testing)] recording_listener: Option<
@@ -133,8 +137,6 @@ impl CassFuture {
         cass_fut
     }
 
-    // This is left just because it might be useful in tests.
-    #[expect(unused)]
     pub(crate) fn new_ready(r: CassFutureResult) -> Arc<Self> {
         Arc::new(CassFuture {
             state: Mutex::new(CassFutureState::default()),
