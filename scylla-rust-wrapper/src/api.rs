@@ -110,7 +110,7 @@ pub mod cluster {
         // cass_cluster_set_prepare_on_all_hosts, UNIMPLEMENTED
         // cass_cluster_set_prepare_on_up_or_add_host, UNIMPLEMENTED
         cass_cluster_set_protocol_version,
-        cass_cluster_set_queue_size_event,
+        cass_cluster_set_queue_size_event, // No-op both in CPP and in the wrapper.
         // cass_cluster_set_queue_size_io, UNIMPLEMENTED
         // cass_cluster_set_reconnect_wait_time, UNIMPLEMENTED
         cass_cluster_set_request_timeout,
