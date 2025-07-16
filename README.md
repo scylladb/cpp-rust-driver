@@ -257,6 +257,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 - cass_cluster_set_host_listener_callback
 - cass_cluster_set_max_concurrent_creation
 - cass_cluster_set_max_concurrent_requests_threshold
+- cass_cluster_set_max_connections_per_host
 - cass_cluster_set_max_requests_per_flush
 - cass_cluster_set_max_reusable_write_objects
 - cass_cluster_set_monitor_reporting_interval
@@ -283,7 +284,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 - cass_collection_append_custom
 - cass_collection_append_custom_n
 
-#### CassColumn
+#### CassColumnMeta:
 - cass_column_meta_field_by_name
 - cass_column_meta_field_by_name_n
 
@@ -384,6 +385,8 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 - cass_tuple_set_custom
 - cass_tuple_set_custom_n
 
+#### CassValue:
+- cass_value_get_custom
 
 # Testing
 ___
