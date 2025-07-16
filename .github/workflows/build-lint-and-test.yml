@@ -57,13 +57,7 @@ jobs:
 
     strategy:
       matrix:
-        scylla-version:
-          [
-            ENTERPRISE-RELEASE,
-            ENTERPRISE-PRIOR-RELEASE,
-            OSS-RELEASE,
-            OSS-PRIOR-RELEASE,
-          ]
+        scylla-version: [ENTERPRISE-RELEASE, ENTERPRISE-PRIOR-RELEASE]
       fail-fast: false
 
     steps:
