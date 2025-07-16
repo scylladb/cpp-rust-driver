@@ -283,7 +283,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 - cass_collection_append_custom
 - cass_collection_append_custom_n
 
-#### CassColumn
+#### CassColumnMeta:
 - cass_column_meta_field_by_name
 - cass_column_meta_field_by_name_n
 
