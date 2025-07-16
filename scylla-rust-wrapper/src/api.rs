@@ -105,6 +105,8 @@ pub mod cluster {
         cass_cluster_set_no_speculative_execution_policy,
         // cass_cluster_set_num_threads_io, UNIMPLEMENTED
         cass_cluster_set_port,
+        // cass_cluster_set_pending_requests_high_water_mark, UNIMPLEMENTED
+        // cass_cluster_set_pending_requests_low_water_mark, UNIMPLEMENTED
         // cass_cluster_set_prepare_on_all_hosts, UNIMPLEMENTED
         // cass_cluster_set_prepare_on_up_or_add_host, UNIMPLEMENTED
         cass_cluster_set_protocol_version,
@@ -122,9 +124,9 @@ pub mod cluster {
         cass_cluster_set_timestamp_gen,
         cass_cluster_set_token_aware_routing,
         cass_cluster_set_token_aware_routing_shuffle_replicas,
+        // cass_cluster_set_tracing_consistency, UNIMPLEMENTED
         // cass_cluster_set_tracing_max_wait_time, UNIMPLEMENTED
         // cass_cluster_set_tracing_retry_wait_time, UNIMPLEMENTED
-        // cass_cluster_set_tracing_consistency, UNIMPLEMENTED
         cass_cluster_set_use_beta_protocol_version,
         // cass_cluster_set_use_hostname_resolution, UNIMPLEMENTED
         // cass_cluster_set_use_randomized_contact_points, UNIMPLEMENTED, stub present
@@ -135,8 +137,6 @@ pub mod cluster {
         cass_cluster_set_whitelist_filtering_n,
         // cass_cluster_set_write_bytes_high_water_mark, UNIMPLEMENTED
         // cass_cluster_set_write_bytes_low_water_mark, UNIMPLEMENTED
-        // cass_cluster_set_pending_requests_high_water_mark, UNIMPLEMENTED
-        // cass_cluster_set_pending_requests_low_water_mark, UNIMPLEMENTED
     };
 }
 
@@ -267,9 +267,9 @@ pub mod index_meta {
     #[expect(unused_imports)]
     pub use crate::metadata::{
         // CassIndexMeta,
-        // cass_index_meta_name, UNIMPLEMENTED
         // cass_index_meta_field_by_name, UNIMPLEMENTED
         // cass_index_meta_field_by_name_n, UNIMPLEMENTED
+        // cass_index_meta_name, UNIMPLEMENTED
         // cass_index_meta_options, UNIMPLEMENTED
         // cass_index_meta_target, UNIMPLEMENTED
         // cass_index_meta_type, UNIMPLEMENTED
@@ -754,7 +754,6 @@ pub mod iterator {
         // cass_iterator_aggregates_from_keyspace_meta, UNIMPLEMENTED
         cass_iterator_columns_from_materialized_view_meta,
         cass_iterator_columns_from_table_meta,
-        // cass_iterator_functions_from_keyspace_meta, UNIMPLEMENTED
         // cass_iterator_fields_from_keyspace_meta, UNIMPLEMENTED
         // cass_iterator_fields_from_table_meta, UNIMPLEMENTED
         // cass_iterator_fields_from_materialized_view_meta, UNIMPLEMENTED
@@ -762,19 +761,20 @@ pub mod iterator {
         // cass_iterator_fields_from_index_meta, UNIMPLEMENTED
         // cass_iterator_fields_from_function_meta, UNIMPLEMENTED
         // cass_iterator_fields_from_aggregate_meta, UNIMPLEMENTED
+        // cass_iterator_functions_from_keyspace_meta, UNIMPLEMENTED
         // cass_iterator_get_aggregate_meta, UNIMPLEMENTED
         cass_iterator_get_column,
         cass_iterator_get_column_meta,
         // cass_iterator_get_function_meta, UNIMPLEMENTED
         // cass_iterator_get_index_meta, UNIMPLEMENTED
-        // cass_iterator_get_meta_field_name, UNIMPLEMENTED
         cass_iterator_get_map_key,
         cass_iterator_get_map_value,
         cass_iterator_get_materialized_view_meta,
+        // cass_iterator_get_meta_field_name, UNIMPLEMENTED
+        // cass_iterator_get_meta_field_value, UNIMPLEMENTED
         cass_iterator_get_user_type_field_name,
         cass_iterator_get_user_type_field_value,
         cass_iterator_get_keyspace_meta,
-        // cass_iterator_get_meta_field_value, UNIMPLEMENTED
         cass_iterator_get_row,
         cass_iterator_get_table_meta,
         cass_iterator_get_value,
@@ -853,10 +853,10 @@ pub mod uuid {
     pub use crate::uuid::{
         cass_uuid_from_string,
         cass_uuid_from_string_n,
-        cass_uuid_min_from_time,
         cass_uuid_max_from_time,
-        cass_uuid_timestamp,
+        cass_uuid_min_from_time,
         cass_uuid_string,
+        cass_uuid_timestamp,
         cass_uuid_version,
     };
 }
