@@ -28,12 +28,13 @@ type CassFutureError = (CassError, String);
 
 pub(crate) type CassFutureResult = Result<CassResultValue, CassFutureError>;
 
-pub type CassFutureCallback = Option<
-    unsafe extern "C" fn(future: CassBorrowedSharedPtr<CassFuture, CMut>, data: *mut c_void),
->;
+pub type CassFutureCallback = Option<NonNullFutureCallback>;
+
+type NonNullFutureCallback =
+    unsafe extern "C" fn(future: CassBorrowedSharedPtr<CassFuture, CMut>, data: *mut c_void);
 
 struct BoundCallback {
-    cb: CassFutureCallback,
+    cb: NonNullFutureCallback,
     data: *mut c_void,
 }
 
@@ -44,7 +45,7 @@ unsafe impl Send for BoundCallback {}
 impl BoundCallback {
     fn invoke(self, fut_ptr: CassBorrowedSharedPtr<CassFuture, CMut>) {
         unsafe {
-            self.cb.unwrap()(fut_ptr, self.data);
+            (self.cb)(fut_ptr, self.data);
         }
     }
 }
@@ -310,7 +311,7 @@ impl CassFuture {
     pub(crate) unsafe fn set_callback(
         &self,
         self_ptr: CassBorrowedSharedPtr<CassFuture, CMut>,
-        cb: CassFutureCallback,
+        cb: NonNullFutureCallback,
         data: *mut c_void,
     ) -> CassError {
         let mut lock = self.state.lock().unwrap();
@@ -358,6 +359,11 @@ pub unsafe extern "C" fn cass_future_set_callback(
 ) -> CassError {
     let Some(future) = ArcFFI::as_ref(future_raw.borrow()) else {
         tracing::error!("Provided null future pointer to cass_future_set_callback!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let Some(callback) = callback else {
+        tracing::error!("Provided null callback pointer to cass_future_set_callback!");
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 

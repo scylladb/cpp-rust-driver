@@ -20,7 +20,6 @@ pub(crate) mod config_value;
 pub(crate) mod date_time;
 pub(crate) mod exec_profile;
 pub(crate) mod execution_error;
-mod external;
 pub(crate) mod future;
 pub(crate) mod inet;
 #[cfg(cpp_integration_testing)]

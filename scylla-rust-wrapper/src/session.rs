@@ -59,12 +59,11 @@ impl CassConnectedSession {
     ) -> impl Future<Output = Result<Option<ExecutionProfileHandle>, (CassError, String)>> + 'a
     {
         async move {
-            if let Some(profile) = exec_profile {
-                let handle = profile.get_or_resolve_profile_handle(self).await?;
-                Ok(Some(handle))
-            } else {
-                Ok(None)
-            }
+            let Some(profile) = exec_profile else {
+                return Ok(None);
+            };
+            let handle = profile.get_or_resolve_profile_handle(self).await?;
+            Ok(Some(handle))
         }
     }
 
@@ -278,11 +277,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     };
 
     let mut state = batch_from_raw.state.clone();
-
-    // DO NOT refer to `batch_from_raw` inside the async block, as I've done just to face a segfault.
     let batch_exec_profile = batch_from_raw.exec_profile.clone();
-    #[allow(unused, clippy::let_unit_value)]
-    let batch_from_raw = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
         if session_guard.connected.is_none() {
@@ -332,7 +327,6 @@ pub unsafe extern "C" fn cass_session_execute(
         return ArcFFI::null();
     };
 
-    // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let Some(statement_opt) = BoxFFI::as_ref(statement_raw) else {
         tracing::error!("Provided null statement pointer to cass_session_execute!");
         return ArcFFI::null();
@@ -371,8 +365,6 @@ pub unsafe extern "C" fn cass_session_execute(
     });
 
     let statement_exec_profile = statement_opt.exec_profile.clone();
-    #[allow(unused, clippy::let_unit_value)]
-    let statement_opt = (); // Hardening shadow to avoid use-after-free.
 
     let future = async move {
         let Some(cass_connected_session) = session_guard.connected.as_ref() else {

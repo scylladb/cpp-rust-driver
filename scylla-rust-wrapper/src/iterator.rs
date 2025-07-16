@@ -13,7 +13,7 @@ use crate::metadata::{
 use crate::query_result::cass_raw_value::CassRawValue;
 use crate::query_result::{
     CassRawRow, CassResult, CassResultKind, CassResultMetadata, CassRow, CassValue,
-    NonNullDeserializationError, cass_value_type,
+    NonNullDeserializationError,
 };
 use crate::types::{cass_bool_t, cass_false, size_t};
 
@@ -768,21 +768,19 @@ pub unsafe extern "C" fn cass_iterator_get_column<'result>(
     };
 
     // Defined only for row iterator, for other types should return null
-    if let CassIteratorInner::Row(row_iterator) = iter {
-        let iter_position = match row_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIteratorInner::Row(row_iterator) = iter else {
+        return RefFFI::null();
+    };
 
-        let value = match row_iterator.row.columns.get(iter_position) {
-            Some(col) => col,
-            None => return RefFFI::null(),
-        };
+    let Some(iter_position) = row_iterator.position else {
+        return RefFFI::null();
+    };
 
-        return RefFFI::as_ptr(value);
-    }
+    let Some(value) = row_iterator.row.columns.get(iter_position) else {
+        return RefFFI::null();
+    };
 
-    RefFFI::null()
+    RefFFI::as_ptr(value)
 }
 
 #[unsafe(no_mangle)]
@@ -929,25 +927,23 @@ pub unsafe extern "C" fn cass_iterator_get_keyspace_meta<'schema>(
         return RefFFI::null();
     };
 
-    if let CassIteratorInner::KeyspacesMeta(schema_meta_iterator) = iter {
-        let iter_position = match schema_meta_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIteratorInner::KeyspacesMeta(schema_meta_iterator) = iter else {
+        return RefFFI::null();
+    };
+    let Some(iter_position) = schema_meta_iterator.position else {
+        return RefFFI::null();
+    };
 
-        let schema_meta_entry_opt = &schema_meta_iterator
-            .value
-            .keyspaces
-            .iter()
-            .nth(iter_position);
+    let Some((_keyspace_name, keyspace_meta)) = schema_meta_iterator
+        .value
+        .keyspaces
+        .iter()
+        .nth(iter_position)
+    else {
+        return RefFFI::null();
+    };
 
-        return match schema_meta_entry_opt {
-            Some(schema_meta_entry) => RefFFI::as_ptr(schema_meta_entry.1),
-            None => RefFFI::null(),
-        };
-    }
-
-    RefFFI::null()
+    RefFFI::as_ptr(keyspace_meta)
 }
 
 #[unsafe(no_mangle)]
@@ -959,25 +955,23 @@ pub unsafe extern "C" fn cass_iterator_get_table_meta<'schema>(
         return RefFFI::null();
     };
 
-    if let CassIteratorInner::TablesMeta(keyspace_meta_iterator) = iter {
-        let iter_position = match keyspace_meta_iterator.position {
-            Some(pos) => pos,
-            None => return RefFFI::null(),
-        };
+    let CassIteratorInner::TablesMeta(keyspace_meta_iterator) = iter else {
+        return RefFFI::null();
+    };
+    let Some(iter_position) = keyspace_meta_iterator.position else {
+        return RefFFI::null();
+    };
 
-        let table_meta_entry_opt = keyspace_meta_iterator
-            .value
-            .tables
-            .iter()
-            .nth(iter_position);
+    let Some((_table_name, table_meta)) = keyspace_meta_iterator
+        .value
+        .tables
+        .iter()
+        .nth(iter_position)
+    else {
+        return RefFFI::null();
+    };
 
-        return match table_meta_entry_opt {
-            Some(table_meta_entry) => RefFFI::as_ptr(table_meta_entry.1.as_ref()),
-            None => RefFFI::null(),
-        };
-    }
-
-    RefFFI::null()
+    RefFFI::as_ptr(table_meta.as_ref())
 }
 
 #[unsafe(no_mangle)]
@@ -989,25 +983,23 @@ pub unsafe extern "C" fn cass_iterator_get_user_type<'schema>(
         return ArcFFI::null();
     };
 
-    if let CassIteratorInner::UserTypes(keyspace_meta_iterator) = iter {
-        let iter_position = match keyspace_meta_iterator.position {
-            Some(pos) => pos,
-            None => return ArcFFI::null(),
-        };
+    let CassIteratorInner::UserTypes(keyspace_meta_iterator) = iter else {
+        return ArcFFI::null();
+    };
+    let Some(iter_position) = keyspace_meta_iterator.position else {
+        return ArcFFI::null();
+    };
 
-        let udt_to_type_entry_opt = keyspace_meta_iterator
-            .value
-            .user_defined_type_data_type
-            .iter()
-            .nth(iter_position);
+    let Some((_udt_name, udt_meta)) = keyspace_meta_iterator
+        .value
+        .user_defined_type_data_type
+        .iter()
+        .nth(iter_position)
+    else {
+        return ArcFFI::null();
+    };
 
-        return match udt_to_type_entry_opt {
-            Some(udt_to_type_entry) => ArcFFI::as_ptr(udt_to_type_entry.1),
-            None => ArcFFI::null(),
-        };
-    }
-
-    ArcFFI::null()
+    ArcFFI::as_ptr(udt_meta)
 }
 
 #[unsafe(no_mangle)]
@@ -1157,16 +1149,15 @@ pub unsafe extern "C" fn cass_iterator_from_row<'result>(
 pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
     value: CassBorrowedSharedPtr<'result, CassValue<'result>, CConst>,
 ) -> CassOwnedExclusivePtr<CassIterator<'result>, CMut> {
-    if RefFFI::is_null(&value) {
+    let Some(val) = RefFFI::as_ref(value) else {
+        tracing::error!("Provided null value pointer to cass_iterator_from_collection!");
         return BoxFFI::null_mut();
-    }
+    };
 
     // SAFETY: We assume that user provided a valid pointer to the value.
     // The `value.value_type` is a `CassDataType` obtained from `CassResultMetadata`, which is immutable
-    // (thus, underlying `get_unchecked()` is safe).
-    let value_type = unsafe { cass_value_type(value.borrow()) };
-
-    let val = RefFFI::as_ref(value).unwrap();
+    // (thus, `get_unchecked()` is safe).
+    let value_type = unsafe { val.value_type.get_unchecked() }.get_value_type();
 
     let iterator_result = match value_type {
         CassValueType::CASS_VALUE_TYPE_SET | CassValueType::CASS_VALUE_TYPE_LIST => {

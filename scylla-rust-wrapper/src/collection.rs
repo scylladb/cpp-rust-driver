@@ -28,9 +28,41 @@ static UNTYPED_MAP_TYPE: LazyLock<Arc<CassDataType>> = LazyLock::new(|| {
     })
 });
 
+/// Introduced to bring type safety to the driver internals,
+/// which is not possible with the C enum `CassCollectionType`.
+#[derive(Clone, Copy)]
+pub(crate) enum CollectionType {
+    List,
+    Set,
+    Map,
+}
+
+impl TryFrom<CassCollectionType> for CollectionType {
+    type Error = ();
+
+    fn try_from(value: CassCollectionType) -> Result<Self, Self::Error> {
+        match value {
+            CassCollectionType::CASS_COLLECTION_TYPE_LIST => Ok(CollectionType::List),
+            CassCollectionType::CASS_COLLECTION_TYPE_SET => Ok(CollectionType::Set),
+            CassCollectionType::CASS_COLLECTION_TYPE_MAP => Ok(CollectionType::Map),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<CollectionType> for CassCollectionType {
+    fn from(value: CollectionType) -> Self {
+        match value {
+            CollectionType::List => CassCollectionType::CASS_COLLECTION_TYPE_LIST,
+            CollectionType::Set => CassCollectionType::CASS_COLLECTION_TYPE_SET,
+            CollectionType::Map => CassCollectionType::CASS_COLLECTION_TYPE_MAP,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct CassCollection {
-    pub(crate) collection_type: CassCollectionType,
+    pub(crate) collection_type: CollectionType,
     pub(crate) data_type: Option<Arc<CassDataType>>,
     pub(crate) items: Vec<CassCqlValue>,
 }
@@ -45,7 +77,7 @@ impl CassCollection {
         let index = self.items.len();
 
         // Do validation only if it's a typed collection.
-        if let Some(data_type) = &self
+        if let Some(data_type) = self
             .data_type
             .as_ref()
             .map(|dt| unsafe { dt.get_unchecked() })
@@ -100,17 +132,16 @@ impl CassCollection {
     }
 }
 
-impl TryFrom<&CassCollection> for CassCqlValue {
-    type Error = ();
-    fn try_from(collection: &CassCollection) -> Result<Self, Self::Error> {
+impl From<&CassCollection> for CassCqlValue {
+    fn from(collection: &CassCollection) -> Self {
         // FIXME: validate that collection items are correct
         let data_type = collection.data_type.clone();
         match collection.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => Ok(CassCqlValue::List {
+            CollectionType::List => CassCqlValue::List {
                 data_type,
                 values: collection.items.clone(),
-            }),
-            CassCollectionType::CASS_COLLECTION_TYPE_MAP => {
+            },
+            CollectionType::Map => {
                 let mut grouped_items = Vec::new();
                 // FIXME: validate even number of items
                 for i in (0..collection.items.len()).step_by(2) {
@@ -120,16 +151,15 @@ impl TryFrom<&CassCollection> for CassCqlValue {
                     grouped_items.push((key, value));
                 }
 
-                Ok(CassCqlValue::Map {
+                CassCqlValue::Map {
                     data_type,
                     values: grouped_items,
-                })
+                }
             }
-            CassCollectionType::CASS_COLLECTION_TYPE_SET => Ok(CassCqlValue::Set {
+            CollectionType::Set => CassCqlValue::Set {
                 data_type,
                 values: collection.items.clone(),
-            }),
-            _ => Err(()),
+            },
         }
     }
 }
@@ -145,6 +175,11 @@ pub unsafe extern "C" fn cass_collection_new(
         CassCollectionType::CASS_COLLECTION_TYPE_MAP => item_count * 2,
         _ => item_count,
     } as usize;
+
+    let Ok(collection_type) = CollectionType::try_from(collection_type) else {
+        tracing::error!("Provided invalid CassCollectionType to cass_collection_new!");
+        return BoxFFI::null_mut();
+    };
 
     BoxFFI::into_ptr(Box::new(CassCollection {
         collection_type,
@@ -164,15 +199,11 @@ pub unsafe extern "C" fn cass_collection_new_from_data_type(
     };
 
     let (capacity, collection_type) = match unsafe { data_type.get_unchecked() } {
-        CassDataTypeInner::List { .. } => {
-            (item_count, CassCollectionType::CASS_COLLECTION_TYPE_LIST)
-        }
-        CassDataTypeInner::Set { .. } => (item_count, CassCollectionType::CASS_COLLECTION_TYPE_SET),
+        CassDataTypeInner::List { .. } => (item_count, CollectionType::List),
+        CassDataTypeInner::Set { .. } => (item_count, CollectionType::Set),
         // Maps consist of a key and a value, so twice
         // the number of CassCqlValue will be stored.
-        CassDataTypeInner::Map { .. } => {
-            (item_count * 2, CassCollectionType::CASS_COLLECTION_TYPE_MAP)
-        }
+        CassDataTypeInner::Map { .. } => (item_count * 2, CollectionType::Map),
         _ => return BoxFFI::null_mut(),
     };
     let capacity = capacity as usize;
@@ -196,14 +227,9 @@ pub unsafe extern "C" fn cass_collection_data_type(
     match &collection_ref.data_type {
         Some(dt) => ArcFFI::as_ptr(dt),
         None => match collection_ref.collection_type {
-            CassCollectionType::CASS_COLLECTION_TYPE_LIST => ArcFFI::as_ptr(&UNTYPED_LIST_TYPE),
-            CassCollectionType::CASS_COLLECTION_TYPE_SET => ArcFFI::as_ptr(&UNTYPED_SET_TYPE),
-            CassCollectionType::CASS_COLLECTION_TYPE_MAP => ArcFFI::as_ptr(&UNTYPED_MAP_TYPE),
-            // CassCollectionType is a C enum. Panic, if it's out of range.
-            _ => panic!(
-                "CassCollectionType enum value out of range: {}",
-                collection_ref.collection_type.0
-            ),
+            CollectionType::List => ArcFFI::as_ptr(&UNTYPED_LIST_TYPE),
+            CollectionType::Set => ArcFFI::as_ptr(&UNTYPED_SET_TYPE),
+            CollectionType::Map => ArcFFI::as_ptr(&UNTYPED_MAP_TYPE),
         },
     }
 }

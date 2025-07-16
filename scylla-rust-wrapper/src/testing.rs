@@ -7,8 +7,8 @@ pub(crate) fn setup_tracing() {
 
 macro_rules! assert_cass_error_eq {
     ($expr:expr, $error:expr $(,)?) => {{
+        use crate::api::error::cass_error_desc;
         use crate::argconv::ptr_to_cstr;
-        use crate::external::cass_error_desc;
         let ___x = $expr;
         assert_eq!(
             ___x,

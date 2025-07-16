@@ -54,7 +54,7 @@ impl From<Level> for CassLogLevel {
 }
 
 impl TryFrom<CassLogLevel> for Level {
-    type Error = String;
+    type Error = ();
 
     fn try_from(log_level: CassLogLevel) -> Result<Self, Self::Error> {
         let level = match log_level {
@@ -64,7 +64,7 @@ impl TryFrom<CassLogLevel> for Level {
             CassLogLevel::CASS_LOG_WARN => Level::WARN,
             CassLogLevel::CASS_LOG_ERROR => Level::ERROR,
             CassLogLevel::CASS_LOG_CRITICAL => Level::ERROR,
-            _ => return Err("Error while converting CassLogLevel to Level".to_string()),
+            _ => return Err(()),
         };
 
         Ok(level)
