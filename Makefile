@@ -122,6 +122,37 @@ CASSANDRA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integr
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
+ifndef SCYLLA_EXAMPLES_TO_RUN
+SCYLLA_EXAMPLES_TO_RUN := \
+    async \
+	basic \
+	batch \
+	bind_by_name \
+	callbacks \
+	collections \
+	concurrent_executions \
+	date_time \
+	duration \
+	maps \
+	named_parameters \
+	paging \
+	prepared \
+	simple \
+	ssl \
+	tracing \
+	tuple \
+	udt \
+	uuids \
+
+	# auth <- unimplemented `cass_cluster_set_authenticator_callbacks()`
+	# execution_profiles <- unimplemented `cass_statement_set_keyspace()`
+	# host_listener <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# logging <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# perf <- unimplemented `cass_cluster_set_num_threads_io()`, `cass_cluster_set_queue_size_io()`
+	# schema_meta <- unimplemented multiple schema-related functions
+	# cloud <- out of interest for us, not related to ScyllaDB
+endif
+
 ifndef CCM_COMMIT_ID
 	export CCM_COMMIT_ID := master
 endif
