@@ -216,6 +216,14 @@ build-integration-test-bin-if-missing:
 		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
 	}
 
+build-examples:
+	@{\
+		echo "Building examples to ${EXAMPLES_DIR}";\
+		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
+		cd "${BUILD_DIR}";\
+		cmake -DCASS_BUILD_INTEGRATION_TESTS=off -DCASS_BUILD_EXAMPLES=on -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
+	}
+
 _update-rust-tooling:
 	@echo "Run rustup update"
 	@rustup update
