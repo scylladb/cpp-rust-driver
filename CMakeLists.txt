@@ -69,6 +69,10 @@ if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_UNIT_TESTS)
   set(CASS_USE_LIBUV ON)
 endif()
 
+if(CASS_BUILD_EXAMPLES)
+  set(CASS_USE_LIBUV ON) # Some examples require libuv, e.g. "callbacks".
+endif()
+
 # Determine which driver target should be used as a dependency
 set(PROJECT_LIB_NAME_TARGET scylla-cpp-driver)
 if(CASS_USE_STATIC_LIBS OR

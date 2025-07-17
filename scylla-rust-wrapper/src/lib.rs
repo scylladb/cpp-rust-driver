@@ -164,6 +164,33 @@ pub(crate) mod cass_metrics_types {
     include_bindgen_generated!("cppdriver_metrics_types.rs");
 }
 
+/// CassAuthenticator
+pub(crate) mod cass_authenticator_types {
+    #![allow(unused)]
+    #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
+
+    include_bindgen_generated!("cppdriver_authenticator_types.rs");
+}
+
+/// CassHostListenerEvent, CassHostListenerCallback
+pub(crate) mod cass_host_listener_types {
+    #![allow(unused)]
+    #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
+
+    include_bindgen_generated!("cppdriver_host_listener_types.rs");
+}
+
+/// CassVersion
+pub(crate) mod cass_version_types {
+    #![allow(unused)]
+    #![allow(non_camel_case_types, non_snake_case)]
+    #![allow(unreachable_pub, unnameable_types)]
+
+    include_bindgen_generated!("cppdriver_version_types.rs");
+}
+
 pub(crate) static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 pub(crate) static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
     RwLock::new(Logger {

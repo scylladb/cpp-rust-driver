@@ -122,6 +122,42 @@ CASSANDRA_NO_VALGRIND_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integr
 :HeartbeatTests.Integration_Cassandra_HeartbeatFailed)
 endif
 
+ifndef SCYLLA_EXAMPLES_URI
+# In sync with the docker compose file.
+SCYLLA_EXAMPLES_URI := 172.43.0.2
+endif
+
+ifndef SCYLLA_EXAMPLES_TO_RUN
+SCYLLA_EXAMPLES_TO_RUN := \
+    async \
+	basic \
+	batch \
+	bind_by_name \
+	callbacks \
+	collections \
+	concurrent_executions \
+	date_time \
+	duration \
+	maps \
+	named_parameters \
+	paging \
+	prepared \
+	simple \
+	ssl \
+	tracing \
+	tuple \
+	udt \
+	uuids \
+
+	# auth <- unimplemented `cass_cluster_set_authenticator_callbacks()`
+	# execution_profiles <- unimplemented `cass_statement_set_keyspace()`
+	# host_listener <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# logging <- unimplemented `cass_cluster_set_host_listener_callback()`
+	# perf <- unimplemented `cass_cluster_set_num_threads_io()`, `cass_cluster_set_queue_size_io()`
+	# schema_meta <- unimplemented multiple schema-related functions
+	# cloud <- out of interest for us, not related to ScyllaDB
+endif
+
 ifndef CCM_COMMIT_ID
 	export CCM_COMMIT_ID := master
 endif
@@ -216,6 +252,14 @@ build-integration-test-bin-if-missing:
 		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
 	}
 
+build-examples:
+	@{\
+		echo "Building examples to ${EXAMPLES_DIR}";\
+		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
+		cd "${BUILD_DIR}";\
+		cmake -DCASS_BUILD_INTEGRATION_TESTS=off -DCASS_BUILD_EXAMPLES=on -DCMAKE_BUILD_TYPE=Release .. && (make -j 4 || make);\
+	}
+
 _update-rust-tooling:
 	@echo "Run rustup update"
 	@rustup update
@@ -298,3 +342,28 @@ endif
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; RUSTFLAGS="${FULL_RUSTFLAGS}" cargo test
+
+# Currently not used.
+CQLSH := cqlsh
+
+run-examples-scylla: build-examples
+	@sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+	@# Keep `SCYLLA_EXAMPLES_URI` in sync with the `scylla` service in `docker-compose.yml`.
+	@docker compose -f tests/examples_cluster/docker-compose.yml up -d --wait
+
+	@# Instead of using cqlsh, which would impose another dependency on the system,
+	@# we use a special example `drop_examples_keyspace` to drop the `examples` keyspace.
+	@# CQLSH_HOST=${SCYLLA_EXAMPLES_URI} ${CQLSH} -e "DROP KEYSPACE IF EXISTS EXAMPLES"; \
+
+	@echo "Running examples on scylla ${SCYLLA_VERSION}"
+	@for example in ${SCYLLA_EXAMPLES_TO_RUN} ; do \
+		echo -e "\nRunning example: $${example}"; \
+		build/examples/drop_examples_keyspace/drop_examples_keyspace ${SCYLLA_EXAMPLES_URI} || exit 1; \
+		build/examples/$${example}/$${example} ${SCYLLA_EXAMPLES_URI} || { \
+		    echo "Example \`$${example}\` has failed!"; \
+			docker compose -f tests/examples_cluster/docker-compose.yml down; \
+			exit 42; \
+		}; \
+	done
+
+	@docker compose -f tests/examples_cluster/docker-compose.yml down --remove-orphans

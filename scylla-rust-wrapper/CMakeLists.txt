@@ -27,7 +27,7 @@ else()
   set(CMAKE_Rust_FLAGS "--cfg cpp_rust_unstable")
 endif()
 
-if(CASS_BUILD_INTEGRATION_TESTS)
+if(CASS_BUILD_INTEGRATION_TESTS OR CASS_BUILD_EXAMPLES)
   set(CMAKE_Rust_FLAGS "${CMAKE_Rust_FLAGS} --cfg cpp_integration_testing")
 endif()
 
