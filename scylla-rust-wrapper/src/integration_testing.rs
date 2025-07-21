@@ -362,13 +362,24 @@ pub unsafe extern "C" fn testing_retry_policy_ignoring_new()
     ))))
 }
 
-/// Stubs of functions that must be implemented for the integration tests to compile,
-/// but the proper implementation is not needed for the tests to run,
-/// and at the same time the functions are not yet implemented in the wrapper.
+/// Stubs of functions that must be implemented for the integration tests
+/// or examples to compile, but the proper implementation is not needed for
+/// the tests/examples to run, and at the same time the functions are not
+/// yet implemented in the wrapper.
 pub(crate) mod stubs {
+    use std::ffi::c_void;
+
     use super::*;
-    use crate::argconv::ptr_to_cstr_n;
+    use crate::argconv::{CassOwnedExclusivePtr, CassPtr, ptr_to_cstr_n, strlen};
+    use crate::cass_authenticator_types::{
+        CassAuthenticatorCallbacks, CassAuthenticatorDataCleanupCallback,
+    };
     use crate::cass_error_types::CassError;
+    use crate::cass_host_listener_types::CassHostListenerCallback;
+    use crate::cass_version_types::CassVersion;
+    use crate::iterator::CassIterator;
+    use crate::metadata::{CassColumnMeta, CassKeyspaceMeta, CassSchemaMeta, CassTableMeta};
+    use crate::query_result::CassValue;
     use crate::types::cass_byte_t;
 
     pub struct CassCustomPayload;
@@ -381,6 +392,16 @@ pub(crate) mod stubs {
         // FIXME: should set `use_randomized_contact_points` flag in cluster config
 
         CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_cluster_set_cloud_secure_connection_bundle(
+        cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        path: *const c_char,
+    ) -> CassError {
+        unsafe {
+            cass_cluster_set_cloud_secure_connection_bundle_n(cluster_raw, path, strlen(path))
+        }
     }
 
     #[unsafe(no_mangle)]
@@ -451,5 +472,194 @@ pub(crate) mod stubs {
         _future: CassBorrowedExclusivePtr<CassFuture, CMut>,
     ) -> size_t {
         0
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_cluster_set_authenticator_callbacks(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        _callbacks: CassBorrowedSharedPtr<CassAuthenticatorCallbacks, CConst>,
+        _cleanup_callback: CassAuthenticatorDataCleanupCallback,
+        _data: *mut c_void,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    pub struct CassAuthenticator;
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_authenticator_response(
+        _auth: CassBorrowedExclusivePtr<CassAuthenticator, CMut>,
+        _size: size_t,
+    ) -> *mut c_char {
+        std::ptr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_statement_add_key_index(
+        _statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
+        _index: size_t,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_statement_set_keyspace(
+        _statement: CassBorrowedExclusivePtr<CassStatement, CMut>,
+        _keyspace: *const c_char,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_cluster_set_host_listener_callback(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        _callback: CassHostListenerCallback,
+        _data: *mut c_void,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_cluster_set_num_threads_io(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        _num_threads: u32,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_cluster_set_queue_size_io(
+        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
+        _queue_size: u32,
+    ) -> CassError {
+        CassError::CASS_OK
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_get_meta_field_name(
+        _cass_iterator: CassBorrowedSharedPtr<CassIterator, CConst>,
+        _name: *mut *const c_char,
+        _name_length: *mut size_t,
+    ) {
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_schema_meta_version(
+        _schema_meta: CassBorrowedSharedPtr<CassSchemaMeta, CConst>,
+    ) -> CassVersion {
+        CassVersion {
+            major_version: 2,
+            minor_version: 1,
+            patch_version: 3,
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_get_meta_field_value<'schema>(
+        _cass_iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
+    ) -> CassOwnedExclusivePtr<CassValue<'schema>, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_indexes_from_table_meta(
+        _cass_table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_column_meta(
+        _cass_column_meta: CassBorrowedSharedPtr<CassColumnMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_table_meta(
+        _cass_table_meta: CassBorrowedSharedPtr<CassTableMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_keyspace_meta(
+        _cass_keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    pub struct CassFunctionMeta;
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_function_meta_name(
+        _cass_function_meta: CassBorrowedSharedPtr<CassFunctionMeta, CConst>,
+        _name: *mut *const c_char,
+        _name_length: *mut size_t,
+    ) {
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_function_meta(
+        _cass_function_meta: CassBorrowedSharedPtr<CassFunctionMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    pub struct CassIndexMeta;
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_get_index_meta<'schema>(
+        _cass_iterator: CassBorrowedSharedPtr<CassIterator<'schema>, CConst>,
+    ) -> CassBorrowedSharedPtr<'schema, CassIndexMeta, CConst> {
+        CassPtr::null()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_index_meta_name(
+        _cass_index_meta: CassBorrowedSharedPtr<CassIndexMeta, CConst>,
+        _name: *mut *const c_char,
+        _name_length: *mut size_t,
+    ) {
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_index_meta(
+        _cass_index_meta: CassBorrowedSharedPtr<CassIndexMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_keyspace_meta_function_by_name(
+        _keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
+        _function: *const c_char,
+    ) -> CassBorrowedSharedPtr<CassFunctionMeta, CConst> {
+        CassPtr::null()
+    }
+
+    pub struct CassAggregateMeta;
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_aggregate_meta_name(
+        _cass_aggregate_meta: CassBorrowedSharedPtr<CassAggregateMeta, CConst>,
+        _name: *mut *const c_char,
+        _name_length: *mut size_t,
+    ) {
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn cass_iterator_fields_from_aggregate_meta(
+        _cass_aggregate_meta: CassBorrowedSharedPtr<CassAggregateMeta, CConst>,
+    ) -> CassOwnedExclusivePtr<CassIterator, CMut> {
+        CassPtr::null_mut()
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn cass_keyspace_meta_aggregate_by_name(
+        _keyspace_meta: CassBorrowedSharedPtr<CassKeyspaceMeta, CConst>,
+        _aggregate: *const c_char,
+    ) -> CassBorrowedSharedPtr<CassAggregateMeta, CConst> {
+        CassPtr::null()
     }
 }

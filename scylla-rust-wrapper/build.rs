@@ -158,4 +158,19 @@ fn main() {
         &["CassMetrics_", "CassMetrics"],
         &out_path,
     );
+    prepare_cppdriver_data(
+        "cppdriver_authenticator_types.rs",
+        &[
+            "CassAuthenticator",
+            "CassAuthenticatorCallbacks",
+            "CassAuthenticatorDataCleanupCallback",
+        ],
+        &out_path,
+    );
+    prepare_cppdriver_data(
+        "cppdriver_host_listener_types.rs",
+        &["CassHostListenerEvent", "CassHostListenerCallback"],
+        &out_path,
+    );
+    prepare_cppdriver_data("cppdriver_version_types.rs", &["CassVersion"], &out_path);
 }
