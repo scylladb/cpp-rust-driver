@@ -8,6 +8,11 @@ respectively.
 
 The default consistency is `CASS_CONSISTENCY_LOCAL_ONE`.
 
+The default serial consistency is `CASS_CONSISTENCY_ANY`, which means no serial consistency specified.
+This may result in an error upon execution of a statement that requires serial consistency (Lightweight Transaction, LWT).
+In order to avoid this, you should set the serial consistency level to `CASS_CONSISTENCY_SERIAL` or `CASS_CONSISTENCY_LOCAL_SERIAL`
+before executing such statement.
+
 ## Consistency Levels
 
 ### Read and Write Consistency Levels
