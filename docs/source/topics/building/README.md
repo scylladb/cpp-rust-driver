@@ -1,6 +1,6 @@
 # Building
 
-The Scylla C/C++ Driver will build on most standard Unix-like and Microsoft
+The ScyllaDB C/C++ Driver will build on most standard Unix-like and Microsoft
 Windows platforms. Packages are available for the following platforms:
 
 * [CentOS 7 64-bit][cpp-driver-centos7]

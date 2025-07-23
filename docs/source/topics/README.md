@@ -71,7 +71,7 @@ int main() {
   /* Add contact points */
   cass_cluster_set_contact_points(cluster, "127.0.0.1");
 
-  /* Shard-awareness (Scylla only): choose the local (ephemeral) port range */
+  /* Shard-awareness (ScyllaDB only): choose the local (ephemeral) port range */
   cass_cluster_set_local_port_range(cluster, 49152, 65535);
   /* Driver will round up this number (32), on every node,
      to a multiple of that node's shard count */
@@ -225,7 +225,7 @@ void handle_query_result(CassFuture* future) {
 
 ### Cluster
 
-The [`CassCluster`] object describes a Cassandra/Scylla cluster’s configuration.
+The [`CassCluster`] object describes a Cassandra/ScyllaDB cluster’s configuration.
 The default cluster object is good for most clusters and only requires a single
 or multiple lists of contact points in order to establish a session connection.
 Once a session is connected using a cluster object, its configuration is
@@ -235,7 +235,7 @@ established does not alter the session's configuration.
 ### Session
 
 The [`CassSession`] object is used for query execution. Internally, a session
-object also manages a pool of client connections to Cassandra/Scylla and uses
+object also manages a pool of client connections to Cassandra/ScyllaDB and uses
 a load balancing policy to distribute requests across those connections. An
 application should create a single session object per keyspace. A session
 object is designed to be created once, reused, and shared by multiple threads
@@ -251,14 +251,14 @@ I/O threads.
 
 Each I/O thread maintains a number of connections for each node in the cluster.
 This number can be controlled by `cass_cluster_set_core_connections_per_host()`.
-In case of Scylla this number is additionally rounded up to the number of shards
+In case of ScyllaDB this number is additionally rounded up to the number of shards
 on the node.
 
 Each of those connections can handle several simultaneous requests using
 pipelining. Asynchronous I/O and pipelining together allow each connection to
 handle several (up to 32k with protocol v3/v4) in-flight requests concurrently.
 This significantly reduces the number of connections required to be open to
-Cassandra/Scylla and allows the driver to batch requests destined for the
+Cassandra/ScyllaDB and allows the driver to batch requests destined for the
 same node.
 
 ### Thread safety
@@ -325,7 +325,7 @@ with other drivers. Such features can be found (and requested) on our [GH].
   installation/*
   logging/*
   metrics/*
-  scylla_specific/*
+  scylladb_specific/*
   security/*
   testing/*
   tracing/*

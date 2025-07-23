@@ -30,7 +30,7 @@ impl CassPrepared {
         //
         // NOTE: We are aware that it makes cached metadata immutable. It is expected, though - there
         // is an integration test for this for CQL protocol v4 (AlterDoesntUpdateColumnCount).
-        // This issue is addressed in CQL protocol v5, but Scylla doesn't support it yet, and probably
+        // This issue is addressed in CQL protocol v5, but ScyllaDB doesn't support it yet, and probably
         // won't support it in the near future.
         statement.set_use_cached_result_metadata(true);
 

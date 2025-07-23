@@ -1,6 +1,6 @@
-# Scylla Specific Features
+# ScyllaDB Specific Features
 
-The following features are specific to Scylla Drivers and are not found in a non-Scylla driver. To use these features, [install](http://cpp-driver.docs.scylladb.com/master/topics/installation/index.html) the driver. 
+The following features are specific to ScyllaDB Drivers and are not found in a non-ScyllaDB driver. To use these features, [install](http://cpp-driver.docs.scylladb.com/master/topics/installation/index.html) the driver.
 
 **Contents**
   * [Shard-Awareness](#shard-awareness)
@@ -9,7 +9,7 @@ The following features are specific to Scylla Drivers and are not found in a non
 
 ## Shard-Awareness
 
-Scylla is built around the concept o a *sharded architecture*. What it means for
+ScyllaDB is built around the concept o a *sharded architecture*. What it means for
 clients is that each piece of data is bound to specific CPU(s) on specific
 node(s). The ability of the driver to query specific shard (CPU) is called
 "shard-awareness".
@@ -27,7 +27,7 @@ on that node and results in even greater speedups.
 
 ### "Basic" shard-awareness
 
-Through extensions to the CQL protocol, Scylla node informs the incoming CQL
+Through extensions to the CQL protocol, ScyllaDB node informs the incoming CQL
 connection about:
 
 1. the total number of shards within the node;
@@ -42,10 +42,10 @@ shard-awareness capabilities to an existing client application.
 
 ### "Advanced" shard-awareness
 
-Since Scylla 4.3 however, drivers can use a new, more powerful method of
+Since ScyllaDB 4.3 however, drivers can use a new, more powerful method of
 establishing per-shard connection pools. This is the recommended usage pattern,
 commonly referred to as "advanced" shard-awareness. The idea behind it is that
-Scylla listens for CQL connections on an additional port, by default 19042.
+ScyllaDB listens for CQL connections on an additional port, by default 19042.
 Connections incoming to that port, are being routed to the shard determined by
 *client-side (ephemeral) port number*. Precisely, if a client socket has local
 port number `P` then that connection lands on shard `P % shard_count`. The
@@ -63,7 +63,7 @@ as needed.
 `native_shard_aware_transport_port_ssl` in the firewall rules, if applicable.
 
 **NOTE:** If the client app runs behind a NAT (e.g. on a desktop in the office
-network) while the Scylla cluster is hosted somewhere else (e.g. on Azure or
+network) while the ScyllaDB cluster is hosted somewhere else (e.g. on Azure or
 AWS) then, most likely, the router at the office alters the client-side port
 numbers. In this case port-based ("advanced") shard selection will not work and
 will fall back to the "basic" mode.
