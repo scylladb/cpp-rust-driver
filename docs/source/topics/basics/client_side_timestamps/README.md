@@ -3,9 +3,9 @@
 Cassandra uses timestamps to serialize write operations. That is, values with a
 more current timestamp are considered to be the most up-to-date version of that
 information. By default, timestamps are assigned by the driver on the
-client-side. This behavior can be overridden by configuring the driver to use a
-timestamp generator or assigning a timestamp directly to a [`CassStatement`] or
-[`CassBatch`].
+client-side using a monotonically increasing timestamp generator. This behavior
+can be overridden by configuring the driver to use a server-side timestamps or
+assigning a timestamp directly to a [`CassStatement`] or [`CassBatch`].
 
 ## Monotonically Increasing Timestamp Generator
 
@@ -16,7 +16,7 @@ atomic counter. That guarantees that no more than 1000 timestamps will be
 generated for a given millisecond clock tick even when shared by multiple
 sessions.
 
-**Warning**: If the rate of 1000 timestamps per millisecond is exceeded this
+**Warning**: If the rate of 1000 timestamps per millisecond is exceeded, this
 generator will produce duplicate timestamps.
 
 ```c
