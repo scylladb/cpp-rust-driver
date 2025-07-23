@@ -315,7 +315,6 @@ with other drivers. Such features can be found (and requested) on our [GH].
   basics/*
   building/*
   client_configuration/*
-  cloud/*
   configuration/*
   execution_profiles/*
   faq/*
