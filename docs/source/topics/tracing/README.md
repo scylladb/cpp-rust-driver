@@ -58,7 +58,7 @@ application itself must use the returned tracing identifier to query the tables.
 By default, when tracing is enabled, the driver will wait for the query's tracing
 data to become available in the server-side tables before setting the request's
 future. The amount of time it will wait, retry, and the consistency level of the
-tracing data can be controls by setting `CassCluster` configuration options.
+tracing data can be controlled by setting `CassCluster` configuration options.
 
 ```c
 CassCluster* cluster = cass_cluster_new();
