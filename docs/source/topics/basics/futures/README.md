@@ -90,6 +90,8 @@ A callback can be set on a future to notify the client application when a reques
 
 **Important**: The driver may run the callback on thread that’s different from the application’s calling thread. Any data accessed in the callback must be immutable or synchronized with a mutex, semaphore, etc.
 
+**BEWARE:**: The callback code must not issue blocking operations, including waiting for a not-yet-ready future to complete. Doing so will make the driver panic, because the asynchronous executor threads (which normally execute the callbacks) must not get blocked. As a notable exception, it is allowed to call otherwise blocking future functions like `cass_future_wait()` or `cass_future_get_result()` from within the callback, but only if the future is guaranteed to be ready at that point. This is the case, among others, when calling the function on a future whose completion has triggered the callback.
+
 ```c
 void on_result(CassFuture* future, void* data) {
   /* This result will now return immediately */
@@ -112,4 +114,3 @@ int main() {
 
 }
 ```
-
