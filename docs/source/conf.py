@@ -108,7 +108,7 @@ html_theme_options = {
     "hide_feedback_buttons": "false",
     "github_issues_repository": "scylladb/cpp-rust-driver",
     "github_repository": "scylladb/cpp-rust-driver",
-    "site_description": "API-compatible rewrite of scylladb/cpp-driver as a wrapper for Rust driver.",
+    "site_description": "API-compatible rewrite of scylladb/cpp-driver as a wrapper over ScyllaDB Rust driver.",
     "hide_version_dropdown": [],
     "zendesk_tag": "gq6ltsh3nfex3cnwfy4aj9",
     "versions_unstable": UNSTABLE_VERSIONS,
