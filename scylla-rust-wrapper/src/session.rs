@@ -1126,7 +1126,7 @@ mod tests {
                         .and(Condition::BodyContainsCaseInsensitive(Box::new(
                             *b"INSERT INTO system.",
                         ))),
-                    // We simulate the write failure error that a Scylla node would respond with anyway.
+                    // We simulate the write failure error that a ScyllaDB node would respond with anyway.
                     RequestReaction::forge().write_failure(),
                 ))
                 .chain(generic_drop_queries_rules()),
@@ -1814,7 +1814,7 @@ mod tests {
         unsafe {
             let mut cluster_raw = cass_cluster_new();
 
-            // An IP with very little chance of having a Scylla node listening
+            // An IP with very little chance of having a ScyllaDB node listening
             let ip = "127.0.1.231";
             let (c_ip, c_ip_len) = str_to_c_str_n(ip);
 
@@ -1854,7 +1854,7 @@ mod tests {
         #![rusty_fork(timeout_ms = 1000)]
         #[test]
         fn cluster_is_not_referenced_by_session_connect_future() {
-            // An IP with very little chance of having a Scylla node listening
+            // An IP with very little chance of having a ScyllaDB node listening
             let ip = "127.0.1.231";
             let (c_ip, c_ip_len) = str_to_c_str_n(ip);
             let profile_name = make_c_str!("latency_aware");
