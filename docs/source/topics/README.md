@@ -8,7 +8,7 @@
 
 Packages for the dependencies: libuv (1.x), OpenSSL, zlib can be installed
 from distribution's repositories and/or EPEL. Please note that `apt-get` can
-handle the dependencies by itself, therefore this step can likely be omitted 
+handle the dependencies by itself, therefore this step can likely be omitted
 on Ubuntu.
 
 ```bash
@@ -122,9 +122,7 @@ attempting to get the result from a future.
 ### Executing Queries
 
 Queries are executed using [`CassStatement`] objects. Statements encapsulate
-the query string and the query parameters. Query parameters are not supported
-by earlier versions of Cassandra (1.2 and below) and values need to be inlined
-in the query string itself.
+the query string and the query parameters.
 
 ```c
 void execute_query(CassSession* session) {
@@ -148,15 +146,14 @@ void execute_query(CassSession* session) {
 
 ### Parameterized Queries (Positional)
 
-Cassandra 2.0+ supports the use of parameterized queries. This allows the same
-query string to be executed multiple times with different values; avoiding
-string manipulation in your application.
+Parameterized queries allow the same query string to be executed multiple times with different values,
+avoiding string manipulation in your application.
 
 **Perfomance Tip:** If the same query is being reused multiple times,
 [prepared statements] should be used to optimize performance.
 
 ```c
-void execute_paramertized_query(CassSession* session) {
+void execute_parametrized_query(CassSession* session) {
   /* There are two bind variables in the query string */
   CassStatement* statement
     = cass_statement_new("INSERT INTO example (key, value) VALUES (?, ?)", 2);
@@ -245,7 +242,7 @@ and writing query request data to and from Cassandra/Scylla. The number of I/O
 threads defaults to one per CPU core, but it can be configured using
 [`cass_cluster_set_num_threads_io()`]. It’s generally better to create a single
 session with more I/O threads than multiple sessions with a smaller number of
-I/O threads. 
+I/O threads.
 
 ### Asynchronous I/O
 

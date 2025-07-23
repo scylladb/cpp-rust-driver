@@ -1,12 +1,5 @@
 # Basics
 
-## Feature Compatibility
-
-* Cassandra 2.0+ is required for parameterized queries, prepared statements,
-  paging, and batches. Cassandra 1.2 does NOT support these features.
-* Cassandra 2.1+ is required for nested collections, UDTs, tuples, and client-side
-  timestamps. Cassandra 1.2 and 2.0 do NOT support these features.
-
 ## Datatypes Mapping
 
 <table class="table table-striped table-hover table-condensed">
@@ -111,7 +104,7 @@
 .. toctree::
   :hidden:
   :glob:
-  
+
   batches/*
   binding_parameters/*
   client_side_timestamps/*

@@ -129,8 +129,7 @@ void iterator_over_map_value(CassFuture* future) {
 
 ## Paging
 
-When communicating with Cassandra 2.0 or later, large result sets can be divided
-into multiple pages automatically. The
+Large result sets can be divided into multiple pages automatically. The
 [`CassResult`](http://datastax.github.io/cpp-driver/api/struct.CassResult) object
 keeps track of the pagination state for the sequence of paging queries. When
 paging through the result set, the result object is checked to see if more pages

@@ -1,8 +1,6 @@
 # Batches
 
-**Note**: Cassandra 2.0+ is required.
-
-Batches can be used to group multiple mutations (`UPDATE`, `INSERT`, `DELETE`) together into a single statement; simple or prepared. There are three different types of batches supported by Cassandra 2.0 or later.
+Batches can be used to group multiple mutations (`UPDATE`, `INSERT`, `DELETE`) together into a single statement; simple or prepared. There are three different types of batches.
 
 * `CASS_BATCH_TYPE_LOGGED` is used to make sure that multiple mutations across multiple partitions happen atomically, that is, all the included mutations will eventually succeed. However, there is a performance penalty imposed by atomicity guarantee.
 * `CASS_BATCH_TYPE_UNLOGGED` is generally used to group mutations for a single partition and do not suffer from the performance penalty imposed by logged batches, but there is no atomicity guarantee for  multi-partition updates.

@@ -184,14 +184,8 @@ int main(int argc, char* argv[]) {
                   INITCOND(0, 0)");
 
     print_table(session, "examples", "schema_meta");
-    if (version.major_version >= 3) {
-      /* Collection types are marked as frozen in Cassandra 3.x and later. */
-      print_function(session, "examples", "avg_state", "frozen<tuple<int,bigint>>,int");
-      print_function(session, "examples", "avg_final", "frozen<tuple<int,bigint>>");
-    } else {
-      print_function(session, "examples", "avg_state", "tuple<int,bigint>,int");
-      print_function(session, "examples", "avg_final", "tuple<int,bigint>");
-    }
+    print_function(session, "examples", "avg_state", "frozen<tuple<int,bigint>>,int");
+    print_function(session, "examples", "avg_final", "frozen<tuple<int,bigint>>");
     print_aggregate(session, "examples", "average", "int");
 
     cass_schema_meta_free(schema_meta);
