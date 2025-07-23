@@ -17,18 +17,18 @@ const char* query = "SELECT * FROM keyspace1.table1";
 CassStatement* statement = cass_statement_new(query, 0);
 
 /* Enable tracing on the statement */
-cass_statement_set_tracing(statement, cass_true)
+cass_statement_set_tracing(statement, cass_true);
 
 /* ... */
 ```
 
 ### Enable Tracing on a Batch (`CassBatch`)
 
-```
+```c
 CassBatch* batch = cass_batch_new(CASS_BATCH_TYPE_UNLOGGED);
 
 /* Enable tracing on the batch */
-cass_batch_set_tracing(batch, cass_true)
+cass_batch_set_tracing(batch, cass_true);
 
 /* ... */
 ```
@@ -58,7 +58,7 @@ application itself must use the returned tracing identifier to query the tables.
 By default, when tracing is enabled, the driver will wait for the query's tracing
 data to become available in the server-side tables before setting the request's
 future. The amount of time it will wait, retry, and the consistency level of the
-tracing data can be controls by setting `CassCluster` configuration options.
+tracing data can be controlled by setting `CassCluster` configuration options.
 
 ```c
 CassCluster* cluster = cass_cluster_new();

@@ -53,7 +53,7 @@ unnecessary.
 ```c
 CassCluster* cluster = cass_cluster_new();
 
-/* Disable schema metdata */
+/* Disable schema metadata */
 cass_cluster_set_use_schema(cluster, cass_false);
 
 cass_cluster_free(cluster);

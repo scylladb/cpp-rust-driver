@@ -59,7 +59,7 @@ Data types can also be retrieved from [`CassResult`], [`CassPrepared`], and
 ## Building a Data Type Programmatically
 
 Data types could be constructed programmatically. This is useful for application that may
-have schema metatdata disabled.
+have schema metadata disabled.
 
 ```c
 CassDataType* address_data_type = cass_data_type_new_type(4);
