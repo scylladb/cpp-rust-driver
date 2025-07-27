@@ -713,7 +713,7 @@ pub mod result {
 pub mod error {
     // Disabling rustfmt to have one item per line for better readability.
     #[rustfmt::skip]
-    pub use crate::execution_error::{
+    pub use crate::cass_error::{
         CassError,
         CassErrorResult,
         CassErrorSource,
