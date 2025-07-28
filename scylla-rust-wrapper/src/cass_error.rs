@@ -257,7 +257,7 @@ impl ToCassError for SerializationError {
             // It means that our custom `UnknownNamedParameterError` was returned.
             CassError::CASS_ERROR_LIB_NAME_DOES_NOT_EXIST
         } else {
-            CassError::CASS_ERROR_LAST_ENTRY
+            CassError::CASS_ERROR_LIB_INVALID_DATA
         }
     }
 }
