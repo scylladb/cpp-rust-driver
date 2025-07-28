@@ -90,14 +90,10 @@ impl ToCassError for RequestAttemptError {
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
             }
             RequestAttemptError::BodyExtensionsParseError(_) => {
-                CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
+                CassError::CASS_ERROR_LIB_INVALID_DATA
             }
-            RequestAttemptError::CqlResultParseError(_) => {
-                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
-            }
-            RequestAttemptError::CqlErrorParseError(_) => {
-                CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
-            }
+            RequestAttemptError::CqlResultParseError(_) => CassError::CASS_ERROR_LIB_INVALID_DATA,
+            RequestAttemptError::CqlErrorParseError(_) => CassError::CASS_ERROR_LIB_INVALID_DATA,
             RequestAttemptError::DbError(db_error, _) => db_error.to_cass_error(),
             RequestAttemptError::UnexpectedResponse(_) => {
                 CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
