@@ -99,14 +99,12 @@ impl ToCassError for RequestAttemptError {
                 CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
             }
             RequestAttemptError::RepreparedIdChanged { .. } => {
-                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+                CassError::CASS_ERROR_LIB_INVALID_STATE
             }
             RequestAttemptError::RepreparedIdMissingInBatch => {
-                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
+                CassError::CASS_ERROR_LIB_INVALID_STATE
             }
-            RequestAttemptError::NonfinishedPagingState => {
-                CassError::CASS_ERROR_SERVER_PROTOCOL_ERROR
-            }
+            RequestAttemptError::NonfinishedPagingState => CassError::CASS_ERROR_LIB_INVALID_STATE,
 
             // RequestAttemptError is non_exhaustive.
             _ => CassError::CASS_ERROR_LAST_ENTRY,
