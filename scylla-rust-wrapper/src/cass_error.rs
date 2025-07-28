@@ -240,9 +240,11 @@ impl ToCassError for MetadataError {
 impl ToCassError for BadKeyspaceName {
     fn to_cass_error(&self) -> CassError {
         match self {
-            BadKeyspaceName::Empty => CassError::CASS_ERROR_LAST_ENTRY,
-            BadKeyspaceName::TooLong(_string, _usize) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadKeyspaceName::IllegalCharacter(_string, _char) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadKeyspaceName::Empty
+            | BadKeyspaceName::TooLong(_, _)
+            | BadKeyspaceName::IllegalCharacter(_, _) => {
+                CassError::CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE
+            }
             // non_exhaustive
             _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
