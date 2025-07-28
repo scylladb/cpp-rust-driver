@@ -6,8 +6,8 @@ use libc::c_char;
 use scylla::deserialize::DeserializationError;
 use scylla::errors::{
     BadKeyspaceName, BadQuery, ConnectionPoolError, DbError, ExecutionError, MetadataError,
-    MetadataFetchErrorKind, NewSessionError, PrepareError, RequestAttemptError, SerializationError,
-    WriteType,
+    MetadataFetchErrorKind, NewSessionError, NextRowError, PrepareError, RequestAttemptError,
+    RequestError, SerializationError, WriteType,
 };
 use scylla::frame::frame_errors::ResultMetadataAndRowsCountParseError;
 use scylla::statement::Consistency;
@@ -187,8 +187,39 @@ impl ToCassError for MetadataError {
                 }
                 MetadataFetchErrorKind::PrepareError(e) => e.to_cass_error(),
                 MetadataFetchErrorKind::SerializationError(e) => e.to_cass_error(),
-                MetadataFetchErrorKind::NextRowError(_) => {
-                    CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+                MetadataFetchErrorKind::NextRowError(e) => {
+                    match e {
+                        // CassError::CASS_ERROR_LIB_UNEXPECTED_RESPONSE
+                        NextRowError::NextPageError(next_page_error) => match next_page_error {
+                            scylla::errors::NextPageError::PartitionKeyError(_) => {
+                                CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
+                            }
+                            scylla::errors::NextPageError::RequestFailure(e) => {
+                                match e {
+                                    RequestError::EmptyPlan => {
+                                        CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE
+                                    }
+                                    RequestError::ConnectionPoolError(e) => e.to_cass_error(),
+                                    RequestError::RequestTimeout(_) => {
+                                        CassError::CASS_ERROR_LIB_REQUEST_TIMED_OUT
+                                    }
+                                    RequestError::LastAttemptError(e) => e.to_cass_error(),
+                                    // non_exhaustive
+                                    _ => CassError::CASS_ERROR_LAST_ENTRY,
+                                }
+                            }
+                            scylla::errors::NextPageError::ResultMetadataParseError(_) => {
+                                CassError::CASS_ERROR_LIB_INVALID_DATA
+                            }
+                            // non_exhaustive
+                            _ => CassError::CASS_ERROR_LAST_ENTRY,
+                        },
+                        NextRowError::RowDeserializationError(_) => {
+                            CassError::CASS_ERROR_LIB_INVALID_DATA
+                        }
+                        // non_exhaustive
+                        _ => CassError::CASS_ERROR_LAST_ENTRY,
+                    }
                 }
 
                 // non_exhaustive
