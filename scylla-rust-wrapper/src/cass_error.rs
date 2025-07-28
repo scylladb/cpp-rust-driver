@@ -147,13 +147,13 @@ impl ToCassError for DbError {
 impl ToCassError for BadQuery {
     fn to_cass_error(&self) -> CassError {
         match self {
-            BadQuery::ValuesTooLongForKey(_usize, _usize2) => CassError::CASS_ERROR_LAST_ENTRY,
-            BadQuery::PartitionKeyExtraction => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::ValuesTooLongForKey(_usize, _usize2) => {
+                CassError::CASS_ERROR_LIB_MESSAGE_ENCODE
+            }
+            BadQuery::PartitionKeyExtraction => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
             BadQuery::SerializationError(e) => e.to_cass_error(),
-            BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LAST_ENTRY,
+            BadQuery::TooManyQueriesInBatchStatement(_) => CassError::CASS_ERROR_LIB_MESSAGE_ENCODE,
             // BadQuery is non_exhaustive
-            // For now, since all other variants return LAST_ENTRY,
-            // let's do it here as well.
             _ => CassError::CASS_ERROR_LAST_ENTRY,
         }
     }
