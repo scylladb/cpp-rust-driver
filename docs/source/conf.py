@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 import sys
 import warnings
 from datetime import date
@@ -37,6 +38,8 @@ extensions = [
     "sphinx_scylladb_theme",
     "sphinx_multiversion",  # optional
     "myst_parser",  # optional
+    'breathe',
+    'sphinx_scylladb_markdown',
 ]
 
 # The suffix(es) of source filenames.
@@ -95,6 +98,43 @@ smv_released_pattern = r"^tags/.*$"
 smv_outputdir_format = "{ref.name}"
 # -- Options for HTML output ----------------------------------------
 
+
+# -- Options for Doxygen (API Reference)
+breathe_projects = {
+	'API': "../../doxygen/xml/"
+}
+breathe_default_project = 'API'
+breathe_default_members = ('members', 'undoc-members')
+
+# Autogenerate API reference
+def _generate_structs(outdir, structs, project):
+    """Write structs docs in the designated outdir folder"""
+    for obj in structs:
+        with open(outdir + '/struct.' + obj + '.rst', 'w') as t_file:
+            t_file.write(obj + "\n" + "=" * len(obj) + "\n\n" + ".. doxygenstruct:: " + obj +" \n  :project: " + project)
+
+def _generate_doxygen_rst(xmldir, outdir):
+    """Autogenerate doxygen docs in the designated outdir folder"""
+    structs = []
+    files = os.listdir(os.path.join(os.path.dirname(__file__), xmldir))
+    for file_name in files:
+        if 'struct' in file_name and '__' not in file_name:
+            structs.append(file_name
+            .replace('struct_', '')
+            .replace('_', ' ')
+            .replace('.xml','')
+            .title()
+            .replace(' ', ''))
+    _generate_structs(outdir, structs, breathe_default_project)
+
+def generate_doxygen(app):
+    DOXYGEN_XML_DIR = breathe_projects[breathe_default_project]
+    _generate_doxygen_rst(DOXYGEN_XML_DIR, app.builder.srcdir + '/api')
+
+# -- Options for sitemap extension
+
+sitemap_url_scheme = '/stable/{link}'
+
 # The theme to use for pages.
 html_theme = "sphinx_scylladb_theme"
 html_theme_path = ["../.."]
@@ -132,6 +172,12 @@ html_context = {"html_baseurl": html_baseurl}
 
 # -- Initialize Sphinx ----------------------------------------------
 
+def replace_relative_links(app, docname, source):
+    result = source[0]
+    for item in app.config.replacements:
+        for key, value in item.items():
+            result = re.sub(key, value, result)
+    source[0] = result
 
 def setup(sphinx):
     warnings.filterwarnings(
@@ -139,3 +185,15 @@ def setup(sphinx):
         category=UserWarning,
         message=r".*Container node skipped.*",
     )
+
+    # Workaround to replace DataStax links
+    replacements = [
+        {"http://datastax.github.io/cpp-driver/api/cassandra.h/": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version + "/api"},
+        {"http://datastax.github.io/cpp-driver": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version},
+        {"http://docs.datastax.com/en/developer/cpp-driver/latest": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version},
+    ]
+    sphinx.add_config_value('replacements', replacements, True)
+    sphinx.connect('source-read', replace_relative_links)
+
+    # Autogenerate API Reference
+    sphinx.connect("builder-inited", generate_doxygen)
