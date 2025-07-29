@@ -67,9 +67,6 @@ CASS_EXPORT CassError cass_cluster_set_host_listener_callback(CassCluster* clust
 CASS_EXPORT CassError cass_cluster_set_no_compact(CassCluster* cluster, cass_bool_t enabled) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_no_compact\n");
 }
-CASS_EXPORT CassError cass_cluster_set_num_threads_io(CassCluster* cluster, unsigned num_threads) {
-  throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_num_threads_io\n");
-}
 CASS_EXPORT CassError cass_cluster_set_prepare_on_all_hosts(CassCluster* cluster,
                                                             cass_bool_t enabled) {
   throw std::runtime_error("UNIMPLEMENTED cass_cluster_set_prepare_on_all_hosts\n");

@@ -83,6 +83,8 @@ const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
 pub struct CassCluster {
+    runtime: Arc<tokio::runtime::Runtime>,
+
     session_builder: SessionBuilder,
     default_execution_profile_builder: ExecutionProfileBuilder,
     execution_profile_map: HashMap<ExecProfileName, CassExecProfile>,
@@ -100,6 +102,10 @@ pub struct CassCluster {
 }
 
 impl CassCluster {
+    pub(crate) fn get_runtime(&self) -> &Arc<tokio::runtime::Runtime> {
+        &self.runtime
+    }
+
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
         &self.execution_profile_map
     }
@@ -179,6 +185,12 @@ impl CassCluster {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster, CMut> {
+    let Ok(default_runtime) = tokio::runtime::Runtime::new()
+        .inspect_err(|e| tracing::error!("Failed to create async runtime: {}", e))
+    else {
+        return CassPtr::null_mut();
+    };
+
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
         .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
@@ -310,6 +322,8 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
+        runtime: Arc::new(default_runtime),
+
         session_builder: default_session_builder,
         port: 9042,
         contact_points: Vec::new(),
@@ -1527,6 +1541,39 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
     };
 
     cluster.execution_profile_map.insert(name, profile);
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_num_threads_io(
+    cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    num_threads: cass_uint32_t,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_num_threads_io!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    let runtime_res = match num_threads {
+        0 => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build(),
+        n => tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(n as usize)
+            .enable_all()
+            .build(),
+    };
+
+    let runtime = match runtime_res {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            tracing::error!("Failed to create async runtime: {}", err);
+            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+        }
+    };
+
+    cluster.runtime = Arc::new(runtime);
 
     CassError::CASS_OK
 }

@@ -103,7 +103,7 @@ pub mod cluster {
         // cass_cluster_set_new_request_ratio, UNIMPLEMENTED
         // cass_cluster_set_no_compact, UNIMPLEMENTED
         cass_cluster_set_no_speculative_execution_policy,
-        // cass_cluster_set_num_threads_io, UNIMPLEMENTED
+        cass_cluster_set_num_threads_io,
         cass_cluster_set_port,
         // cass_cluster_set_pending_requests_high_water_mark, UNIMPLEMENTED
         // cass_cluster_set_pending_requests_low_water_mark, UNIMPLEMENTED
@@ -984,7 +984,6 @@ pub mod integration_testing {
         cass_cluster_set_authenticator_callbacks,
         cass_cluster_set_cloud_secure_connection_bundle,
         cass_cluster_set_host_listener_callback,
-        cass_cluster_set_num_threads_io,
         cass_cluster_set_queue_size_io,
         cass_cluster_set_cloud_secure_connection_bundle_n,
         cass_cluster_set_exponential_reconnect,

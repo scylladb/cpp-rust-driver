@@ -520,14 +520,6 @@ pub(crate) mod stubs {
     }
 
     #[unsafe(no_mangle)]
-    pub extern "C" fn cass_cluster_set_num_threads_io(
-        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
-        _num_threads: u32,
-    ) -> CassError {
-        CassError::CASS_OK
-    }
-
-    #[unsafe(no_mangle)]
     pub extern "C" fn cass_cluster_set_queue_size_io(
         _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
         _queue_size: u32,
