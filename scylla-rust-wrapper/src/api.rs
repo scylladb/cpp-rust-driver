@@ -98,8 +98,9 @@ pub mod cluster {
         // cass_cluster_set_max_connections_per_host, UNIMPLEMENTED
         // cass_cluster_set_max_requests_per_flush, UNIMPLEMENTED
         // cass_cluster_set_max_reusable_write_objects, UNIMPLEMENTED
-        // cass_cluster_set_monitor_reporting_interval, UNIMPLEMENTED
         cass_cluster_set_max_schema_wait_time,
+        cass_cluster_set_metadata_request_serverside_timeout,
+        // cass_cluster_set_monitor_reporting_interval, UNIMPLEMENTED
         // cass_cluster_set_new_request_ratio, UNIMPLEMENTED
         // cass_cluster_set_no_compact, UNIMPLEMENTED
         cass_cluster_set_no_speculative_execution_policy,

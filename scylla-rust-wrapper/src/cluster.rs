@@ -1570,6 +1570,26 @@ pub unsafe extern "C" fn cass_cluster_set_num_threads_io(
     CassError::CASS_OK
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_metadata_request_serverside_timeout(
+    cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    timeout_ms: cass_duration_t,
+) {
+    let Some(cluster_from_raw) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!(
+            "Provided null cluster pointer to cass_cluster_set_metadata_request_serverside_timeout!"
+        );
+        return;
+    };
+
+    let metadata_request_timeout = (timeout_ms > 0).then(|| Duration::from_millis(timeout_ms));
+
+    cluster_from_raw
+        .session_builder
+        .config
+        .metadata_request_serverside_timeout = metadata_request_timeout;
+}
+
 #[cfg(test)]
 mod tests {
     use crate::testing::{assert_cass_error_eq, setup_tracing};
