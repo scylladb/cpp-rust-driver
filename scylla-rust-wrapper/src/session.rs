@@ -280,17 +280,16 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     let batch_exec_profile = batch_from_raw.exec_profile.clone();
 
     let future = async move {
-        if session_guard.connected.is_none() {
+        let Some(connected_session) = session_guard.connected.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
-        }
+        };
 
-        let cass_connected_session = session_guard.connected.as_ref().unwrap();
-        let session = &cass_connected_session.session;
+        let session = &connected_session.session;
 
-        let handle = cass_connected_session
+        let handle = connected_session
             .get_or_resolve_profile_handle(batch_exec_profile.as_ref())
             .await?;
 
@@ -512,14 +511,15 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            if session_guard.connected.is_none() {
+            let Some(connected_session) = session_guard.connected.as_ref() else {
                 return Err((
                     CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                     "Session is not connected".msg(),
                 ));
-            }
-            let session = &session_guard.connected.as_ref().unwrap().session;
-            let prepared = session
+            };
+
+            let prepared = connected_session
+                .session
                 .prepare(query.query.clone())
                 .await
                 .map_err(|err| (err.to_cass_error(), err.msg()))?;
@@ -569,15 +569,15 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     let query = Statement::new(query_str.to_string());
 
     let fut = async move {
-        if session_guard.connected.is_none() {
+        let Some(connected_session) = session_guard.connected.as_ref() else {
             return Err((
                 CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                 "Session is not connected".msg(),
             ));
-        }
-        let session = &session_guard.connected.as_ref().unwrap().session;
+        };
 
-        let prepared = session
+        let prepared = connected_session
+            .session
             .prepare(query)
             .await
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
