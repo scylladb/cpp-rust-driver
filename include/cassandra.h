@@ -1729,10 +1729,37 @@ cass_cluster_set_serial_consistency(CassCluster* cluster,
                                     CassConsistency consistency);
 
 /**
- * Sets the number of IO threads. This is the number of threads
- * that will handle query requests.
+ * Sets the number of IO threads. This is the number of dedicated runtime threads
+ * that will resolve driver's futures, handling requests and other IO operations.
  *
- * <b>Default:</b> 1
+ * If `num_threads` > 0 is given, the driver will create a dedicated thread pool
+ * with the specified number of threads. This is the recommended way to use the
+ * driver, as it allows the driver to execute tasks in parallel and utilize
+ * multiple CPU cores. Also, this makes the execution of futures eager and
+ * in-background, allowing the main thread to do whatever it wants concurrently
+ * with the futures.
+ *
+ * If 0 is specified, the `current_thread` tokio runtime will be used. This runtime
+ * has no dedicated worker threads, but instead uses the current thread to execute
+ * all tasks. This ensures the lowest possible overhead, may make sense for testing
+ * and debugging purposes, or for applications that do not require high concurrency.
+ * Also, single-CPU machines may benefit from this runtime, as operating on a single
+ * thread is usually faster than switching between multiple threads.
+ * **BEWARE:** the semantics of `CassFuture` when `current_thread` runtime is enabled
+ * are different. The futures will not start execution immediately when they are
+ * created, but only when some user thread awaits some future. That is, any thread
+ * that awaits a future will start the execution of all futures that are ready
+ * to be executed at that moment. This means that the only way to ensure that
+ * a future is executed is to await it. On the other hand, if one future is being
+ * awaited, then all other existing futures will be executed in the same thread
+ * until the awaited future is resolved.
+ * A notable example of code that is not compatible with `current_thread` runtime
+ * is the `callbacks` example in this codebase. This is because the main thread
+ * sets up callbacks and then blocks itself on a conditional variable. As no other
+ * thread exists that drives the futures, the callbacks will never be called
+ * and thus the program will hang.
+ *
+ * <b>Default:</b> Number of CPU cores available to the system.
  *
  * @public @memberof CassCluster
  *
