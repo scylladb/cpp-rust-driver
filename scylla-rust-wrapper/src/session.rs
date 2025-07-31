@@ -279,13 +279,18 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     let mut state = batch_from_raw.state.clone();
     let batch_exec_profile = batch_from_raw.exec_profile.clone();
 
+    let Some(connected_session) = session_guard.connected.as_ref() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let future = async move {
-        let Some(connected_session) = session_guard.connected.as_ref() else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
+        let connected_session = session_guard
+            .connected
+            .as_ref()
+            .expect("This should have been handled synchronously!");
 
         let session = &connected_session.session;
 
@@ -338,6 +343,13 @@ pub unsafe extern "C" fn cass_session_execute(
         )));
     };
 
+    let Some(connected_session) = session_guard.connected.as_ref() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
     let mut statement = statement_opt.statement.clone();
@@ -366,15 +378,13 @@ pub unsafe extern "C" fn cass_session_execute(
     let statement_exec_profile = statement_opt.exec_profile.clone();
 
     let future = async move {
-        let Some(cass_connected_session) = session_guard.connected.as_ref() else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
-        let session = &cass_connected_session.session;
+        let connected_session = session_guard
+            .connected
+            .as_ref()
+            .expect("This should have been handled synchronously!");
+        let session = &connected_session.session;
 
-        let handle = cass_connected_session
+        let handle = connected_session
             .get_or_resolve_profile_handle(statement_exec_profile.as_ref())
             .await?;
 
@@ -500,6 +510,13 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         )));
     };
 
+    let Some(connected_session) = session_guard.connected.as_ref() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let statement = cass_statement.statement.clone();
 
     CassFuture::make_raw(
@@ -511,12 +528,10 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
                 }
             };
 
-            let Some(connected_session) = session_guard.connected.as_ref() else {
-                return Err((
-                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                    "Session is not connected".msg(),
-                ));
-            };
+            let connected_session = session_guard
+                .connected
+                .as_ref()
+                .expect("This should have been handled synchronously!");
 
             let prepared = connected_session
                 .session
@@ -566,15 +581,20 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         )));
     };
 
+    let Some(connected_session) = session_guard.connected.as_ref() else {
+        return CassFuture::make_ready_raw(Err((
+            CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+            "Session is not connected".msg(),
+        )));
+    };
+
     let query = Statement::new(query_str.to_string());
 
     let fut = async move {
-        let Some(connected_session) = session_guard.connected.as_ref() else {
-            return Err((
-                CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                "Session is not connected".msg(),
-            ));
-        };
+        let connected_session = session_guard
+            .connected
+            .as_ref()
+            .expect("This should have been handled synchronously!");
 
         let prepared = connected_session
             .session
