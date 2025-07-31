@@ -163,6 +163,12 @@ impl CassFuture {
     ///       timed out (see [CassFuture::waited_result_timed]). We need to
     ///       take the ownership of the handle, and complete the work.
     pub(crate) fn waited_result(&self) -> &CassFutureResult {
+        // Happy path: if the result is already available, we can return it
+        // without locking the Mutex.
+        if let Some(result) = self.result.get() {
+            return result;
+        }
+
         let mut guard = self.state.lock().unwrap();
         loop {
             if let Some(result) = self.result.get() {
@@ -227,6 +233,12 @@ impl CassFuture {
         &self,
         timeout_duration: Duration,
     ) -> Result<&CassFutureResult, FutureError> {
+        // Happy path: if the result is already available, we can return it
+        // without locking the Mutex.
+        if let Some(result) = self.result.get() {
+            return Ok(result);
+        }
+
         let mut guard = self.state.lock().unwrap();
         let deadline = tokio::time::Instant::now()
             .checked_add(timeout_duration)
