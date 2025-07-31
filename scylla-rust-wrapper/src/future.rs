@@ -49,15 +49,28 @@ impl BoundCallback {
 
 #[derive(Default)]
 struct CassFutureState {
+    /// Optional callback to be executed when the future is resolved.
     callback: Option<BoundCallback>,
+
+    /// Join handle of the tokio task that resolves the future.
     join_handle: Option<JoinHandle<()>>,
 }
 
 pub struct CassFuture {
+    /// Mutable state of the future that requires synchronized exclusive access
+    /// in order to ensure thread safety of the future execution.
     state: Mutex<CassFutureState>,
+
+    /// Result of the future once it is resolved.
     result: OnceLock<CassFutureResult>,
+
+    /// Required as a place to allocate the stringified error message.
+    /// This is needed to support `cass_future_error_message`.
     err_string: OnceLock<String>,
+
+    /// Used to notify threads waiting for the future's result.
     wait_for_value: Condvar,
+
     #[cfg(cpp_integration_testing)]
     recording_listener: Option<Arc<crate::integration_testing::RecordingHistoryListener>>,
 }
