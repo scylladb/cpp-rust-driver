@@ -602,7 +602,7 @@ pub unsafe extern "C" fn cass_session_free(session_raw: CassOwnedSharedPtr<CassS
     };
 
     let close_fut = CassConnectedSession::close_fut(session_opt);
-    close_fut.with_waited_result(|_| ());
+    close_fut.waited_result();
 
     // We don't have to drop the session's Arc explicitly, because it has been moved
     // into the CassFuture, which is dropped here with the end of the scope.

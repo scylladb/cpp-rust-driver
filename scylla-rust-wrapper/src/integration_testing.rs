@@ -80,7 +80,7 @@ pub unsafe extern "C" fn testing_future_get_host(
         return;
     };
 
-    future.with_waited_result(|r| match r {
+    match future.waited_result() {
         Ok(CassResultValue::QueryResult(result)) => {
             // unwrap: Coordinator is none only for unit tests.
             let coordinator = result.coordinator.as_ref().unwrap();
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn testing_future_get_host(
             *host = std::ptr::null_mut();
             *host_length = 0;
         },
-    })
+    }
 }
 
 #[unsafe(no_mangle)]

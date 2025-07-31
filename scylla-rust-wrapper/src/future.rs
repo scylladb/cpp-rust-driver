@@ -147,17 +147,7 @@ impl CassFuture {
         })
     }
 
-    pub(crate) fn with_waited_result<'s, T>(
-        &'s self,
-        f: impl FnOnce(&'s CassFutureResult) -> T,
-    ) -> T
-    where
-        T: 's,
-    {
-        self.with_waited_state(|_| f(self.result.get().unwrap()))
-    }
-
-    /// Awaits the future until completion.
+    /// Awaits the future until completion and exposes the result.
     ///
     /// There are three possible cases:
     /// - result is already available -> we can return.
@@ -170,21 +160,20 @@ impl CassFuture {
     ///     - JoinHandle is consumed -> some other thread already resolved the future.
     ///       We can return.
     ///     - JoinHandle is Some -> some other thread was working on the future, but
-    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       timed out (see [CassFuture::waited_result_timed]). We need to
     ///       take the ownership of the handle, and complete the work.
-    fn with_waited_state<T>(&self, f: impl FnOnce(&mut CassFutureState) -> T) -> T {
+    pub(crate) fn waited_result(&self) -> &CassFutureResult {
         let mut guard = self.state.lock().unwrap();
         loop {
-            if self.result.get().is_some() {
+            if let Some(result) = self.result.get() {
                 // The result is already available, we can return it.
-                return f(&mut guard);
+                return result;
             }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
                 mem::drop(guard);
                 // unwrap: JoinError appears only when future either panic'ed or canceled.
                 RUNTIME.block_on(handle).unwrap();
-                guard = self.state.lock().unwrap();
             } else {
                 guard = self
                     .wait_for_value
@@ -202,19 +191,12 @@ impl CassFuture {
                     continue;
                 }
             }
-            return f(&mut guard);
+            return self.result.get().unwrap(); // FIXME: refactor this to avoid unwrap
         }
     }
 
-    fn with_waited_result_timed<T>(
-        &self,
-        f: impl FnOnce(&CassFutureResult) -> T,
-        timeout_duration: Duration,
-    ) -> Result<T, FutureError> {
-        self.with_waited_state_timed(|_| f(self.result.get().unwrap()), timeout_duration)
-    }
-
-    /// Tries to await the future with a given timeout.
+    /// Tries to await the future with a given timeout and exposes the result,
+    /// if it is available.
     ///
     /// There are three possible cases:
     /// - result is already available -> we can return.
@@ -229,22 +211,21 @@ impl CassFuture {
     ///     - JoinHandle is consumed -> some other thread already resolved the future.
     ///       We can return.
     ///     - JoinHandle is Some -> some other thread was working on the future, but
-    ///       timed out (see [CassFuture::with_waited_state_timed]). We need to
+    ///       timed out (see [CassFuture::waited_result_timed]). We need to
     ///       take the ownership of the handle, and continue the work.
-    fn with_waited_state_timed<T>(
+    fn waited_result_timed(
         &self,
-        f: impl FnOnce(&mut CassFutureState) -> T,
         timeout_duration: Duration,
-    ) -> Result<T, FutureError> {
+    ) -> Result<&CassFutureResult, FutureError> {
         let mut guard = self.state.lock().unwrap();
         let deadline = tokio::time::Instant::now()
             .checked_add(timeout_duration)
             .ok_or(FutureError::InvalidDuration)?;
 
         loop {
-            if self.result.get().is_some() {
+            if let Some(result) = self.result.get() {
                 // The result is already available, we can return it.
-                return Ok(f(&mut guard));
+                return Ok(result);
             }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
@@ -279,7 +260,6 @@ impl CassFuture {
                     // unwrap: JoinError appears only when future either panic'ed or canceled.
                     Ok(result) => result.unwrap(),
                 };
-                guard = self.state.lock().unwrap();
             } else {
                 let remaining_timeout = deadline.duration_since(tokio::time::Instant::now());
                 let (guard_result, timeout_result) = self
@@ -303,7 +283,7 @@ impl CassFuture {
                 }
             }
 
-            return Ok(f(&mut guard));
+            return Ok(self.result.get().unwrap()); // FIXME: refactor this to avoid unwrap
         }
     }
 
@@ -376,7 +356,7 @@ pub unsafe extern "C" fn cass_future_wait(future_raw: CassBorrowedSharedPtr<Cass
         return;
     };
 
-    future.with_waited_result(|_| ());
+    future.waited_result();
 }
 
 #[unsafe(no_mangle)]
@@ -390,7 +370,7 @@ pub unsafe extern "C" fn cass_future_wait_timed(
     };
 
     future
-        .with_waited_result_timed(|_| (), Duration::from_micros(timeout_us))
+        .waited_result_timed(Duration::from_micros(timeout_us))
         .is_ok() as cass_bool_t
 }
 
@@ -415,11 +395,11 @@ pub unsafe extern "C" fn cass_future_error_code(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    future.with_waited_result(|r: &CassFutureResult| match r {
+    match future.waited_result() {
         Ok(CassResultValue::QueryError(err)) => err.to_cass_error(),
         Err((err, _)) => *err,
         _ => CassError::CASS_OK,
-    })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -433,14 +413,14 @@ pub unsafe extern "C" fn cass_future_error_message(
         return;
     };
 
-    future.with_waited_result(|result: &CassFutureResult| {
-        let msg = future.err_string.get_or_init(|| match result {
-            Ok(CassResultValue::QueryError(err)) => err.msg(),
-            Err((_, s)) => s.msg(),
-            _ => "".to_string(),
-        });
-        unsafe { write_str_to_c(msg.as_str(), message, message_length) };
+    let value = future.waited_result();
+    let msg = future.err_string.get_or_init(|| match value {
+        Ok(CassResultValue::QueryError(err)) => err.msg(),
+        Err((_, s)) => s.msg(),
+        _ => "".to_string(),
     });
+
+    unsafe { write_str_to_c(msg.as_str(), message, message_length) };
 }
 
 #[unsafe(no_mangle)]
@@ -458,11 +438,12 @@ pub unsafe extern "C" fn cass_future_get_result(
     };
 
     future
-        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassResult>> {
-            match r.as_ref().ok()? {
-                CassResultValue::QueryResult(qr) => Some(Arc::clone(qr)),
-                _ => None,
-            }
+        .waited_result()
+        .as_ref()
+        .ok()
+        .and_then(|r| match r {
+            CassResultValue::QueryResult(qr) => Some(Arc::clone(qr)),
+            _ => None,
         })
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
@@ -477,11 +458,12 @@ pub unsafe extern "C" fn cass_future_get_error_result(
     };
 
     future
-        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassErrorResult>> {
-            match r.as_ref().ok()? {
-                CassResultValue::QueryError(qr) => Some(Arc::clone(qr)),
-                _ => None,
-            }
+        .waited_result()
+        .as_ref()
+        .ok()
+        .and_then(|r| match r {
+            CassResultValue::QueryError(qr) => Some(Arc::clone(qr)),
+            _ => None,
         })
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
@@ -496,11 +478,12 @@ pub unsafe extern "C" fn cass_future_get_prepared(
     };
 
     future
-        .with_waited_result(|r: &CassFutureResult| -> Option<Arc<CassPrepared>> {
-            match r.as_ref().ok()? {
-                CassResultValue::Prepared(p) => Some(Arc::clone(p)),
-                _ => None,
-            }
+        .waited_result()
+        .as_ref()
+        .ok()
+        .and_then(|r| match r {
+            CassResultValue::Prepared(p) => Some(Arc::clone(p)),
+            _ => None,
         })
         .map_or(ArcFFI::null(), ArcFFI::into_ptr)
 }
@@ -515,7 +498,7 @@ pub unsafe extern "C" fn cass_future_tracing_id(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    future.with_waited_result(|r: &CassFutureResult| match r {
+    match future.waited_result() {
         Ok(CassResultValue::QueryResult(result)) => match result.tracing_id {
             Some(id) => {
                 unsafe { *tracing_id = CassUuid::from(id) };
@@ -524,7 +507,7 @@ pub unsafe extern "C" fn cass_future_tracing_id(
             None => CassError::CASS_ERROR_LIB_NO_TRACING_ID,
         },
         _ => CassError::CASS_ERROR_LIB_INVALID_FUTURE_TYPE,
-    })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -536,13 +519,13 @@ pub unsafe extern "C" fn cass_future_coordinator(
         return RefFFI::null();
     };
 
-    future.with_waited_result(|r| match r {
+    match future.waited_result() {
         Ok(CassResultValue::QueryResult(result)) => {
             // unwrap: Coordinator is `None` only for tests.
             RefFFI::as_ptr(result.coordinator.as_ref().unwrap())
         }
         _ => RefFFI::null(),
-    })
+    }
 }
 
 #[cfg(test)]
