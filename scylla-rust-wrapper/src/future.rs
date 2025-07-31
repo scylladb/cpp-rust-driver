@@ -1,4 +1,3 @@
-use crate::RUNTIME;
 use crate::argconv::*;
 use crate::cass_error::{CassError, CassErrorMessage, CassErrorResult, ToCassError as _};
 use crate::prepared::CassPrepared;
@@ -70,6 +69,9 @@ enum FutureKind {
 }
 
 struct ResolvableFuture {
+    /// Runtime used to spawn and execute the future.
+    runtime: Arc<tokio::runtime::Runtime>,
+
     /// Mutable state of the future that requires synchronized exclusive access
     /// in order to ensure thread safety of the future execution.
     state: Mutex<CassFutureState>,
@@ -113,12 +115,14 @@ impl CassFuture {
     }
 
     pub(crate) fn make_raw(
+        runtime: Arc<tokio::runtime::Runtime>,
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
         #[cfg(cpp_integration_testing)] recording_listener: Option<
             Arc<crate::integration_testing::RecordingHistoryListener>,
         >,
     ) -> CassOwnedSharedPtr<CassFuture, CMut> {
         Self::new_from_future(
+            runtime,
             fut,
             #[cfg(cpp_integration_testing)]
             recording_listener,
@@ -127,6 +131,7 @@ impl CassFuture {
     }
 
     pub(crate) fn new_from_future(
+        runtime: Arc<tokio::runtime::Runtime>,
         fut: impl Future<Output = CassFutureResult> + Send + 'static,
         #[cfg(cpp_integration_testing)] recording_listener: Option<
             Arc<crate::integration_testing::RecordingHistoryListener>,
@@ -136,6 +141,7 @@ impl CassFuture {
             err_string: OnceLock::new(),
             kind: FutureKind::Resolvable {
                 fut: ResolvableFuture {
+                    runtime: Arc::clone(&runtime),
                     state: Mutex::new(Default::default()),
                     result: OnceLock::new(),
                     wait_for_value: Condvar::new(),
@@ -145,7 +151,7 @@ impl CassFuture {
             },
         });
         let cass_fut_clone = Arc::clone(&cass_fut);
-        let join_handle = RUNTIME.spawn(async move {
+        let join_handle = runtime.spawn(async move {
             let resolvable_fut = match cass_fut_clone.kind {
                 FutureKind::Resolvable {
                     fut: ref resolvable,
@@ -239,7 +245,7 @@ impl CassFuture {
                 // the future.
                 mem::drop(guard);
                 // unwrap: JoinError appears only when future either panic'ed or canceled.
-                RUNTIME.block_on(handle).unwrap();
+                resolvable_fut.runtime.block_on(handle).unwrap();
 
                 // Once we are here, the future is resolved.
                 // The result is guaranteed to be set.
@@ -331,7 +337,7 @@ impl CassFuture {
                         future::Either::Right((_, handle)) => Err(JoinHandleTimeout(handle)),
                     }
                 };
-                match RUNTIME.block_on(timed) {
+                match resolvable_fut.runtime.block_on(timed) {
                     Err(JoinHandleTimeout(returned_handle)) => {
                         // We timed out. so we can't finish waiting for the future.
                         // The problem is that if current thread executor is used,
@@ -677,6 +683,15 @@ mod tests {
         time::Duration,
     };
 
+    fn runtime_for_test() -> Arc<tokio::runtime::Runtime> {
+        Arc::new(
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        )
+    }
+
     // This is not a particularly smart test, but if some thread is granted access the value
     // before it is truly computed, then weird things should happen, even a segfault.
     // In the incorrect implementation that inspired this test to be written, this test
@@ -685,11 +700,13 @@ mod tests {
     #[ntest::timeout(100)]
     fn cass_future_thread_safety() {
         const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
+        let runtime = runtime_for_test();
         let fut = async {
             tokio::time::sleep(Duration::from_millis(10)).await;
             Err((CassError::CASS_OK, ERROR_MSG.into()))
         };
         let cass_fut = CassFuture::make_raw(
+            runtime,
             fut,
             #[cfg(cpp_integration_testing)]
             None,
@@ -724,11 +741,13 @@ mod tests {
     fn cass_future_resolves_after_timeout() {
         const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
         const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
+        let runtime = runtime_for_test();
         let fut = async move {
             tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS)).await;
             Err((CassError::CASS_OK, ERROR_MSG.into()))
         };
         let cass_fut = CassFuture::make_raw(
+            runtime,
             fut,
             #[cfg(cpp_integration_testing)]
             None,
@@ -764,6 +783,8 @@ mod tests {
         const ERROR_MSG: &str = "NOBODY EXPECTED SPANISH INQUISITION";
         const HUNDRED_MILLIS_IN_MICROS: u64 = 100 * 1000;
 
+        let runtime = runtime_for_test();
+
         let create_future_and_flag = || {
             unsafe extern "C" fn mark_flag_cb(
                 _fut: CassBorrowedSharedPtr<CassFuture, CMut>,
@@ -780,6 +801,7 @@ mod tests {
                 Err((CassError::CASS_OK, ERROR_MSG.into()))
             };
             let cass_fut = CassFuture::make_raw(
+                Arc::clone(&runtime),
                 fut,
                 #[cfg(cpp_integration_testing)]
                 None,
@@ -855,7 +877,7 @@ mod tests {
         {
             let (cass_fut, flag_ptr) = create_future_and_flag();
 
-            RUNTIME.block_on(async {
+            runtime.block_on(async {
                 tokio::time::sleep(Duration::from_micros(HUNDRED_MILLIS_IN_MICROS + 10 * 1000))
                     .await
             });

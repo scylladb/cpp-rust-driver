@@ -31,6 +31,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub(crate) struct CassConnectedSession {
+    runtime: Arc<tokio::runtime::Runtime>,
     session: Session,
     exec_profile_map: HashMap<ExecProfileName, ExecutionProfileHandle>,
 }
@@ -78,6 +79,7 @@ impl CassConnectedSession {
         let cluster_client_id = cluster.get_client_id();
 
         let fut = Self::connect_fut(
+            Arc::clone(cluster.get_runtime()),
             session,
             session_builder,
             cluster_client_id,
@@ -87,6 +89,7 @@ impl CassConnectedSession {
         );
 
         CassFuture::make_raw(
+            Arc::clone(cluster.get_runtime()),
             fut,
             #[cfg(cpp_integration_testing)]
             None,
@@ -94,6 +97,7 @@ impl CassConnectedSession {
     }
 
     async fn connect_fut(
+        runtime: Arc<tokio::runtime::Runtime>,
         session: Arc<CassSession>,
         session_builder_fut: impl Future<Output = SessionBuilder>,
         cluster_client_id: Option<uuid::Uuid>,
@@ -152,6 +156,7 @@ impl CassConnectedSession {
             .map_err(|err| (err.to_cass_error(), err.msg()))?;
 
         session_guard.connected = Some(CassConnectedSession {
+            runtime,
             session,
             exec_profile_map,
         });
@@ -159,13 +164,32 @@ impl CassConnectedSession {
     }
 
     fn close_fut(session_opt: Arc<RwLock<CassSessionInner>>) -> Arc<CassFuture> {
+        let runtime = {
+            let Ok(session_guard) = session_opt.try_read() else {
+                return CassFuture::new_ready(Err((
+                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                    "Still connecting or already closing".msg(),
+                )));
+            };
+
+            let Some(connected_session) = session_guard.connected.as_ref() else {
+                return CassFuture::new_ready(Err((
+                    CassError::CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                    "Session is not connected".msg(),
+                )));
+            };
+
+            Arc::clone(&connected_session.runtime)
+        };
+
         CassFuture::new_from_future(
+            runtime,
             async move {
                 let mut session_guard = session_opt.write().await;
                 if session_guard.connected.is_none() {
                     return Err((
                         CassError::CASS_ERROR_LIB_UNABLE_TO_CLOSE,
-                        "Already closing or closed".msg(),
+                        "Session is not connected".msg(),
                     ));
                 }
 
@@ -286,6 +310,8 @@ pub unsafe extern "C" fn cass_session_execute_batch(
         )));
     };
 
+    let runtime = Arc::clone(&connected_session.runtime);
+
     let future = async move {
         let connected_session = session_guard
             .connected
@@ -315,6 +341,7 @@ pub unsafe extern "C" fn cass_session_execute_batch(
     };
 
     CassFuture::make_raw(
+        runtime,
         future,
         #[cfg(cpp_integration_testing)]
         None,
@@ -349,6 +376,8 @@ pub unsafe extern "C" fn cass_session_execute(
             "Session is not connected".msg(),
         )));
     };
+
+    let runtime = Arc::clone(&connected_session.runtime);
 
     let paging_state = statement_opt.paging_state.clone();
     let paging_enabled = statement_opt.paging_enabled;
@@ -483,6 +512,7 @@ pub unsafe extern "C" fn cass_session_execute(
     };
 
     CassFuture::make_raw(
+        runtime,
         future,
         #[cfg(cpp_integration_testing)]
         recording_listener,
@@ -517,9 +547,12 @@ pub unsafe extern "C" fn cass_session_prepare_from_existing(
         )));
     };
 
+    let runtime = Arc::clone(&connected_session.runtime);
+
     let statement = cass_statement.statement.clone();
 
     CassFuture::make_raw(
+        runtime,
         async move {
             let query = match &statement {
                 BoundStatement::Simple(q) => q,
@@ -588,6 +621,8 @@ pub unsafe extern "C" fn cass_session_prepare_n(
         )));
     };
 
+    let runtime = Arc::clone(&connected_session.runtime);
+
     let query = Statement::new(query_str.to_string());
 
     let fut = async move {
@@ -608,6 +643,7 @@ pub unsafe extern "C" fn cass_session_prepare_n(
     };
 
     CassFuture::make_raw(
+        runtime,
         fut,
         #[cfg(cpp_integration_testing)]
         None,

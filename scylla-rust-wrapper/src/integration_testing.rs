@@ -280,14 +280,27 @@ pub unsafe extern "C" fn testing_future_get_attempted_hosts(
     unsafe { CString::from_vec_unchecked(concatenated_hosts.into_bytes()) }.into_raw()
 }
 
+#[cfg(test)]
+fn runtime_for_test() -> Arc<tokio::runtime::Runtime> {
+    Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap(),
+    )
+}
+
 /// Ensures that the `testing_future_get_attempted_hosts` function
 /// behaves correctly, i.e., it returns a list of attempted hosts as a concatenated string.
 #[test]
 fn test_future_get_attempted_hosts() {
     use scylla::observability::history::HistoryListener as _;
 
+    let runtime = runtime_for_test();
+
     let listener = Arc::new(RecordingHistoryListener::new());
-    let future = CassFuture::new_from_future(std::future::pending(), Some(listener.clone()));
+    let future =
+        CassFuture::new_from_future(runtime, std::future::pending(), Some(listener.clone()));
 
     fn assert_attempted_hosts_eq(future: &Arc<CassFuture>, hosts: &[String]) {
         let hosts_str = unsafe { testing_future_get_attempted_hosts(ArcFFI::as_ptr(future)) };
