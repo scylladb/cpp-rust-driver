@@ -9,6 +9,7 @@ use futures::future;
 use std::future::Future;
 use std::mem;
 use std::os::raw::c_void;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -57,7 +58,18 @@ struct CassFutureState {
     join_handle: Option<JoinHandle<()>>,
 }
 
-pub struct CassFuture {
+enum FutureKind {
+    /// Future that must be resolved by the tokio runtime.
+    Resolvable { fut: ResolvableFuture },
+
+    /// Future that is immediately ready with the result.
+    Immediate {
+        res: CassFutureResult,
+        callback_set: AtomicBool,
+    },
+}
+
+struct ResolvableFuture {
     /// Mutable state of the future that requires synchronized exclusive access
     /// in order to ensure thread safety of the future execution.
     state: Mutex<CassFutureState>,
@@ -65,15 +77,20 @@ pub struct CassFuture {
     /// Result of the future once it is resolved.
     result: OnceLock<CassFutureResult>,
 
-    /// Required as a place to allocate the stringified error message.
-    /// This is needed to support `cass_future_error_message`.
-    err_string: OnceLock<String>,
-
     /// Used to notify threads waiting for the future's result.
     wait_for_value: Condvar,
 
     #[cfg(cpp_integration_testing)]
     recording_listener: Option<Arc<crate::integration_testing::RecordingHistoryListener>>,
+}
+
+pub struct CassFuture {
+    /// One of the possible implementations of the future.
+    kind: FutureKind,
+
+    /// Required as a place to allocate the stringified error message.
+    /// This is needed to support `cass_future_error_message`.
+    err_string: OnceLock<String>,
 }
 
 impl FFI for CassFuture {
@@ -116,19 +133,30 @@ impl CassFuture {
         >,
     ) -> Arc<CassFuture> {
         let cass_fut = Arc::new(CassFuture {
-            state: Mutex::new(Default::default()),
-            result: OnceLock::new(),
             err_string: OnceLock::new(),
-            wait_for_value: Condvar::new(),
-            #[cfg(cpp_integration_testing)]
-            recording_listener,
+            kind: FutureKind::Resolvable {
+                fut: ResolvableFuture {
+                    state: Mutex::new(Default::default()),
+                    result: OnceLock::new(),
+                    wait_for_value: Condvar::new(),
+                    #[cfg(cpp_integration_testing)]
+                    recording_listener,
+                },
+            },
         });
         let cass_fut_clone = Arc::clone(&cass_fut);
         let join_handle = RUNTIME.spawn(async move {
+            let resolvable_fut = match cass_fut_clone.kind {
+                FutureKind::Resolvable {
+                    fut: ref resolvable,
+                } => resolvable,
+                _ => unreachable!("CassFuture has been created as Resolvable"),
+            };
+
             let r = fut.await;
             let maybe_cb = {
-                let guard = cass_fut_clone.state.lock().unwrap();
-                cass_fut_clone
+                let guard = resolvable_fut.state.lock().unwrap();
+                resolvable_fut
                     .result
                     .set(r)
                     .expect("Tried to resolve future result twice!");
@@ -144,23 +172,28 @@ impl CassFuture {
                 bound_cb.invoke(fut_ptr);
             }
 
-            cass_fut_clone.wait_for_value.notify_all();
+            resolvable_fut.wait_for_value.notify_all();
         });
         {
-            let mut lock = cass_fut.state.lock().unwrap();
+            let resolvable_fut = match cass_fut.kind {
+                FutureKind::Resolvable {
+                    fut: ref resolvable,
+                } => resolvable,
+                _ => unreachable!("CassFuture has been created as Resolvable"),
+            };
+            let mut lock = resolvable_fut.state.lock().unwrap();
             lock.join_handle = Some(join_handle);
         }
         cass_fut
     }
 
-    pub(crate) fn new_ready(r: CassFutureResult) -> Arc<Self> {
+    pub(crate) fn new_ready(res: CassFutureResult) -> Arc<Self> {
         Arc::new(CassFuture {
-            state: Mutex::new(CassFutureState::default()),
-            result: OnceLock::from(r),
+            kind: FutureKind::Immediate {
+                res,
+                callback_set: AtomicBool::new(false),
+            },
             err_string: OnceLock::new(),
-            wait_for_value: Condvar::new(),
-            #[cfg(cpp_integration_testing)]
-            recording_listener: None,
         })
     }
 
@@ -180,15 +213,23 @@ impl CassFuture {
     ///       timed out (see [CassFuture::waited_result_timed]). We need to
     ///       take the ownership of the handle, and complete the work.
     pub(crate) fn waited_result(&self) -> &CassFutureResult {
+        let resolvable_fut = match self.kind {
+            FutureKind::Resolvable {
+                fut: ref resolvable_fut,
+            } => resolvable_fut,
+            // The future is immediately ready, so we can return the result.
+            FutureKind::Immediate { ref res, .. } => return res,
+        };
+
         // Happy path: if the result is already available, we can return it
         // without locking the Mutex.
-        if let Some(result) = self.result.get() {
+        if let Some(result) = resolvable_fut.result.get() {
             return result;
         }
 
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = resolvable_fut.state.lock().unwrap();
         loop {
-            if let Some(result) = self.result.get() {
+            if let Some(result) = resolvable_fut.result.get() {
                 // The result is already available, we can return it.
                 return result;
             }
@@ -202,11 +243,11 @@ impl CassFuture {
 
                 // Once we are here, the future is resolved.
                 // The result is guaranteed to be set.
-                return self.result.get().unwrap();
+                return resolvable_fut.result.get().unwrap();
             } else {
                 // Someone has taken the handle, so we need to wait for them to complete
                 // the future. Once they finish or timeout, we will be notified.
-                guard = self
+                guard = resolvable_fut
                     .wait_for_value
                     .wait_while(guard, |state| {
                         // There are two cases when we should wake up:
@@ -220,7 +261,7 @@ impl CassFuture {
                         //    no one else will complete the future, so it's our responsibility.
                         //    In the next iteration we will land in the branch with `block_on`
                         //    and complete the future.
-                        self.result.get().is_none() && state.join_handle.is_none()
+                        resolvable_fut.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
@@ -250,19 +291,27 @@ impl CassFuture {
         &self,
         timeout_duration: Duration,
     ) -> Result<&CassFutureResult, FutureError> {
+        let resolvable_fut = match self.kind {
+            FutureKind::Resolvable {
+                fut: ref resolvable_fut,
+            } => resolvable_fut,
+            // The future is immediately ready, so we can return the result.
+            FutureKind::Immediate { ref res, .. } => return Ok(res),
+        };
+
         // Happy path: if the result is already available, we can return it
         // without locking the Mutex.
-        if let Some(result) = self.result.get() {
+        if let Some(result) = resolvable_fut.result.get() {
             return Ok(result);
         }
 
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = resolvable_fut.state.lock().unwrap();
         let deadline = tokio::time::Instant::now()
             .checked_add(timeout_duration)
             .ok_or(FutureError::InvalidDuration)?;
 
         loop {
-            if let Some(result) = self.result.get() {
+            if let Some(result) = resolvable_fut.result.get() {
                 // The result is already available, we can return it.
                 return Ok(result);
             }
@@ -293,9 +342,9 @@ impl CassFuture {
                         //  - Signal one thread, so that if all other consumers are
                         //    already waiting on condvar, one of them wakes up and
                         //    picks up the work.
-                        guard = self.state.lock().unwrap();
+                        guard = resolvable_fut.state.lock().unwrap();
                         guard.join_handle = Some(returned_handle);
-                        self.wait_for_value.notify_one();
+                        resolvable_fut.wait_for_value.notify_one();
                         return Err(FutureError::TimeoutError);
                     }
                     // unwrap: JoinError appears only when future either panic'ed or canceled.
@@ -304,14 +353,14 @@ impl CassFuture {
 
                         // Once we are here, the future is resolved.
                         // The result is guaranteed to be set.
-                        return Ok(self.result.get().unwrap());
+                        return Ok(resolvable_fut.result.get().unwrap());
                     }
                 };
             } else {
                 // Someone has taken the handle, so we need to wait for them to complete
                 // the future. Once they finish or timeout, we will be notified.
                 let remaining_timeout = deadline.duration_since(tokio::time::Instant::now());
-                let (guard_result, timeout_result) = self
+                let (guard_result, timeout_result) = resolvable_fut
                     .wait_for_value
                     .wait_timeout_while(guard, remaining_timeout, |state| {
                         // There are two cases when we should wake up:
@@ -325,7 +374,7 @@ impl CassFuture {
                         //    no one else will complete the future, so it's our responsibility.
                         //    In the next iteration we will land in the branch with `block_on`
                         //    and attempt to complete the future.
-                        self.result.get().is_none() && state.join_handle.is_none()
+                        resolvable_fut.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
@@ -338,7 +387,26 @@ impl CassFuture {
         }
     }
 
-    pub(crate) unsafe fn set_callback(
+    pub(crate) fn into_raw(self: Arc<Self>) -> CassOwnedSharedPtr<Self, CMut> {
+        ArcFFI::into_ptr(self)
+    }
+
+    #[cfg(cpp_integration_testing)]
+    pub(crate) fn attempted_hosts(&self) -> Vec<std::net::SocketAddr> {
+        if let FutureKind::Resolvable {
+            fut: ref resolvable_fut,
+        } = self.kind
+            && let Some(listener) = &resolvable_fut.recording_listener
+        {
+            listener.get_attempted_hosts()
+        } else {
+            vec![]
+        }
+    }
+}
+
+impl ResolvableFuture {
+    unsafe fn set_callback(
         &self,
         self_ptr: CassBorrowedSharedPtr<CassFuture, CMut>,
         cb: NonNullFutureCallback,
@@ -368,19 +436,6 @@ impl CassFuture {
         }
         CassError::CASS_OK
     }
-
-    pub(crate) fn into_raw(self: Arc<Self>) -> CassOwnedSharedPtr<Self, CMut> {
-        ArcFFI::into_ptr(self)
-    }
-
-    #[cfg(cpp_integration_testing)]
-    pub(crate) fn attempted_hosts(&self) -> Vec<std::net::SocketAddr> {
-        if let Some(listener) = &self.recording_listener {
-            listener.get_attempted_hosts()
-        } else {
-            vec![]
-        }
-    }
 }
 
 // Do not remove; this asserts that `CassFuture` implements Send + Sync,
@@ -405,7 +460,26 @@ pub unsafe extern "C" fn cass_future_set_callback(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    unsafe { future.set_callback(future_raw.borrow(), callback, data) }
+    match future.kind {
+        FutureKind::Resolvable {
+            fut: ref resolvable,
+        } => {
+            // Safety: `callback` is a valid pointer to a function that matches the signature.
+            unsafe { resolvable.set_callback(future_raw.borrow(), callback, data) }
+        }
+        FutureKind::Immediate {
+            ref callback_set, ..
+        } => {
+            if callback_set.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                // Another callback has been already set.
+                return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
+            }
+
+            let bound_cb = BoundCallback { cb: callback, data };
+            bound_cb.invoke(future_raw.borrow());
+            CassError::CASS_OK
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -442,7 +516,12 @@ pub unsafe extern "C" fn cass_future_ready(
         return cass_false;
     };
 
-    future.result.get().is_some() as cass_bool_t
+    (match future.kind {
+        FutureKind::Resolvable {
+            fut: ref resolvable_fut,
+        } => resolvable_fut.result.get().is_some(),
+        FutureKind::Immediate { .. } => true,
+    }) as cass_bool_t
 }
 
 #[unsafe(no_mangle)]
