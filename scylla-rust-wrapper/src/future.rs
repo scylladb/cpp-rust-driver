@@ -403,10 +403,7 @@ pub unsafe extern "C" fn cass_future_ready(
         return cass_false;
     };
 
-    match future.result.get() {
-        None => cass_false,
-        Some(_) => cass_true,
-    }
+    future.result.get().is_some() as cass_bool_t
 }
 
 #[unsafe(no_mangle)]
