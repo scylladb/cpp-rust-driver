@@ -49,7 +49,6 @@ impl BoundCallback {
 
 #[derive(Default)]
 struct CassFutureState {
-    err_string: Option<String>,
     callback: Option<BoundCallback>,
     join_handle: Option<JoinHandle<()>>,
 }
@@ -57,6 +56,7 @@ struct CassFutureState {
 pub struct CassFuture {
     state: Mutex<CassFutureState>,
     result: OnceLock<CassFutureResult>,
+    err_string: OnceLock<String>,
     wait_for_value: Condvar,
     #[cfg(cpp_integration_testing)]
     recording_listener: Option<Arc<crate::integration_testing::RecordingHistoryListener>>,
@@ -104,6 +104,7 @@ impl CassFuture {
         let cass_fut = Arc::new(CassFuture {
             state: Mutex::new(Default::default()),
             result: OnceLock::new(),
+            err_string: OnceLock::new(),
             wait_for_value: Condvar::new(),
             #[cfg(cpp_integration_testing)]
             recording_listener,
@@ -139,6 +140,7 @@ impl CassFuture {
         Arc::new(CassFuture {
             state: Mutex::new(CassFutureState::default()),
             result: OnceLock::from(r),
+            err_string: OnceLock::new(),
             wait_for_value: Condvar::new(),
             #[cfg(cpp_integration_testing)]
             recording_listener: None,
@@ -434,15 +436,12 @@ pub unsafe extern "C" fn cass_future_error_message(
         return;
     };
 
-    future.with_waited_state(|state: &mut CassFutureState| {
-        let value = future.result.get();
-        let msg = state
-            .err_string
-            .get_or_insert_with(|| match value.as_ref().unwrap() {
-                Ok(CassResultValue::QueryError(err)) => err.msg(),
-                Err((_, s)) => s.msg(),
-                _ => "".to_string(),
-            });
+    future.with_waited_result(|result: &CassFutureResult| {
+        let msg = future.err_string.get_or_init(|| match result {
+            Ok(CassResultValue::QueryError(err)) => err.msg(),
+            Err((_, s)) => s.msg(),
+            _ => "".to_string(),
+        });
         unsafe { write_str_to_c(msg.as_str(), message, message_length) };
     });
 }
