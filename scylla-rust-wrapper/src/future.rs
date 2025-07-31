@@ -171,27 +171,37 @@ impl CassFuture {
             }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
+                // No one else has taken the handle, so we are responsible for completing
+                // the future.
                 mem::drop(guard);
                 // unwrap: JoinError appears only when future either panic'ed or canceled.
                 RUNTIME.block_on(handle).unwrap();
+
+                // Once we are here, the future is resolved.
+                // The result is guaranteed to be set.
+                return self.result.get().unwrap();
             } else {
+                // Someone has taken the handle, so we need to wait for them to complete
+                // the future. Once they finish or timeout, we will be notified.
                 guard = self
                     .wait_for_value
                     .wait_while(guard, |state| {
+                        // There are two cases when we should wake up:
+                        // 1. The result is already available, so we can return it.
+                        //    In this case, we will see it available in the next iteration
+                        //    of the loop, so we will return it.
+                        // 2. `join_handle` was None, and now it's Some - some other thread must
+                        //    have timed out and returned the handle. We need to take over the work
+                        //    of completing the future, because the result is still not available
+                        //    and we may be using `current_thread` tokio executor, in which case
+                        //    no one else will complete the future, so it's our responsibility.
+                        //    In the next iteration we will land in the branch with `block_on`
+                        //    and complete the future.
                         self.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
                     .unwrap();
-                if self.result.get().is_none() && guard.join_handle.is_some() {
-                    // join_handle was none, and now it isn't - some other thread must
-                    // have timed out and returned the handle. We need to take over
-                    // the work of completing the future, because the result is still not available.
-                    // To do that, we go into another iteration so that we land in the branch
-                    // with `block_on`.
-                    continue;
-                }
             }
-            return self.result.get().unwrap(); // FIXME: refactor this to avoid unwrap
         }
     }
 
@@ -229,6 +239,8 @@ impl CassFuture {
             }
             let handle = guard.join_handle.take();
             if let Some(handle) = handle {
+                // No one else has taken the handle, so we are responsible for completing
+                // the future.
                 mem::drop(guard);
                 // Need to wrap it with async{} block, so the timeout is lazily executed inside the runtime.
                 // See mention about panics: https://docs.rs/tokio/latest/tokio/time/fn.timeout.html.
@@ -258,13 +270,32 @@ impl CassFuture {
                         return Err(FutureError::TimeoutError);
                     }
                     // unwrap: JoinError appears only when future either panic'ed or canceled.
-                    Ok(result) => result.unwrap(),
+                    Ok(result) => {
+                        result.unwrap();
+
+                        // Once we are here, the future is resolved.
+                        // The result is guaranteed to be set.
+                        return Ok(self.result.get().unwrap());
+                    }
                 };
             } else {
+                // Someone has taken the handle, so we need to wait for them to complete
+                // the future. Once they finish or timeout, we will be notified.
                 let remaining_timeout = deadline.duration_since(tokio::time::Instant::now());
                 let (guard_result, timeout_result) = self
                     .wait_for_value
                     .wait_timeout_while(guard, remaining_timeout, |state| {
+                        // There are two cases when we should wake up:
+                        // 1. The result is already available, so we can return it.
+                        //    In this case, we will see it available in the next iteration
+                        //    of the loop, so we will return it.
+                        // 2. `join_handle` was None, and now it's Some - some other thread must
+                        //    have timed out and returned the handle. We need to take over the work
+                        //    of completing the future, because the result is still not available
+                        //    and we may be using `current_thread` tokio executor, in which case
+                        //    no one else will complete the future, so it's our responsibility.
+                        //    In the next iteration we will land in the branch with `block_on`
+                        //    and attempt to complete the future.
                         self.result.get().is_none() && state.join_handle.is_none()
                     })
                     // unwrap: Error appears only when mutex is poisoned.
@@ -274,16 +305,7 @@ impl CassFuture {
                 }
 
                 guard = guard_result;
-                if self.result.get().is_none() && guard.join_handle.is_some() {
-                    // join_handle was none, and now it isn't - some other thread must
-                    // have timed out and returned the handle. We need to take over
-                    // the work of completing the future. To do that, we go into
-                    // another iteration so that we land in the branch with block_on.
-                    continue;
-                }
             }
-
-            return Ok(self.result.get().unwrap()); // FIXME: refactor this to avoid unwrap
         }
     }
 
