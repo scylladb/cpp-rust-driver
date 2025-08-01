@@ -305,24 +305,3 @@ with other drivers. Such features can be found (and requested) on our [GH].
 [`CassSession`]: http://datastax.github.io/cpp-driver/api/struct.CassSession
 [post]: http://www.datastax.com/dev/blog/4-simple-rules-when-using-the-datastax-drivers-for-cassandra
 [GH]: https://github.com/scylladb/cpp-driver/issues
-
-```{eval-rst}
-.. toctree::
-  :hidden:
-  :glob:
-
-
-  basics/*
-  building/*
-  client_configuration/*
-  configuration/*
-  execution_profiles/*
-  faq/*
-  installation/*
-  logging/*
-  metrics/*
-  scylladb_specific/*
-  security/*
-  testing/*
-  tracing/*
-```
