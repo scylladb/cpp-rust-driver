@@ -202,5 +202,5 @@ expensive or long-running future callbacks are used (via
   :hidden:
   :glob:
 
-  retry_policies/*
+  retry_policies
 ```
