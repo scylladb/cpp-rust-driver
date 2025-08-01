@@ -203,6 +203,6 @@ expensive or long-running future callbacks are used (via
   :glob:
 
   load_balancing
-  retry_policies/*
+  retry_policies
   speculative_execution
 ```
