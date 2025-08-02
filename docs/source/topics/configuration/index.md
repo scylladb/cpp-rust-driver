@@ -111,8 +111,8 @@ attempt.
   :hidden:
   :glob:
 
-  load_balancing
-  retry_policies
-  speculative_execution
-  performance_tips
+  load-balancing
+  retry-policies
+  speculative-execution
+  performance-tips
 ```
