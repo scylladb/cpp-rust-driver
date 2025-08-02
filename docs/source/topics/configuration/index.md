@@ -104,11 +104,7 @@ delay.
 The constant reconnection policy is a fixed delay for each reconnection
 attempt.
 
-[`allow_remote_dcs_for_local_cl`]: http://datastax.github.io/cpp-driver/api/struct.CassCluster#1a46b9816129aaa5ab61a1363489dccfd0
-[`OPTIONS`]: https://github.com/apache/cassandra/blob/cassandra-3.0/doc/native_protocol_v3.spec
-[token-aware]: http://datastax.github.io/cpp-driver/topics/configuration#latency-aware-routing
-[latency-aware]: http://datastax.github.io/cpp-driver/topics/configuration#token-aware-routing
-[paging]: http://datastax.github.io/cpp-driver/topics/basics/handling_results#paging
+[`OPTIONS`]: https://github.com/apache/cassandra/blob/a39f3b066f010d465a1be1038d5e06f1e31b0391/doc/native_protocol_v4.spec#L330
 
 ```{eval-rst}
 .. toctree::

@@ -47,4 +47,4 @@ sudo apt-get install -y ./scylla-cpp-driver-dev_<VERSION>.deb ./scylla-cpp-drive
 
 If pre-built packages are not available for your platform or architecture you
 will need to build the driver from source. Directions for building and
-installing the ScyllaDB C/C++ Driver can be found [here](../building/).
+installing the ScyllaDB C/C++ Driver can be found [here](building.md).

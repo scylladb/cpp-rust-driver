@@ -9,14 +9,14 @@ ScyllaDB CPP-Rust Driver
 
     index
     api/index
-    topics/README
-    topics/installation/README
-    topics/building/README
-    topics/testing/README
-    topics/basics/README
-    topics/configuration/README
-    topics/client_configuration/README
-    topics/execution_profiles/README
-    topics/security/README
-    topics/observability/README
-    topics/scylladb_specific/README
+    topics/index
+    topics/installation
+    topics/building
+    topics/testing/index
+    topics/basics/index
+    topics/configuration/index
+    topics/client_configuration
+    topics/execution_profiles
+    topics/security/index
+    topics/observability/index
+    topics/scylladb_specific
