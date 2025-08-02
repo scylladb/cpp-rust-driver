@@ -106,17 +106,17 @@
   :glob:
 
   batches
-  binding_parameters
-  client_side_timestamps
+  binding-parameters
+  client-side-timestamps
   consistency
-  data_types
-  date_and_time
+  data-types
+  date-and-time
   futures
-  handling_results
+  handling-results
   keyspaces
-  prepared_statements
-  schema_metadata
+  prepared-statements
+  schema-metadata
   tuples
-  user_defined_types
+  user-defined-types
   uuids
 ```

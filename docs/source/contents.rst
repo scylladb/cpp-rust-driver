@@ -15,8 +15,8 @@ ScyllaDB CPP-Rust Driver
     topics/testing/index
     topics/basics/index
     topics/configuration/index
-    topics/client_configuration
-    topics/execution_profiles
+    topics/client-configuration
+    topics/execution-profiles
     topics/security/index
     topics/observability/index
-    topics/scylladb_specific
+    topics/scylladb-specific
