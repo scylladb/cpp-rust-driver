@@ -10,6 +10,8 @@ Some notes on this guide:
 
 SSL can be rather cumbersome to setup; if assistance is required please use the [mailing list](https://groups.google.com/a/lists.datastax.com/forum/#!forum/cpp-driver-user).
 
+## Prerequisites
+
 ### Generating the Cassandra Public and Private Keys
 
 The most secure method of setting up SSL is to verify that DNS or IP address used to connect to the server matches identity information found in the SSL certificate. This helps to prevent man-in-the-middle attacks. Cassandra uses IP addresses internally so those can be used directly for verification or a domain name can be used via reverse DNS (PTR record). That means that the IP address or domain name of the Cassandra server where the certficate is installed needs to be present in either the certficate's common name (CN) or one of its subject alternative names (SANs). It's possible to create the certficate without either, but then it will not be possible to verify the server's identity. Although this is not as secure, it eases the deployment of SSL by allowing the same certficate to be deployed across the entire Cassandra cluster.
