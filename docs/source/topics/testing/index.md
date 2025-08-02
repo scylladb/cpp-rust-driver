@@ -122,6 +122,6 @@ Here are some of the items being scheduled for future enhancements.
 .. toctree::
   :hidden:
   :glob:
-  
-  ccm/*
+
+  ccm
 ```

@@ -142,6 +142,6 @@ int main() {
 .. toctree::
   :hidden:
   :glob:
-   
-  ssl/*
+
+  ssl
 ```
