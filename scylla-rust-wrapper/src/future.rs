@@ -552,13 +552,13 @@ pub unsafe extern "C" fn cass_future_error_message(
     };
 
     let value = future.waited_result();
-    let msg = future.err_string.get_or_init(|| match value {
-        Ok(CassResultValue::QueryError(err)) => err.msg(),
-        Err((_, s)) => s.msg(),
-        _ => "".to_string(),
-    });
+    let msg = match value {
+        Ok(CassResultValue::QueryError(err)) => future.err_string.get_or_init(|| err.msg()),
+        Err((_, s)) => s,
+        _ => "",
+    };
 
-    unsafe { write_str_to_c(msg.as_str(), message, message_length) };
+    unsafe { write_str_to_c(msg, message, message_length) };
 }
 
 #[unsafe(no_mangle)]
