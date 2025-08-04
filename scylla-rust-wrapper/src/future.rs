@@ -344,20 +344,25 @@ impl CassFuture {
         cb: NonNullFutureCallback,
         data: *mut c_void,
     ) -> CassError {
-        let mut lock = self.state.lock().unwrap();
-        if lock.callback.is_some() {
-            // Another callback has been already set
-            return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
-        }
         let bound_cb = BoundCallback { cb, data };
 
-        // Store the callback, so that no other callback can be set from now on.
-        // Rationale: only one callback can be set for the whole lifetime of a future.
-        lock.callback = Some(bound_cb);
+        // Check if the callback is already set (in such case we must error out).
+        // If it is not set, we store the callback in the state, so that no different
+        // callback can be set.
+        {
+            let mut lock = self.state.lock().unwrap();
+            if lock.callback.is_some() {
+                // Another callback has been already set
+                return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
+            }
+
+            // Store the callback, so that no other callback can be set from now on.
+            // Rationale: only one callback can be set for the whole lifetime of a future.
+            lock.callback = Some(bound_cb);
+        }
 
         if self.result.get().is_some() {
             // The value is already available, we need to call the callback ourselves
-            mem::drop(lock);
             bound_cb.invoke(self_ptr);
             return CassError::CASS_OK;
         }
