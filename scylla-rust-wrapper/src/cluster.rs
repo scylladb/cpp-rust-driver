@@ -81,7 +81,6 @@ const DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE: ShardAwarePortRange =
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Clone)]
 pub struct CassCluster {
     runtime: Arc<tokio::runtime::Runtime>,
 
