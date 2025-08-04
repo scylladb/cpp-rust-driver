@@ -30,6 +30,7 @@ pub type CassFutureCallback = Option<NonNullFutureCallback>;
 type NonNullFutureCallback =
     unsafe extern "C" fn(future: CassBorrowedSharedPtr<CassFuture, CMut>, data: *mut c_void);
 
+#[derive(Clone, Copy)]
 struct BoundCallback {
     cb: NonNullFutureCallback,
     data: *mut c_void,
@@ -126,13 +127,16 @@ impl CassFuture {
         let join_handle = RUNTIME.spawn(async move {
             let r = fut.await;
             let maybe_cb = {
-                let mut guard = cass_fut_clone.state.lock().unwrap();
+                let guard = cass_fut_clone.state.lock().unwrap();
                 cass_fut_clone
                     .result
                     .set(r)
                     .expect("Tried to resolve future result twice!");
-                // Take the callback and call it after releasing the lock
-                guard.callback.take()
+
+                // Get the callback and call it after releasing the lock.
+                // Do not take the callback out, as it prevents other callbacks
+                // from being set afterwards, which is needed to match CPP Driver's semantics.
+                guard.callback
             };
             if let Some(bound_cb) = maybe_cb {
                 let fut_ptr = ArcFFI::as_ptr::<CMut>(&cass_fut_clone);
@@ -346,14 +350,17 @@ impl CassFuture {
             return CassError::CASS_ERROR_LIB_CALLBACK_ALREADY_SET;
         }
         let bound_cb = BoundCallback { cb, data };
+
+        // Store the callback, so that no other callback can be set from now on.
+        // Rationale: only one callback can be set for the whole lifetime of a future.
+        lock.callback = Some(bound_cb);
+
         if self.result.get().is_some() {
             // The value is already available, we need to call the callback ourselves
             mem::drop(lock);
             bound_cb.invoke(self_ptr);
             return CassError::CASS_OK;
         }
-        // Store the callback
-        lock.callback = Some(bound_cb);
         CassError::CASS_OK
     }
 
