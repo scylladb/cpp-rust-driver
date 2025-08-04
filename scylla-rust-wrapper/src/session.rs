@@ -79,7 +79,7 @@ impl CassConnectedSession {
         let cluster_client_id = cluster.get_client_id();
 
         let fut = Self::connect_fut(
-            Arc::clone(cluster.get_runtime()),
+            cluster.get_runtime(),
             session,
             session_builder,
             cluster_client_id,
@@ -89,7 +89,7 @@ impl CassConnectedSession {
         );
 
         CassFuture::make_raw(
-            Arc::clone(cluster.get_runtime()),
+            cluster.get_runtime(),
             fut,
             #[cfg(cpp_integration_testing)]
             None,

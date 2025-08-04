@@ -7,6 +7,7 @@ use crate::load_balancing::{
     CassHostFilter, DcRestriction, LoadBalancingConfig, LoadBalancingKind,
 };
 use crate::retry_policy::CassRetryPolicy;
+use crate::runtime::RUNTIMES;
 use crate::ssl::CassSsl;
 use crate::timestamp_generator::CassTimestampGen;
 use crate::types::*;
@@ -82,7 +83,11 @@ const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CassCluster {
-    runtime: Arc<tokio::runtime::Runtime>,
+    /// Number of threads in the tokio runtime thread pool.
+    ///
+    /// Specified with `cass_cluster_set_num_threads_io`.
+    /// If not set, the default tokio runtime is used.
+    num_threads_io: Option<usize>,
 
     session_builder: SessionBuilder,
     default_execution_profile_builder: ExecutionProfileBuilder,
@@ -101,8 +106,20 @@ pub struct CassCluster {
 }
 
 impl CassCluster {
-    pub(crate) fn get_runtime(&self) -> &Arc<tokio::runtime::Runtime> {
-        &self.runtime
+    /// Gets the runtime that has been set for the cluster.
+    /// If no runtime has been set yet, it creates a default runtime
+    /// and makes it cached in the global `Runtimes` instance.
+    pub(crate) fn get_runtime(&self) -> Arc<tokio::runtime::Runtime> {
+        let mut runtimes = RUNTIMES.lock().unwrap();
+
+        if let Some(num_threads_io) = self.num_threads_io {
+            // If the number of threads is set, we create a runtime with that number of threads.
+            runtimes.n_thread_runtime(num_threads_io)
+        } else {
+            // Otherwise, we use the default runtime.
+            runtimes.default_runtime()
+        }
+        .unwrap_or_else(|err| panic!("Failed to create an async runtime: {err}"))
     }
 
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
@@ -184,12 +201,6 @@ impl CassCluster {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster, CMut> {
-    let Ok(default_runtime) = tokio::runtime::Runtime::new()
-        .inspect_err(|e| tracing::error!("Failed to create async runtime: {}", e))
-    else {
-        return CassPtr::null_mut();
-    };
-
     let default_execution_profile_builder = ExecutionProfileBuilder::default()
         .consistency(DEFAULT_CONSISTENCY)
         .serial_consistency(DEFAULT_SERIAL_CONSISTENCY)
@@ -321,7 +332,7 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
-        runtime: Arc::new(default_runtime),
+        num_threads_io: None,
 
         session_builder: default_session_builder,
         port: 9042,
@@ -1554,25 +1565,7 @@ pub unsafe extern "C" fn cass_cluster_set_num_threads_io(
         return CassError::CASS_ERROR_LIB_BAD_PARAMS;
     };
 
-    let runtime_res = match num_threads {
-        0 => tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-        n => tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(n as usize)
-            .enable_all()
-            .build(),
-    };
-
-    let runtime = match runtime_res {
-        Ok(runtime) => runtime,
-        Err(err) => {
-            tracing::error!("Failed to create async runtime: {}", err);
-            return CassError::CASS_ERROR_LIB_BAD_PARAMS;
-        }
-    };
-
-    cluster.runtime = Arc::new(runtime);
+    cluster.num_threads_io = Some(num_threads as usize);
 
     CassError::CASS_OK
 }

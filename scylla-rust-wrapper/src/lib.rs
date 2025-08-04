@@ -30,6 +30,7 @@ pub(crate) mod misc;
 pub(crate) mod prepared;
 pub(crate) mod query_result;
 pub(crate) mod retry_policy;
+pub(crate) mod runtime;
 #[cfg(test)]
 mod ser_de_tests;
 pub(crate) mod session;
