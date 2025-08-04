@@ -1,11 +1,11 @@
 use crate::argconv::*;
+use crate::cass_error::CassErrorResult;
 use crate::cass_error::{CassError, ToCassError};
 pub use crate::cass_types::CassValueType;
 use crate::cass_types::{
     CassColumnSpec, CassDataType, CassDataTypeInner, MapDataType, cass_data_type_type,
     get_column_type,
 };
-use crate::execution_error::CassErrorResult;
 use crate::inet::CassInet;
 use crate::types::*;
 use crate::uuid::CassUuid;
@@ -229,7 +229,7 @@ mod row_with_self_borrowed_result_data {
     use scylla::errors::DeserializationError;
     use yoke::{Yoke, Yokeable};
 
-    use crate::execution_error::CassErrorResult;
+    use crate::cass_error::CassErrorResult;
     use crate::query_result::CassRawRow;
 
     use super::{CassRow, CassRowsResultSharedData};
