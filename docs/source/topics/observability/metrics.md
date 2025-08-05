@@ -34,11 +34,9 @@ The [`stats`] field contains information about the total number of connections.
 
 The [`errors`] field contains information about the
 occurrence of requests and connection timeouts. Request timeouts occur when
-a request fails to get a timely response (default: 12 seconds). Pending request
-timeouts occur whens a request waits too long to be serviced by an assigned
-host. This can occur when too many requests are in-flight for a single host.
+a request fails to get a timely response.
 Connection timeouts occur when the process of establishing new connections is
-unresponsive (default: 5 seconds).
+unresponsive.
 
 [`cass_session_get_metrics()`]: http://datastax.github.io/cpp-driver/api/struct.CassSession#1ab3773670c98c00290bad48a6df0f9eae
 [`CassMetrics`]: http://datastax.github.io/cpp-driver/api/struct.CassMetrics
