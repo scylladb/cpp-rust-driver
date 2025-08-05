@@ -7,10 +7,13 @@ ScyllaDB/Cassandra is unable to fulfill the consistency requirement of a request
 client-side timeouts or client-side connection issues. In these cases
 application code must handle the failure and retry the request. The driver will
 automatically recover requests that haven't been written, but once a request is
-written the driver will return an error for in-flight requests and will not try
-to automatically recover. This is done because not all operations are idempotent
-and the driver is unable to distinguish which requests can automatically retried
-without side effect. It's up to application code to make this distinction.
+written, the driver will only recover the request if the statement is marked
+as idempotent (see [`cass_statement_set_is_idempotent()`]
+and [`cass_batch_set_is_idempotent()`]). Otherwise, it will return an error
+and will not try to automatically recover. This is done because
+not all operations are idempotent and the driver is unable to distinguish which
+requests can automatically retried without side effect. It's up to application
+code to make this distinction.
 
 ## Setting Retry Policy
 
@@ -50,6 +53,7 @@ succeed. In all other cases, this policy will return an error.
    <td>Unavailable</td>
    <td>Retries the request using the next host in the query plan.</td>
   </tr>
+<!-- TODO: describe remaining covered cases. -->
   </tbody>
 </table>
 
@@ -139,5 +143,7 @@ cass_cluster_free(cluster);
 ```
 [`cass_cluster_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassCluster#cass-cluster-set-retry-policy
 [`cass_statement_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassStatement#cass-statement-set-retry-policy
+[`cass_statement_set_is_idempotent()`]: http://datastax.github.io/cpp-driver/api/struct.CassStatement#cass-statement-set-is-idempotent
 [`cass_batch_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassBatch#cass-batch-set-retry-policy
+[`cass_batch_set_is_idempotent()`]: http://datastax.github.io/cpp-driver/api/struct.CassBatch#cass-batch-set-is-idempotent
 [`CASS_LOG_INFO`]: http://datastax.github.io/cpp-driver/api/cassandra.h#cass-log-level
