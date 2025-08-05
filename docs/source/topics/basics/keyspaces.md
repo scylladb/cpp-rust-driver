@@ -2,9 +2,9 @@
 
 ## Setting the Keyspace at Connection Time
 
-A session can be initially connected using a supplied keyspace.
+A session can be initially connected using a supplied keyspace. This is the recommended way to set the keyspace for a session, as it prevents races between setting keyspace and requests being executed. This is particularly important in applications that use a single session object shared by multiple threads.
 
-**Performance Tip:**  An application should create a single session object per keyspace as a session object is designed to be created once, reused, and shared by multiple threads within the application.
+**Performance Tip:**  An application should create a single session object per keyspace as a session object is designed to be created once, reused, and shared by multiple threads within the application. Even better performance can be achieved by creating a single session object per application, but then if the application interacts with multiple keyspaces, it must fully qualify the table names in its statements.
 
 ```c
 CassSession* session = cass_session_new();
