@@ -80,7 +80,7 @@ pub unsafe extern "C" fn testing_future_get_host(
         return;
     };
 
-    future.with_waited_result(|r| match r {
+    match future.waited_result() {
         Ok(CassResultValue::QueryResult(result)) => {
             // unwrap: Coordinator is none only for unit tests.
             let coordinator = result.coordinator.as_ref().unwrap();
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn testing_future_get_host(
             *host = std::ptr::null_mut();
             *host_length = 0;
         },
-    })
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -280,14 +280,27 @@ pub unsafe extern "C" fn testing_future_get_attempted_hosts(
     unsafe { CString::from_vec_unchecked(concatenated_hosts.into_bytes()) }.into_raw()
 }
 
+#[cfg(test)]
+fn runtime_for_test() -> Arc<tokio::runtime::Runtime> {
+    Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap(),
+    )
+}
+
 /// Ensures that the `testing_future_get_attempted_hosts` function
 /// behaves correctly, i.e., it returns a list of attempted hosts as a concatenated string.
 #[test]
 fn test_future_get_attempted_hosts() {
     use scylla::observability::history::HistoryListener as _;
 
+    let runtime = runtime_for_test();
+
     let listener = Arc::new(RecordingHistoryListener::new());
-    let future = CassFuture::new_from_future(std::future::pending(), Some(listener.clone()));
+    let future =
+        CassFuture::new_from_future(runtime, std::future::pending(), Some(listener.clone()));
 
     fn assert_attempted_hosts_eq(future: &Arc<CassFuture>, hosts: &[String]) {
         let hosts_str = unsafe { testing_future_get_attempted_hosts(ArcFFI::as_ptr(future)) };
@@ -515,14 +528,6 @@ pub(crate) mod stubs {
         _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
         _callback: CassHostListenerCallback,
         _data: *mut c_void,
-    ) -> CassError {
-        CassError::CASS_OK
-    }
-
-    #[unsafe(no_mangle)]
-    pub extern "C" fn cass_cluster_set_num_threads_io(
-        _cluster_raw: CassBorrowedExclusivePtr<CassCluster, CMut>,
-        _num_threads: u32,
     ) -> CassError {
         CassError::CASS_OK
     }

@@ -4,7 +4,6 @@ use crate::logging::Logger;
 use crate::logging::stderr_log_callback;
 use std::sync::LazyLock;
 use std::sync::RwLock;
-use tokio::runtime::Runtime;
 
 #[macro_use]
 mod binding;
@@ -31,6 +30,7 @@ pub(crate) mod misc;
 pub(crate) mod prepared;
 pub(crate) mod query_result;
 pub(crate) mod retry_policy;
+pub(crate) mod runtime;
 #[cfg(test)]
 mod ser_de_tests;
 pub(crate) mod session;
@@ -190,7 +190,6 @@ pub(crate) mod cass_version_types {
     include_bindgen_generated!("cppdriver_version_types.rs");
 }
 
-pub(crate) static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 pub(crate) static LOGGER: LazyLock<RwLock<Logger>> = LazyLock::new(|| {
     RwLock::new(Logger {
         cb: Some(stderr_log_callback),

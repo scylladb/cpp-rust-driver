@@ -7,6 +7,7 @@ use crate::load_balancing::{
     CassHostFilter, DcRestriction, LoadBalancingConfig, LoadBalancingKind,
 };
 use crate::retry_policy::CassRetryPolicy;
+use crate::runtime::RUNTIMES;
 use crate::ssl::CassSsl;
 use crate::timestamp_generator::CassTimestampGen;
 use crate::types::*;
@@ -81,8 +82,13 @@ const DEFAULT_SHARD_AWARE_LOCAL_PORT_RANGE: ShardAwarePortRange =
 const DRIVER_NAME: &str = "ScyllaDB Cpp-Rust Driver";
 const DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Clone)]
 pub struct CassCluster {
+    /// Number of threads in the tokio runtime thread pool.
+    ///
+    /// Specified with `cass_cluster_set_num_threads_io`.
+    /// If not set, the default tokio runtime is used.
+    num_threads_io: Option<usize>,
+
     session_builder: SessionBuilder,
     default_execution_profile_builder: ExecutionProfileBuilder,
     execution_profile_map: HashMap<ExecProfileName, CassExecProfile>,
@@ -100,6 +106,22 @@ pub struct CassCluster {
 }
 
 impl CassCluster {
+    /// Gets the runtime that has been set for the cluster.
+    /// If no runtime has been set yet, it creates a default runtime
+    /// and makes it cached in the global `Runtimes` instance.
+    pub(crate) fn get_runtime(&self) -> Arc<tokio::runtime::Runtime> {
+        let mut runtimes = RUNTIMES.lock().unwrap();
+
+        if let Some(num_threads_io) = self.num_threads_io {
+            // If the number of threads is set, we create a runtime with that number of threads.
+            runtimes.n_thread_runtime(num_threads_io)
+        } else {
+            // Otherwise, we use the default runtime.
+            runtimes.default_runtime()
+        }
+        .unwrap_or_else(|err| panic!("Failed to create an async runtime: {err}"))
+    }
+
     pub(crate) fn execution_profile_map(&self) -> &HashMap<ExecProfileName, CassExecProfile> {
         &self.execution_profile_map
     }
@@ -310,6 +332,8 @@ pub unsafe extern "C" fn cass_cluster_new() -> CassOwnedExclusivePtr<CassCluster
     };
 
     BoxFFI::into_ptr(Box::new(CassCluster {
+        num_threads_io: None,
+
         session_builder: default_session_builder,
         port: 9042,
         contact_points: Vec::new(),
@@ -1527,6 +1551,21 @@ pub unsafe extern "C" fn cass_cluster_set_execution_profile_n(
     };
 
     cluster.execution_profile_map.insert(name, profile);
+
+    CassError::CASS_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cass_cluster_set_num_threads_io(
+    cluster: CassBorrowedExclusivePtr<CassCluster, CMut>,
+    num_threads: cass_uint32_t,
+) -> CassError {
+    let Some(cluster) = BoxFFI::as_mut_ref(cluster) else {
+        tracing::error!("Provided null cluster pointer to cass_cluster_set_num_threads_io!");
+        return CassError::CASS_ERROR_LIB_BAD_PARAMS;
+    };
+
+    cluster.num_threads_io = Some(num_threads as usize);
 
     CassError::CASS_OK
 }

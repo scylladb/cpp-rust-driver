@@ -153,7 +153,7 @@ SCYLLA_EXAMPLES_TO_RUN := \
 	# execution_profiles <- unimplemented `cass_statement_set_keyspace()`
 	# host_listener <- unimplemented `cass_cluster_set_host_listener_callback()`
 	# logging <- unimplemented `cass_cluster_set_host_listener_callback()`
-	# perf <- unimplemented `cass_cluster_set_num_threads_io()`, `cass_cluster_set_queue_size_io()`
+	# perf <- unimplemented `cass_cluster_set_queue_size_io()`
 	# schema_meta <- unimplemented multiple schema-related functions
 	# cloud <- out of interest for us, not related to ScyllaDB
 endif

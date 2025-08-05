@@ -263,7 +263,6 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
 - cass_cluster_set_monitor_reporting_interval
 - cass_cluster_set_new_request_ratio
 - cass_cluster_set_no_compact
-- cass_cluster_set_num_threads_io
 - cass_cluster_set_pending_requests_high_water_mark
 - cass_cluster_set_pending_requests_low_water_mark
 - cass_cluster_set_prepare_on_all_hosts
