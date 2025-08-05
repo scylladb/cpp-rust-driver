@@ -8,6 +8,7 @@
   load-balancing
   retry-policies
   speculative-execution
+  execution-profiles
   performance-tips
   client-configuration
 ```
