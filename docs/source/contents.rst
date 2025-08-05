@@ -17,4 +17,3 @@ ScyllaDB CPP-Rust Driver
     topics/configuration/index
     topics/security/index
     topics/observability/index
-    topics/scylladb-specific
