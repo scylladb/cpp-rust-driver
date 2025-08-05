@@ -33,5 +33,5 @@ client-to-node encryption (TLS), or in a trusted network environment.
   :hidden:
   :glob:
 
-  ssl
+  tls
 ```
