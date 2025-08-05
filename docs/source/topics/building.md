@@ -34,7 +34,7 @@ __\*\*__ Use the `CASS_USE_ZLIB` CMake option to enable/disable zlib support.
 
 __\*\*\*__ Use the `CASS_USE_KERBEROS` CMake option to enable/disable Kerberos
        support. Enabling this option will enable Kerberos authentication
-       protocol within the driver (currently unusupproted by Scylla);
+       protocol within the driver (currently unusupported by Scylla);
        defaults to `Off`.
 
 ## Linux/Mac OS
@@ -257,90 +257,11 @@ cmake -DCASS_BUILD_INTEGRATION_TESTS=On ..
 cmake -DCASS_BUILD_UNIT_TESTS=On ..
 ```
 
-## Windows
-
-The driver is known to build with Visual Studio 2010, 2012, 2013, 2015, 2017, and 2019.
-
-### Obtaining build dependencies
-
-* Download and install [Bison]
-  * Make sure Bison is in your system PATH and not installed in a directory with
-    spaces (e.g. `%SYSTEMDRIVE%\GnuWin32`)
-* Download and install [CMake]
-  * Make sure to select the option "Add CMake to the system PATH for all users"
-    or "Add CMake to the system PATH for current user"
-* Download and install [Strawberry Perl] or [ActiveState Perl]
-  * Make sure to select the option "Add Perl to PATH environment variable"
-* Download and install Kerberos for Windows v4.0.1
-  * [32-bit][k4w-32]
-  * [64-bit][k4w-64]
-
-### Building the driver
-
-First you will need to open a "Command Prompt" to execute the CMake commands.
-
-#### Building the C/C++ driver
-
-Supported generators are:
-* Visual Studio 10 2010
-* Visual Studio 11 2012
-* Visual Studio 12 2013
-* Visual Studio 14 2015
-* Visual Studio 15 2017
-* Visual Studio 16 2019
-
-```bash
-mkdir build
-pushd build
-cmake -G "Visual Studio 16 2019" -A x64 ..
-cmake --build .
-popd
-```
-
-__Note__: To build 32-bit binaries/libraries use `-A Win32`.
-
-#### Building examples (optional)
-
-Examples are not built by default and need to be enabled. Update your [CMake]
-line to build examples.
-
-```bash
-cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_EXAMPLES=On ..
-```
-
-#### Building tests (optional)
-
-Tests (integration and unit) are not built by default and need to be enabled.
-
-##### All tests
-
-```bash
-cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_TESTS=On ..
-```
-
-__Note__: This will build both the integration and unit tests
-
-
-##### Integration tests
-
-```bash
-cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_INTEGRATION_TESTS=On ..
-```
-
-##### Unit tests
-
-```bash
-cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_UNIT_TESTS=On ..
-```
-
 [download server]: https://github.com/scylladb/cpp-rust-driver/releases
 [cpp-driver-centos7]: https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver-2.15.2-1.el7.x86_64.rpm
 [cpp-driver-ubuntu18-04]: https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver_2.15.2-1_amd64.deb
 [Homebrew]: https://brew.sh
-[Bison]: http://gnuwin32.sourceforge.net/downlinks/bison.php
 [CMake]: http://www.cmake.org/download
-[Strawberry Perl]: http://strawberryperl.com
-[ActiveState Perl]: https://www.perl.org/get.html#win32
 [k4w-32]: http://web.mit.edu/kerberos/dist/kfw/4.0/kfw-4.0.1-i386.msi
 [k4w-64]: http://web.mit.edu/kerberos/dist/kfw/4.0/kfw-4.0.1-amd64.msi
 [libuv]: http://libuv.org
