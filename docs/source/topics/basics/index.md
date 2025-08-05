@@ -34,7 +34,7 @@
   </tr>
   <tr>
    <td><code>boolean</code></td>
-   <td><code>cass_boot_t</code></td>
+   <td><code>cass_bool_t</code></td>
    <td>1.2+</td>
   </tr>
   <tr>
