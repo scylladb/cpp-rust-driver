@@ -6,7 +6,8 @@ options and reuse them across different query executions. These options include:
 * Request timeout
 * Consistency and serial consistency level
 * Load balancing policy (*)
-* Retry Policy
+* Retry policy
+* Speculative execution policy
 
 __*__ - Load balancing policies are disabled by default and must be explicity
         enabled for child policy settings to be applied (e.g. Token aware,
@@ -60,7 +61,7 @@ __Note__: There is no limit on how many execution profiles can be associated
 ## Using Execution Profiles
 
 Execution profiles are copied from the cluster object to the session object
-during the session connection process.. To use an execution profile the name
+during the session connection process. To use an execution profile the name
 must be assigned to a statement.
 
 ```c
