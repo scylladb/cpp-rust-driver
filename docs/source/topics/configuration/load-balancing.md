@@ -3,17 +3,19 @@
 Load balancing controls how queries are distributed to nodes in a ScyllaDB/Cassandra
 cluster.
 
-Without additional configuration the C/C++ driver defaults to using Datacenter-aware
-load balancing with token-aware routing. This means that driver will only send
-queries to nodes in the local datacenter (for local consistency levels) and
-it will use the primary key of queries to route them directly to the nodes where the
-corresponding data is located.
+Without additional configuration the C/C++ driver defaults to using Datacenter-unaware
+load balancing with token-aware routing. This means that the driver will use the primary key
+of queries to route them directly to the nodes where the corresponding data is located.
+It will not consider datacenter locality when distributing queries, because it does not
+know if there exists a datacenter that should be preferred over others, and, if so,
+which one.
 
 ## Round-robin Load Balancing
 
 This load balancing policy equally distributes queries across cluster without
-consideration of datacenter locality. This should only be used with
-ScyllaDB/Cassandra clusters where all nodes are located in the same datacenter.
+consideration of datacenter locality. This policy normally should always be
+accompanied by token-aware routing to ensure that queries are sent directly
+to the nodes where the data is located.
 
 ## Datacenter-aware Load Balancing
 
@@ -74,6 +76,9 @@ cass_cluster_free(cluster);
 Latency-aware routing tracks the latency of queries to avoid sending new queries
 to poorly performing ScyllaDB/Cassandra nodes. It can be used in conjunction with other
 load balancing and routing policies.
+The way latency-aware interacts with other policies is tricky and may as well worsen
+the performance of your application. It is recommended to use it only after
+comparing the performance of your application with and without it.
 
 ```c
 CassCluster* cluster = cass_cluster_new();
