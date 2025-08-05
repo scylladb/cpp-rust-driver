@@ -9,4 +9,5 @@
   retry-policies
   speculative-execution
   performance-tips
+  client-configuration
 ```
