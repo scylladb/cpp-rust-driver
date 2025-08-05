@@ -84,11 +84,5 @@ cass_collection_free(map);
 
 A collection can be added to another collection using [`cass_collection_append_collection()`].
 
-## Custom types
-
-Custom types can be bound using either the `cass_statement_bind_bytes[_by_name]()` or the
-`cass_statement_bind_custom[by_name]()` functions. The latter validates the class
-name of the custom type matches the class name of the type being bound.
-
 [`cass_collection_append_collection()`]:
 http://datastax.github.io/cpp-driver/api/struct.CassCollection#cass-collection-append-collection
