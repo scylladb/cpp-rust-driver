@@ -31,7 +31,7 @@ Packages are currently available for the following platforms:
 * CentOS 7
 * Ubuntu 18.04 LTS
 
-They are available for download from the [Releases][cpp-driver-releases] section.
+They are available for download from the [Releases][cpp-rust-driver-releases] section.
 
 NOTE: If you have Datastax cpp-driver installed you need to remove it first:
 
@@ -280,11 +280,11 @@ without incurring extra allocations.
 
 **NOTE:** Advancing an iterator invalidates the value it previously returned.
 
-[`cass_int32_t`]: http://datastax.github.io/cpp-driver/api/cassandra.h#cass-int32-t
-[`cass_result_first_row()`]: http://datastax.github.io/cpp-driver/api/struct.CassResult#cass-result-first-row
-[`cass_cluster_set_num_threads_io()`]: http://datastax.github.io/cpp-driver/api/struct.CassCluster#function-cass_cluster_set_num_threads_io
-[`CassCluster`]: http://datastax.github.io/cpp-driver/api/struct.CassCluster
-[`CassFuture`]: http://datastax.github.io/cpp-driver/api/struct.CassFuture
-[`CassStatement`]: http://datastax.github.io/cpp-driver/api/struct.CassStatement
-[`CassIterator`]: http://datastax.github.io/cpp-driver/api/struct.CassIterator
-[`CassSession`]: http://datastax.github.io/cpp-driver/api/struct.CassSession
+[`cass_int32_t`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/cassandra.h#cass-int32-t
+[`cass_result_first_row()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassResult#cass-result-first-row
+[`cass_cluster_set_num_threads_io()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassCluster#function-cass_cluster_set_num_threads_io
+[`CassCluster`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassCluster
+[`CassFuture`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassFuture
+[`CassStatement`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassStatement
+[`CassIterator`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassIterator
+[`CassSession`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassSession

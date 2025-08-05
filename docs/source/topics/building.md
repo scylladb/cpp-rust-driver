@@ -333,7 +333,7 @@ cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_INTEGRATION_TESTS=On ..
 cmake -G "Visual Studio 16 2019" -A x64 -DCASS_BUILD_UNIT_TESTS=On ..
 ```
 
-[download server]: https://github.com/scylladb/cpp-driver/releases
+[download server]: https://github.com/scylladb/cpp-rust-driver/releases
 [cpp-driver-centos7]: https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver-2.15.2-1.el7.x86_64.rpm
 [cpp-driver-ubuntu18-04]: https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver_2.15.2-1_amd64.deb
 [Homebrew]: https://brew.sh
