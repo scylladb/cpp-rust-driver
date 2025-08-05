@@ -3124,6 +3124,27 @@ CASS_EXPORT void
 cass_cluster_set_compression(CassCluster* cluster,
                              CassCompressionType compression_type);
 
+/**
+ * Sets the server-side timeout for metadata queries.
+ *
+ * It means that all metadata queries will be set the given timeout
+ * no matter what timeout is set as a cluster default.
+ * This prevents timeouts of schema queries when the schema is large
+ * and the default timeout is configured as tight.
+ *
+ * <b>Default:</b> 2 seconds.
+ *
+ * @public @memberof CassCluster
+ *
+ * @param[in] cluster
+ * @param[in] timeout_ms Request timeout in milliseconds. Pass 0 to use cluster default timeout.
+ */
+CASS_EXPORT void
+cass_cluster_set_metadata_request_serverside_timeout(CassCluster* cluster,
+                             cass_duration_t timeout_ms);
+
+
+
 /***********************************************************************************
  *
  * Session
