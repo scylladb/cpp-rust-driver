@@ -10,4 +10,5 @@
   speculative-execution
   connection
   performance-tips
+  client-configuration
 ```
