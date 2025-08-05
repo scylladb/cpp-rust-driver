@@ -9,6 +9,7 @@
   retry-policies
   speculative-execution
   connection
+  execution-profiles
   performance-tips
   client-configuration
 ```
