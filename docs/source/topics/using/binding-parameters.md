@@ -36,7 +36,7 @@ Calling `cass_statement_reset_parameters()` will unbind (or resize) a statement'
 
 ## Constructing Collections
 
-Collections are supported using [`CassCollection`](http://datastax.github.io/cpp-driver/api/struct.CassCollection) objects; supporting `list`, `map` and `set` ScyllaDB/Cassandra types. The code below shows how to construct a `list` collection; however, a set can be constructed in a very similar way. The only difference is the type `CASS_COLLECTION_TYPE_SET` is used to create the collection instead of `CASS_COLLECTION_TYPE_LIST`.
+Collections are supported using [`CassCollection`](https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassCollection) objects; supporting `list`, `map` and `set` ScyllaDB/Cassandra types types. The code below shows how to construct a `list` collection; however, a set can be constructed in a very similar way. The only difference is the type `CASS_COLLECTION_TYPE_SET` is used to create the collection instead of `CASS_COLLECTION_TYPE_LIST`.
 
 **Important**: Values appended to the collection can be freed immediately afterward because the values are copied.
 
@@ -85,4 +85,4 @@ cass_collection_free(map);
 A collection can be added to another collection using [`cass_collection_append_collection()`].
 
 [`cass_collection_append_collection()`]:
-http://datastax.github.io/cpp-driver/api/struct.CassCollection#cass-collection-append-collection
+https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassCollection#cass-collection-append-collection

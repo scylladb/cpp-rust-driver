@@ -137,7 +137,7 @@ int main() {
 ___
 
 The driver inherits almost all the features of C/C++ and Rust drivers, such as:
- * [Asynchronous API](http://datastax.github.io/cpp-driver/topics/#futures)
+ * [Asynchronous API](https://cpp-rust-driver.docs.scylladb.com/stable/topics/#futures)
  * Shard-aware routing
  * Simple, Prepared and Batch statements
  * Query paging
@@ -146,9 +146,9 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
  * Retry policies
  * SSL
  * Authentication
- * [Tuples](http://datastax.github.io/cpp-driver/topics/basics/data-types/tuples/) and [UDTs](http://datastax.github.io/cpp-driver/topics/basics/data-types/user-defined-types/)
- * [Nested collections](http://datastax.github.io/cpp-driver/topics/basics/binding-parameters/#nested-collections)
- * [Data types](http://datastax.github.io/cpp-driver/topics/basics/data-types/)
+ * [Tuples](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/tuples/) and [UDTs](http://https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/user-defined-types/)
+ * [Nested collections](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/binding-parameters/#nested-collections)
+ * [Data types](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/)
  * Schema metadata (keyspace metadata, materialized views, etc.)
 
 # Limitations

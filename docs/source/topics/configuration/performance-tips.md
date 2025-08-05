@@ -39,7 +39,7 @@ to wait for one or more nodes to respond back to the coordinator node before a
 request can complete. In multi-datacenter configurations, consistency levels such as
 `EACH_QUORUM` can cause a request to wait for replication across a slower cross
 datacenter network link.  More information about setting the consistency level
-can be found [here](http://datastax.github.io/cpp-driver/topics/basics/consistency/).
+can be found [here](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/consistency/).
 
 ## Driver Tuning
 
@@ -87,6 +87,6 @@ recommended that your application decrease this value if computationally
 expensive or long-running future callbacks are used (via
 `cass_future_set_callback()`), otherwise this can be left unchanged.
 
-[token-aware]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/configuration/load_balancing#latency-aware-routing
-[latency-aware]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/configuration/load_balancing#token-aware-routing
-[paging]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/handling_results#paging
+[token-aware]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/configuration/load-balancing#latency-aware-routing
+[latency-aware]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/configuration/load-balancing#token-aware-routing
+[paging]: https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/handling-results#paging

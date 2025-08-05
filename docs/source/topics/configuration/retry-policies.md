@@ -141,9 +141,9 @@ cass_retry_policy_free(logging_policy);
 
 cass_cluster_free(cluster);
 ```
-[`cass_cluster_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassCluster#cass-cluster-set-retry-policy
-[`cass_statement_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassStatement#cass-statement-set-retry-policy
-[`cass_statement_set_is_idempotent()`]: http://datastax.github.io/cpp-driver/api/struct.CassStatement#cass-statement-set-is-idempotent
-[`cass_batch_set_retry_policy()`]: http://datastax.github.io/cpp-driver/api/struct.CassBatch#cass-batch-set-retry-policy
-[`cass_batch_set_is_idempotent()`]: http://datastax.github.io/cpp-driver/api/struct.CassBatch#cass-batch-set-is-idempotent
-[`CASS_LOG_INFO`]: http://datastax.github.io/cpp-driver/api/cassandra.h#cass-log-level
+[`cass_cluster_set_retry_policy()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassCluster#cass-cluster-set-retry-policy
+[`cass_statement_set_retry_policy()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassStatement#cass-statement-set-retry-policy
+[`cass_statement_set_is_idempotent()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassStatement#cass-statement-set-is-idempotent
+[`cass_batch_set_retry_policy()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassBatch#cass-batch-set-retry-policy
+[`cass_batch_set_is_idempotent()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassBatch#cass-batch-set-is-idempotent
+[`CASS_LOG_INFO`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/cassandra.h#cass-log-level
