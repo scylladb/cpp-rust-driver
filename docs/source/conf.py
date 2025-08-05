@@ -187,8 +187,9 @@ def setup(sphinx):
     )
 
     # Workaround to replace DataStax links
+    # FIXME(David Garcia) - Make this workaround work correctly.
     replacements = [
-        {"http://datastax.github.io/cpp-driver/api/cassandra.h/": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version + "/api"},
+        {"https://cpp-rust-driver.docs.scylladb.com/stable/api/cassandra.h/": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version + "/api"},
         {"http://datastax.github.io/cpp-driver": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version},
         {"http://docs.datastax.com/en/developer/cpp-driver/latest": "https://cpp-rust-driver.docs.scylladb.com/" + smv_latest_version},
     ]

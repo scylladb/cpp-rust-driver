@@ -82,7 +82,7 @@ application. Descriptions for each read/write consistency level can be found
 
 ## Setting Consistency Level
 
-A ['CassStatement'](http://datastax.github.io/cpp-driver/api/struct.CassFuture/) object
+A ['CassStatement'](https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassFuture/) object
 can have its consistency level altered at anytime before the statement is
 executed by the session.
 

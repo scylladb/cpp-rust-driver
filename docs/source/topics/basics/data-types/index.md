@@ -214,16 +214,16 @@ cass_tuple_free(address);
 cass_collection_free(phone_numbers);
 ```
 
-[`CassDataType`]: http://datastax.github.io/cpp-driver/api/struct.CassDataType
-[`CassUserType`]: http://datastax.github.io/cpp-driver/api/struct.CassUserType
-[`CassPrepared`]: http://datastax.github.io/cpp-driver/api/struct.CassPrepared
-[`CassResult`]: http://datastax.github.io/cpp-driver/api/struct.CassResult
-[`CassValue`]: http://datastax.github.io/cpp-driver/api/struct.CassValue
-[`CassSchemaMeta`]: http://datastax.github.io/cpp-driver/api/struct.CassSchemaMeta
-[`cass_user_type_new_from_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassUserType#cass-user-type-new-from-data-type
-[`cass_result_column_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassResult#cass-result-column-data-type
-[`cass_prepared_parameter_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassPrepared#cass-prepared-parameter-data-type
-[`cass_value_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassValue#cass-value-data-type
+[`CassDataType`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassDataType
+[`CassUserType`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassUserType
+[`CassPrepared`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassPrepared
+[`CassResult`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassResult
+[`CassValue`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassValue
+[`CassSchemaMeta`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassSchemaMeta
+[`cass_user_type_new_from_data_type()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassUserType#cass-user-type-new-from-data-type
+[`cass_result_column_data_type()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassResult#cass-result-column-data-type
+[`cass_prepared_parameter_data_type()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassPrepared#cass-prepared-parameter-data-type
+[`cass_value_data_type()`]: https://cpp-rust-driver.docs.scylladb.com/stable/api/struct.CassValue#cass-value-data-type
 
 ```{eval-rst}
 .. toctree::
