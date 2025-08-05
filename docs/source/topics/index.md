@@ -234,23 +234,25 @@ a load balancing policy to distribute requests across those connections. An
 application should create a single session object per keyspace. A session
 object is designed to be created once, reused, and shared by multiple threads
 within the application. The throughput of a session can be scaled by
-increasing the number of I/O threads. An I/O thread is used to handle reading
-and writing query request data to and from Cassandra/Scylla. The number of I/O
-threads defaults to one per CPU core, but it can be configured using
-[`cass_cluster_set_num_threads_io()`]. It’s generally better to create a single
-session with more I/O threads than multiple sessions with a smaller number of
-I/O threads.
+increasing the number of I/O threads. An I/O thread is used to drive the inner
+driver machinery, which among others sends requests to Cassandra/Scylla and handle
+responses. The number of I/O threads defaults to one per CPU core, but it can be
+configured using [`cass_cluster_set_num_threads_io()`]. It’s generally much better
+to create a single session with more I/O threads than multiple sessions with
+a smaller number of I/O threads, especially that a session is a heavyweight
+object - it keeps the connection pool and up-to-date cluster metadata.
 
 ### Asynchronous I/O
 
-Each I/O thread maintains a number of connections for each node in the cluster.
+Each session maintains a number of connections for each node in the cluster.
 This number can be controlled by `cass_cluster_set_core_connections_per_host()`.
-In case of ScyllaDB this number is additionally rounded up to the number of shards
-on the node.
+In case of ScyllaDB, it is possible to specify a number of connection per **shard**
+instead of a node by calling `cass_cluster_set_core_connections_per_shard()`,
+which is the recommended way to configure the driver for ScyllaDB.
 
 Each of those connections can handle several simultaneous requests using
-pipelining. Asynchronous I/O and pipelining together allow each connection to
-handle several (up to 32k with protocol v3/v4) in-flight requests concurrently.
+pipelining. Asynchronous I/O and pipelining together allow each connection
+to handle several (up to 32k) in-flight requests concurrently.
 This significantly reduces the number of connections required to be open to
 ScyllaDB/Cassandra and allows the driver to batch requests destined for the
 same node.
