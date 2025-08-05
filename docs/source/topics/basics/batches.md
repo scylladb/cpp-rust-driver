@@ -6,7 +6,7 @@ Batches can be used to group multiple mutations (`UPDATE`, `INSERT`, `DELETE`) t
 * `CASS_BATCH_TYPE_UNLOGGED` is generally used to group mutations for a single partition and do not suffer from the performance penalty imposed by logged batches, but there is no atomicity guarantee for  multi-partition updates.
 * `CASS_BATCH_TYPE_COUNTER` is used to group counters updates.
 
-**Important**: Be careful when using batches as a [performance optimization](http://www.datastax.com/documentation/cql/3.1/cql/cql_using/useBatch.html).
+**Important**: Be careful when using batches as a [performance optimization](https://forum.scylladb.com/t/batch-performance-considerations-when-grouping-queries-on-the-client-side/2076).
 
 ```c
 void execute_batch(CassSession* session) {
