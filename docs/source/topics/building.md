@@ -20,12 +20,16 @@ ScyllaDB does not support these platforms.
 The C/C++ driver depends on the following software:
 
 * [CMake] v2.6.4+
-* [libuv] 1.x
+* [libuv] 1.x (only for tests and examples, not required for the driver itself)
 * [OpenSSL] v1.0.x or v1.1.x \*
 
 __\*__ Use the `CASS_USE_OPENSSL` CMake option to enable/disable OpenSSL
          support. Disabling this option will disable SSL/TLS protocol support
          within the driver; defaults to `On`.
+
+Note that only `CMake` is mandatory for building the driver. The others:
+- `libuv` is only required for building tests and some of the examples, not the driver itself.
+- `OpenSSL` is only required if you want to enable TLS support in the driver.
 
 ## Linux/Mac OS
 
@@ -67,9 +71,9 @@ brew install autoconf automake cmake libtool
 
 #### libuv
 
-libuv v1.x should be used in order to ensure all features of the C/C++ driver
-are available. When using a package manager for your operating system make sure
-you install v1.x. Recent package repositories tend to have it available.
+**libuv is required only for tests and examples, not required for the driver itself.**
+libuv v1.x is recommended. When using a package manager for your operating system,
+make sure you install v1.x.
 
 ##### Ubuntu
 
@@ -103,17 +107,8 @@ brew install libuv
 _The following procedures should be performed if packages are not available for
 your system._
 
-```bash
-pushd /tmp
-wget http://dist.libuv.org/dist/v1.34.0/libuv-v1.35.0.tar.gz
-tar xzf libuv-v1.35.0.tar.gz
-pushd libuv-v1.35.0
-sh autogen.sh
-./configure
-make install
-popd
-popd
-```
+Browse [https://dist.libuv.org/dist/] and download the newest stable version available.
+Follow the instructions in the downloaded package to build and install it.
 
 #### OpenSSL
 
