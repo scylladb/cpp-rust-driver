@@ -13,7 +13,7 @@ cass_statement_bind_string(statement, 0, "abc");
 cass_statement_free(statement);
 ```
 
-Variables also could be bound by name, where name could be inferred from query, or explicitly specified as `:name`. This limitation did exist because query metadata provided by Cassandra is required to map the variable name to the variable’s marker index.)
+Variables also could be bound by name, where name could be inferred from query, or explicitly specified as `:name`. This limitation did exist because query metadata provided by ScyllaDB/Cassandra is required to map the variable name to the variable’s marker index.)
 
 ```c
 void execute_prepared_statement(const CassPrepared* prepared) {
@@ -36,7 +36,7 @@ Calling `cass_statement_reset_parameters()` will unbind (or resize) a statement'
 
 ## Constructing Collections
 
-Collections are supported using [`CassCollection`](http://datastax.github.io/cpp-driver/api/struct.CassCollection) objects; supporting `list`, `map` and `set` Cassandra types. The code below shows how to construct a `list` collection; however, a set can be constructed in a very similar way. The only difference is the type `CASS_COLLECTION_TYPE_SET` is used to create the collection instead of `CASS_COLLECTION_TYPE_LIST`.
+Collections are supported using [`CassCollection`](http://datastax.github.io/cpp-driver/api/struct.CassCollection) objects; supporting `list`, `map` and `set` ScyllaDB/Cassandra types. The code below shows how to construct a `list` collection; however, a set can be constructed in a very similar way. The only difference is the type `CASS_COLLECTION_TYPE_SET` is used to create the collection instead of `CASS_COLLECTION_TYPE_LIST`.
 
 **Important**: Values appended to the collection can be freed immediately afterward because the values are copied.
 

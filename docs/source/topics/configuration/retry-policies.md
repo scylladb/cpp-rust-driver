@@ -1,7 +1,7 @@
 # Retry policies
 
 Retry polices allow the driver to automatically handle server-side failures when
-Cassandra is unable to fulfill the consistency requirement of a request.
+ScyllaDB/Cassandra is unable to fulfill the consistency requirement of a request.
 
 **Important**: Retry policies do not handle client-side failures such as
 client-side timeouts or client-side connection issues. In these cases

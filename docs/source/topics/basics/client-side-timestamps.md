@@ -1,6 +1,6 @@
 # Client-side timestamps
 
-Cassandra uses timestamps to serialize write operations. That is, values with a
+ScyllaDB/Cassandra uses timestamps to serialize write operations. That is, values with a
 more current timestamp are considered to be the most up-to-date version of that
 information. By default, timestamps are assigned by the driver on the
 client-side using a monotonically increasing timestamp generator. This behavior

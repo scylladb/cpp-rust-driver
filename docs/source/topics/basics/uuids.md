@@ -1,13 +1,13 @@
 # UUIDs
 
 UUIDs are 128-bit identifiers that can be used to uniquely identify information
-without requiring central coordination. These are often used in Cassandra
+without requiring central coordination. These are often used in ScyllaDB/Cassandra
 for primary and clustering keys. There are two types of UUIDs supported by
-the driver (and Cassandra), version 1 which is time-based and version 4 which
-is randomly generated. Version 1 can be used with Cassandra'a `timeuuid` type
+the driver (and ScyllaDB/Cassandra), version 1 which is time-based and version 4 which
+is randomly generated. Version 1 can be used with ScyllaDB/Cassandra's `timeuuid` type
 and can be used as a timestamp for data.  Timestamp information can be
 extracted from the time part of a version 1 UUID using [`cass_uuid_timestamp()`].
-Version 4 can be used with Cassandra's `uuid` type for unique identification.
+Version 4 can be used with ScyllaDB/Cassandra's `uuid` type for unique identification.
 
 ## Generator
 

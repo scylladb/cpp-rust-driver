@@ -1,7 +1,7 @@
 # Data Types
 
 [`CassDataType`] objects are useful for describing the different values that can
-be stored in Cassandra, from primitive types to more complex composite types,
+be stored in ScyllaDB/Cassandra, from primitive types to more complex composite types,
 such as, UDTs (user-defined types), tuples and collections. Data types can be retrieved from existing
 metadata found in schema, results, values or prepared statements, or they can be
 constructed programmatically.

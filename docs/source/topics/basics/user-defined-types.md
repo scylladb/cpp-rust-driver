@@ -9,7 +9,7 @@ created from a manually defined data type.
 
 An [`CassSchemaMeta`] instance can be used to construct a new [`CassUserType`]. The
 [`CassSchemaMeta`] instance returns a [`CassDataType`] object which is used to
-describe Cassandra types including UDTs, tuples, collections and all basic types
+describe ScyllaDB/Cassandra types including UDTs, tuples, collections and all basic types
 (`int`, `bigint`, `uuid`, etc.).
 
 ```c
@@ -60,7 +60,7 @@ CREATE TYPE IF NOT EXISTS udt (field1 int, field2 uuid, field3 text);
 
 ## Consuming values from a UDT result
 
-A UDT returned from Cassandra is consumed by iterating over its fields similar
+A UDT returned from ScyllaDB/Cassandra is consumed by iterating over its fields similar
 to the way collections or tuples are consumed.
 
 ```c

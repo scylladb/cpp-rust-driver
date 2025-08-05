@@ -222,7 +222,7 @@ void handle_query_result(CassFuture* future) {
 
 ### Cluster
 
-The [`CassCluster`] object describes a Cassandra/ScyllaDB cluster’s configuration.
+The [`CassCluster`] object describes a ScyllaDB/Cassandra cluster’s configuration.
 The default cluster object is good for most clusters and only requires a single
 or multiple lists of contact points in order to establish a session connection.
 Once a session is connected using a cluster object, its configuration is
@@ -232,7 +232,7 @@ established does not alter the session's configuration.
 ### Session
 
 The [`CassSession`] object is used for query execution. Internally, a session
-object also manages a pool of client connections to Cassandra/ScyllaDB and uses
+object also manages a pool of client connections to ScyllaDB/Cassandra and uses
 a load balancing policy to distribute requests across those connections. An
 application should create a single session object per keyspace. A session
 object is designed to be created once, reused, and shared by multiple threads
@@ -255,7 +255,7 @@ Each of those connections can handle several simultaneous requests using
 pipelining. Asynchronous I/O and pipelining together allow each connection to
 handle several (up to 32k with protocol v3/v4) in-flight requests concurrently.
 This significantly reduces the number of connections required to be open to
-Cassandra/ScyllaDB and allows the driver to batch requests destined for the
+ScyllaDB/Cassandra and allows the driver to batch requests destined for the
 same node.
 
 ### Thread safety

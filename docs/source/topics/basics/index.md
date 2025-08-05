@@ -5,7 +5,7 @@
 <table class="table table-striped table-hover table-condensed">
   <thead>
   <tr>
-   <th>Cassandra Type(s)</th>
+   <th>ScyllaDB/Cassandra Type(s)</th>
    <th>Driver Type</th>
   </tr>
   </thead>

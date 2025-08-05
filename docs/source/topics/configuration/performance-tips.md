@@ -5,7 +5,7 @@
 ### Use a single persistent session
 
 Sessions are expensive objects to create in both time and resources because they
-maintain a pool of connections to your Cassandra cluster. An application should
+maintain a pool of connections to your ScyllaDB/Cassandra cluster. An application should
 create a minimal number of sessions and maintain them for the lifetime of an
 application.
 

@@ -75,7 +75,7 @@ impl CassExecProfile {
     fn use_cluster_defaults_for_unset_settings(&mut self, default_profile: &ExecutionProfile) {
         // The reason for separate handling of consistency is that the default consistency
         // depends on the kind of the cluster that the CPP Driver connected to (DataStax DBAAS has
-        // a different default than the ordinary Cassandra/ScyllaDB).
+        // a different default than the ordinary ScyllaDB/Cassandra).
         //
         // It would be plausible to believe that we don't have to worry about that, because we treat
         // all DBs the same way wrt the default consistency. This is **wrong**. Consistency, unlike

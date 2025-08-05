@@ -1,10 +1,10 @@
 # Prepared Statements
 
-Prepared statements can be used to improve the performance of frequently executed queries. Preparing the query caches it on the Cassandra cluster and only needs to be performed once. Once created, prepared statements should be reused with different bind variables. Prepared queries use the `?` marker to denote bind variables in the query string. You can also specify bind variables as `:name`.
+Prepared statements can be used to improve the performance of frequently executed queries. Preparing the query caches it on the ScyllaDB/Cassandra cluster and only needs to be performed once. Once created, prepared statements should be reused with different bind variables. Prepared queries use the `?` marker to denote bind variables in the query string. You can also specify bind variables as `:name`.
 
 ```c
 void prepare_statement(CassSession* session) {
-  /* Prepare the statement on the Cassandra cluster */
+  /* Prepare the statement on the ScyllaDB/Cassandra cluster */
   CassFuture* prepare_future
     = cass_session_prepare(session, "INSERT INTO example (key, value) VALUES (?, ?)");
 
