@@ -73,9 +73,6 @@ int main() {
 
   /* Shard-awareness (ScyllaDB only): choose the local (ephemeral) port range */
   cass_cluster_set_local_port_range(cluster, 49152, 65535);
-  /* Driver will round up this number (32), on every node,
-     to a multiple of that node's shard count */
-  cass_cluster_set_core_connections_per_host(cluster, 32);
 
   /* Provide the cluster object as configuration to connect the session */
   connect_future = cass_session_connect(session, cluster);
