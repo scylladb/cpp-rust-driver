@@ -17,11 +17,6 @@ else()
   list(APPEND SOURCES ssl/ssl_no_impl.cpp)
 endif()
 
-if(CASS_USE_KERBEROS)
-  list(APPEND INCLUDE_DIRS gssapi)
-  list(APPEND SOURCES gssapi/dse_auth_gssapi.cpp gssapi/dse_auth_gssapi.hpp)
-endif()
-
 # Determine atomic library to include
 if(CASS_USE_BOOST_ATOMIC)
   list(APPEND SOURCES atomic/atomic_boost.hpp)
@@ -122,7 +117,6 @@ endif()
 
 set(HAVE_BOOST_ATOMIC ${CASS_USE_BOOST_ATOMIC})
 set(HAVE_STD_ATOMIC ${CASS_USE_STD_ATOMIC})
-set(HAVE_KERBEROS ${CASS_USE_KERBEROS})
 set(HAVE_OPENSSL ${CASS_USE_OPENSSL})
 
 # Generate the driver_config.hpp file
