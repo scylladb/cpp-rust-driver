@@ -17,7 +17,7 @@ Conflicts:      scylla-cpp-driver
 API-compatible rewrite of https://github.com/scylladb/cpp-driver as a wrapper for Rust driver.
 
 %package devel
-Summary:        Development libraries for ${name}
+Summary:        Development libraries for %{name}
 Group:          Development/Tools
 Requires:       %{name} = %{version}-%{release}
 Requires:       pkgconfig
