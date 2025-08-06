@@ -108,17 +108,6 @@ if(CASS_USE_OPENSSL)
 endif()
 
 #------------------------
-# Kerberos
-#------------------------
-
-if(CASS_USE_KERBEROS)
-  # Discover Kerberos and assign Kerberos include and libraries
-  find_package(Kerberos REQUIRED)
-  set(CASS_INCLUDES ${CASS_INCLUDES} ${KERBEROS_INCLUDE_DIR})
-  set(CASS_LIBS ${CASS_LIBS} ${KERBEROS_LIBRARIES})
-endif()
-
-#------------------------
 # Boost
 #------------------------
 
