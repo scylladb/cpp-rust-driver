@@ -7,18 +7,15 @@
 #### Dependencies
 
 Packages for the dependencies: libuv (1.x), OpenSSL can be installed
-from distribution's repositories and/or EPEL. Please note that `apt-get` can
-handle the dependencies by itself, therefore this step can likely be omitted
-on Ubuntu.
+from distribution's repositories.
 
 ```bash
-# Example: Ubuntu 18.04:
-sudo apt-get update
-sudo apt-get install -y libuv1 openssl libssl
+# Example: Ubuntu/Debian:
+sudo apt update
+sudo apt install -y libuv1 openssl libssl
 
-# Example: CentOS 7:
-sudo yum install -y epel-release
-sudo yum install -y libuv openssl
+# Example: Rocky/RedHat:
+sudo dnf install -y libuv openssl
 ```
 
 The driver can also be [built from source], in which case dependencies need
@@ -26,34 +23,35 @@ to be installed in `-dev` or `-devel` versions.
 
 ### Driver
 
-Packages are currently available for the following platforms:
-
-* CentOS 7
-* Ubuntu 18.04 LTS
+Packages are available for some platforms - see the [Installation section](installation.md) for a list.
 
 They are available for download from the [Releases][cpp-rust-driver-releases] section.
 
-NOTE: If you have Datastax cpp-driver installed you need to remove it first:
+NOTE: If you have Datastax or ScyllaDB C/C++ Driver installed, you need to remove it first:
 
 ```bash
 # Ubuntu/Debian:
-sudo apt-get remove cassandra-cpp-driver
+sudo apt remove cassandra-cpp-driver
+sudo apt remove scylla-cpp-driver
 
 
-# CentOS/RedHat:
-sudo yum remove cassandra-cpp-driver
+# Rocky/RedHat:
+sudo dnf remove cassandra-cpp-driver
+sudo dnf remove scylla-cpp-driver
 ```
 
+<!-- FIXME: Note that there is only a `dev` package for Ubuntu. Is it expected? -->
+<!-- Also, the name is `cpp-driver`, not `cpp-rust-driver`. -->
 ```bash
-# Example: Ubuntu 18.04/Debian:
-wget https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver_2.15.2-1_amd64.deb https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver-dev_2.15.2-1_amd64.deb
-sudo apt-get update
-sudo apt-get install -y ./scylla-cpp-driver_2.15.2-1_amd64.deb ./scylla-cpp-driver-dev_2.15.2-1_amd64.deb
+# Example: Ubuntu/Debian:
+wget https://github.com/scylladb/cpp-rust-driver/releases/download/<LATEST_VERSION>/libscylla-cpp-driver-dev_<LATEST_VERSION>.deb
+sudo apt update
+sudo apt install -y ./libscylla-cpp-driver-dev_<LATEST_VERSION>.deb
 
 
-# Example: CentOS 7/RedHat:
-wget https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver-2.15.2-1.el7.x86_64.rpm https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver-devel-2.15.2-1.el7.x86_64.rpm
-sudo yum localinstall -y scylla-cpp-driver-2.15.2-1.el7.x86_64.rpm scylla-cpp-driver-devel-2.15.2-1.el7.x86_64.rpm
+# Example: Rocky/RedHat:
+wget https://github.com/scylladb/cpp-rust-driver/releases/download/<LATEST_VERSION>/scylla-cpp-rust-driver-<LATEST_VERSION>.rpm https://github.com/scylladb/cpp-rust-driver/releases/download/<LATEST_VERSION>/scylla-cpp-rust-driver-devel-<LATEST_VERSION>.rpm
+sudo dnf install -y ./scylla-cpp-rust-driver-<LATEST_VERSION>.rpm ./scylla-cpp-rust-driver-devel-<LATEST_VERSION>.rpm
 ```
 
 ## Connecting
