@@ -10,7 +10,7 @@ ScyllaDB CPP-Rust Driver
     index
     api/index
     topics/getting-started
-    topics/index
+    topics/architecture-overview
     topics/installation
     topics/building
     topics/testing
