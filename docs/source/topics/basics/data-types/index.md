@@ -224,3 +224,14 @@ cass_collection_free(phone_numbers);
 [`cass_result_column_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassResult#cass-result-column-data-type
 [`cass_prepared_parameter_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassPrepared#cass-prepared-parameter-data-type
 [`cass_value_data_type()`]: http://datastax.github.io/cpp-driver/api/struct.CassValue#cass-value-data-type
+
+```{eval-rst}
+.. toctree::
+  :hidden:
+  :glob:
+
+  date-and-time
+  tuples
+  user-defined-types
+  uuids
+```

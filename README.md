@@ -146,7 +146,7 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
  * Retry policies
  * SSL
  * Authentication
- * [Tuples](http://datastax.github.io/cpp-driver/topics/basics/tuples/) and [UDTs](http://datastax.github.io/cpp-driver/topics/basics/user-defined-types/)
+ * [Tuples](http://datastax.github.io/cpp-driver/topics/basics/data-types/tuples/) and [UDTs](http://datastax.github.io/cpp-driver/topics/basics/data-types/user-defined-types/)
  * [Nested collections](http://datastax.github.io/cpp-driver/topics/basics/binding-parameters/#nested-collections)
  * [Data types](http://datastax.github.io/cpp-driver/topics/basics/data-types/)
  * Schema metadata (keyspace metadata, materialized views, etc.)
