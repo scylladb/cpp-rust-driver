@@ -10,7 +10,7 @@ To install the dependencies we recommend using EPEL:
 
 ```bash
 sudo yum install -y epel-release
-sudo yum -y install libuv openssl zlib
+sudo yum -y install libuv openssl
 ```
 
 Install the runtime library. Replace `<VERSION>` with the version+platform string:
