@@ -1,8 +1,6 @@
-# Overview
+# Architecture Overview
 
-## Architecture
-
-### Cluster
+## Cluster
 
 The [`CassCluster`] object describes a ScyllaDB/Cassandra cluster’s configuration.
 The default cluster object is good for most clusters and only requires a single
@@ -11,7 +9,7 @@ Once a session is connected using a cluster object, its configuration is
 constant. Modifying the cluster's object configuration after a session is
 established does not alter the session's configuration.
 
-### Session
+## Session
 
 The [`CassSession`] object is used for query execution. Internally, a session
 object also manages a pool of client connections to ScyllaDB/Cassandra and uses
@@ -27,7 +25,7 @@ to create a single session with more I/O threads than multiple sessions with
 a smaller number of I/O threads, especially that a session is a heavyweight
 object - it keeps the connection pool and up-to-date cluster metadata.
 
-### Asynchronous I/O
+## Asynchronous I/O
 
 Each session maintains a number of connections for each node in the cluster.
 This number can be controlled by `cass_cluster_set_core_connections_per_host()`.
@@ -42,7 +40,7 @@ This significantly reduces the number of connections required to be open to
 ScyllaDB/Cassandra and allows the driver to batch requests destined for the
 same node.
 
-### Thread safety
+## Thread safety
 
 A [`CassSession`] is designed to be used concurrently from multiple threads.
 [`CassFuture`] is also thread safe. Other than these exclusions, in general,
@@ -53,7 +51,7 @@ that are immutable (marked 'const') can be read safely by multiple threads.
 `cass_session_free`, ... `cass_*_free`) cannot be called concurrently on the
 same instance of an object.
 
-### Memory handling
+## Memory handling
 
 Values such as strings (`const char*`), bytes and decimals
 (`const cass_bytes_t*`) point to memory held by the result object. The
