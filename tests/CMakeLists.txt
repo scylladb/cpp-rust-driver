@@ -167,15 +167,6 @@ set(COMMON_INTEGRATION_TEST_SOURCE_FILES ${INTEGRATION_TESTS_SOURCE_FILES}
 #------------------------
 
 if(CASS_BUILD_INTEGRATION_TESTS)
-  configure_file(embedded-ads.jar ${CMAKE_BINARY_DIR} COPYONLY)
-  if(WIN32)
-    # Copy the embedded ADS to additional locations for use with IDE
-    if(NOT EXISTS ${CMAKE_BINARY_DIR}/tests)
-      file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
-    endif()
-    configure_file(embedded-ads.jar ${CMAKE_BINARY_DIR}/tests COPYONLY)
-  endif()
-
   add_subdirectory(src/integration)
 endif()
 
