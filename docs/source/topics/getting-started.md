@@ -4,6 +4,8 @@
 
 ### Dependencies
 
+#### Dependencies
+
 Packages for the dependencies: libuv (1.x), OpenSSL can be installed
 from distribution's repositories and/or EPEL. Please note that `apt-get` can
 handle the dependencies by itself, therefore this step can likely be omitted

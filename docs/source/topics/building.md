@@ -22,15 +22,11 @@ The C/C++ driver depends on the following software:
 * [CMake] v2.6.4+
 * [libuv] 1.x
 * [OpenSSL] v1.0.x or v1.1.x \*
-* [zlib] v1.x \*\*
 * Kerberos v5 ([Heimdal] or [MIT]) \*\*\*
 
 __\*__ Use the `CASS_USE_OPENSSL` CMake option to enable/disable OpenSSL
          support. Disabling this option will disable SSL/TLS protocol support
          within the driver; defaults to `On`.
-
-__\*\*__ Use the `CASS_USE_ZLIB` CMake option to enable/disable zlib support.
-           Defaults to `On`.
 
 __\*\*\*__ Use the `CASS_USE_KERBEROS` CMake option to enable/disable Kerberos
        support. Enabling this option will enable Kerberos authentication
@@ -180,39 +176,6 @@ popd
 popd
 ```
 
-#### zlib
-
-##### CentOS (Yum)
-
-```bash
-yum install zlib-devel
-```
-
-##### Ubuntu (APT)
-
-```bash
-apt-get install zlib1g-dev
-```
-
-##### Mac OS (Brew)
-
-```bash
-brew install zlib
-```
-
-##### Manually build and install
-
-```bash
-pushd /tmp
-wget --no-check-certificate https://www.zlib.net/zlib-1.2.11.tar.gz
-tar xzf zlib-1.2.11.tar.gz
-pushd zlib-1.2.11
-./configure
-make install
-popd
-popd
-```
-
 ### Building and installing the C/C++ driver
 
 ```bash
@@ -268,4 +231,3 @@ cmake -DCASS_BUILD_UNIT_TESTS=On ..
 [Heimdal]: https://www.h5l.org
 [MIT]: https://web.mit.edu/kerberos
 [OpenSSL]: https://www.openssl.org
-[zlib]: https://www.zlib.net
