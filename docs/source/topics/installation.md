@@ -2,31 +2,33 @@
 
 ## Packages
 
-Pre-built packages are available for CentOS 7 and Ubuntu 18.04.
+Pre-built packages are available for:
+- Rocky Linux 9,
+- Fedora 41 and 42,
+- Ubuntu 22.04 LTS and 24.04 LTS.
 
-### CentOS
+### RHEL/Rocky
 
-To install the dependencies we recommend using EPEL:
+To install the dependencies:
 
 ```bash
-sudo yum install -y epel-release
-sudo yum -y install libuv openssl
+sudo dnf -y install libuv openssl
 ```
 
 Install the runtime library. Replace `<VERSION>` with the version+platform string:
 
 ```bash
-sudo yum localinstall -y scylla-cpp-driver-<VERSION>.rpm
+sudo dnf install -y scylla-cpp-driver-<VERSION>.rpm
 ```
 
 When developing against the driver you'll also want to install the development
 package and the debug symbols:
 
 ```bash
-sudo yum localinstall -y scylla-cpp-driver-devel-<VERSION>.rpm scylla-cpp-driver-debuginfo-<VERSION>.rpm
+sudo dnf install -y scylla-cpp-driver-devel-<VERSION>.rpm scylla-cpp-driver-debuginfo-<VERSION>.rpm
 ```
 
-### Ubuntu
+### Ubuntu/Debian
 
 Ubuntu's apt-get will resolve and install the dependencies by itself.
 Replace `<VERSION>` with the appropriate version+platform string:
@@ -45,6 +47,6 @@ sudo apt-get install -y ./scylla-cpp-driver-dev_<VERSION>.deb ./scylla-cpp-drive
 
 ## Building
 
-If pre-built packages are not available for your platform or architecture you
-will need to build the driver from source. Directions for building and
+If pre-built packages are not available for your platform or architecture,
+you will need to build the driver from source. Directions for building and
 installing the ScyllaDB C/C++ Driver can be found [here](building.md).
