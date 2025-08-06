@@ -11,5 +11,5 @@
   connection
   execution-profiles
   performance-tips
-  client-configuration
+  client-identity
 ```
