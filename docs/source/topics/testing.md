@@ -1,7 +1,7 @@
 # Testing
 Before proceeding ensure the tests were built using the [build procedures].
 
-Integration tests rely on [Cassandra Cluster Manager (CCM)](ccm) to be installed.
+Integration tests rely on Cassandra Cluster Manager (CCM) to be installed.
 
 Each test performs a [setup](#setup-cassandra), [execute](#execute-test), and
 [teardown](#teardown-cassandra). This ensures that each test has a clean and
@@ -117,11 +117,3 @@ Here are some of the items being scheduled for future enhancements.
  - Allow files to be copied over SSH established connection
 
 [build procedures]: http://datastax.github.io/cpp-driver/topics/building#test-dependencies-and-building-tests-not-required
-
-```{eval-rst}
-.. toctree::
-  :hidden:
-  :glob:
-
-  ccm
-```
