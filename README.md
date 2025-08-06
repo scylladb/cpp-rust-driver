@@ -395,7 +395,7 @@ Some tests are added to GitHub Actions workflows and are used to test every pull
 
 To build and run the integration tests several requirements need to be met:
 
-* Install `libuv`, `openssl` and `kerberos` on your system:
+* Install `libuv` and `openssl` on your system:
 
 ```shell
 # On Ubuntu

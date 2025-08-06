@@ -22,16 +22,10 @@ The C/C++ driver depends on the following software:
 * [CMake] v2.6.4+
 * [libuv] 1.x
 * [OpenSSL] v1.0.x or v1.1.x \*
-* Kerberos v5 ([Heimdal] or [MIT]) \*\*\*
 
 __\*__ Use the `CASS_USE_OPENSSL` CMake option to enable/disable OpenSSL
          support. Disabling this option will disable SSL/TLS protocol support
          within the driver; defaults to `On`.
-
-__\*\*\*__ Use the `CASS_USE_KERBEROS` CMake option to enable/disable Kerberos
-       support. Enabling this option will enable Kerberos authentication
-       protocol within the driver (currently unusupported by Scylla);
-       defaults to `Off`.
 
 ## Linux/Mac OS
 
@@ -69,20 +63,6 @@ operating system. Ensure [Homebrew is installed][Homebrew] before proceeding.
 brew update
 brew upgrade
 brew install autoconf automake cmake libtool
-```
-
-#### Kerberos
-
-##### CentOS/RHEL (Yum)
-
-```bash
-yum install krb5-devel
-```
-
-##### Ubuntu (APT)
-
-```bash
-apt-get install libkrb5-dev
 ```
 
 #### libuv
@@ -225,9 +205,5 @@ cmake -DCASS_BUILD_UNIT_TESTS=On ..
 [cpp-driver-ubuntu18-04]: https://github.com/scylladb/cpp-driver/releases/download/2.15.2-1/scylla-cpp-driver_2.15.2-1_amd64.deb
 [Homebrew]: https://brew.sh
 [CMake]: http://www.cmake.org/download
-[k4w-32]: http://web.mit.edu/kerberos/dist/kfw/4.0/kfw-4.0.1-i386.msi
-[k4w-64]: http://web.mit.edu/kerberos/dist/kfw/4.0/kfw-4.0.1-amd64.msi
 [libuv]: http://libuv.org
-[Heimdal]: https://www.h5l.org
-[MIT]: https://web.mit.edu/kerberos
 [OpenSSL]: https://www.openssl.org
