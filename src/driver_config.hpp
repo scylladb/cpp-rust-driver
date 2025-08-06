@@ -14,6 +14,5 @@
 /* #undef HAVE_ARC4RANDOM */
 #define HAVE_GETRANDOM
 #define HAVE_TIMERFD
-#define HAVE_ZLIB
 
 #endif

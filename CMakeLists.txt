@@ -47,7 +47,6 @@ option(CASS_USE_LIBSSH2 "Use libssh2 for integration tests" OFF)
 option(CASS_USE_OPENSSL "Use OpenSSL" ON)
 option(CASS_USE_STATIC_LIBS "Link static libraries when building executables" OFF)
 option(CASS_USE_STD_ATOMIC "Use std::atomic library" ON)
-option(CASS_USE_ZLIB "Use zlib" OFF)
 option(CASS_USE_TIMERFD "Use timerfd (Linux only)" ON)
 option(CASS_USE_LIBUV "Use libuv" OFF)
 

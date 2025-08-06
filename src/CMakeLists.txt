@@ -124,7 +124,6 @@ set(HAVE_BOOST_ATOMIC ${CASS_USE_BOOST_ATOMIC})
 set(HAVE_STD_ATOMIC ${CASS_USE_STD_ATOMIC})
 set(HAVE_KERBEROS ${CASS_USE_KERBEROS})
 set(HAVE_OPENSSL ${CASS_USE_OPENSSL})
-set(HAVE_ZLIB ${CASS_USE_ZLIB})
 
 # Generate the driver_config.hpp file
 configure_file(
