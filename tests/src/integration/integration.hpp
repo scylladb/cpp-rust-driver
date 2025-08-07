@@ -85,8 +85,8 @@
 
 // Currently, we only check for the version if tests are being run against
 // Cassandra cluster. It's because, some of the tests were unnecessarily
-// skipped for Scylla. In the future (once it's needed) we might
-// do some version restrictions for Scylla clusters as well.
+// skipped for ScyllaDB. In the future (once it's needed) we might
+// do some version restrictions for ScyllaDB clusters as well.
 #define SKIP_IF_CASSANDRA_VERSION_LT(version)                                                      \
   do {                                                                              \
     CCM::CassVersion cass_version = this->server_version_;                          \
@@ -309,7 +309,7 @@ protected:
    * (DEFAULT: true)
    */
   bool is_beta_protocol_;
-  /** Flag to indicate if tablets should be disabled for Scylla keyspace.
+  /** Flag to indicate if tablets should be disabled for ScyllaDB keyspace.
    * There are some cases where the test logic will fail for tablets keyspace
    * (e.g. when test uses LWT statements).
    * (DEFAULT: false)
@@ -515,10 +515,10 @@ protected:
   std::string generate_contact_points(const std::string& ip_prefix, size_t number_of_nodes);
 
   /**
-   * Check if Scylla supports a specific feature.
+   * Check if ScyllaDB supports a specific feature.
    *
-   * @param feature Feature to check if supported by Scylla
-   * @return True if Scylla supports the feature; false otherwise
+   * @param feature Feature to check if supported by ScyllaDB
+   * @return True if ScyllaDB supports the feature; false otherwise
    */
   bool scylla_supports_feature(const std::string& feature);
 

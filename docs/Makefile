@@ -5,7 +5,7 @@ SPHINXOPTS    = -j auto
 SPHINXBUILD   = $(POETRY) run sphinx-build
 PAPER         =
 BUILDDIR      = _build
-SOURCEDIR     = source
+SOURCEDIR     = _source
 
 # Internal variables
 PAPEROPT_a4     = -D latex_paper_size=a4
@@ -24,6 +24,11 @@ setupenv:
 .PHONY: setup
 setup:
 	$(POETRY) install
+	$(POETRY) update
+	cd .. && doxygen Doxyfile.in
+	@if [ ! -d "$(SOURCEDIR)" ]; then mkdir -p "$(SOURCEDIR)"; fi
+	cp -RL source/* $(SOURCEDIR)
+	# cd $(SOURCEDIR) && find . -name README.md -execdir mv '{}' index.md ';'
 
 .PHONY: update
 update:
