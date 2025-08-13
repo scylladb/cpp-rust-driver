@@ -85,10 +85,10 @@ impl CassCollection {
             match data_type {
                 CassDataTypeInner::List { typ: subtype, .. }
                 | CassDataTypeInner::Set { typ: subtype, .. } => {
-                    if let Some(subtype) = subtype {
-                        if !value::is_type_compatible(value, subtype) {
-                            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-                        }
+                    if let Some(subtype) = subtype
+                        && !value::is_type_compatible(value, subtype)
+                    {
+                        return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
                     }
                 }
 

@@ -43,10 +43,10 @@ impl CassTuple {
             return CassError::CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
         }
 
-        if let Some(inner_types) = self.get_types() {
-            if !value::is_type_compatible(&v, &inner_types[index]) {
-                return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-            }
+        if let Some(inner_types) = self.get_types()
+            && !value::is_type_compatible(&v, &inner_types[index])
+        {
+            return CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE;
         }
 
         self.items[index] = v;
