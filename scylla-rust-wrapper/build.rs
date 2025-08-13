@@ -71,6 +71,11 @@ fn prepare_cppdriver_data(outfile: &str, allowed_types: &[&str], out_path: &Path
     for t in allowed_types {
         type_bindings = type_bindings.allowlist_type(t);
     }
+
+    // Prevent these clippy complaints:
+    // `warning: function pointer comparisons do not produce meaningful results since their addresses are not guaranteed to be unique`
+    type_bindings = type_bindings.no_partialeq(".*Callback.*");
+
     let type_bindings = type_bindings
         .generate()
         .expect("Unable to generate bindings");
