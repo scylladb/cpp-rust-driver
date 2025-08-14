@@ -202,7 +202,7 @@ CassCollection* phone_numbers =
 /* ... */
 
 /* Add fields to the UDT */
-cass_user_type_set_string_byte_by_name(person, "name", "Bob");
+cass_user_type_set_string_by_name(person, "name", "Bob");
 cass_user_type_set_user_type_by_name(person, "address", address);
 cass_user_type_set_collection_by_name(person, "phone_numbers", phone_numbers);
 

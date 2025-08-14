@@ -64,12 +64,12 @@ It is also possible to create keyspaces and tables by executing CQL using a sess
 ```cql
 CREATE KEYSPACE cpp_driver
   WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };
-CREATE TABLE cpp_driver.contributers (
+CREATE TABLE cpp_driver.contributors (
   lastname text,
-  firstname test,
+  firstname text,
   company text,
   website text,
   since timestamp,
-  last_activity timestamp
+  last_activity timestamp,
   PRIMARY KEY(lastname));
 ```
