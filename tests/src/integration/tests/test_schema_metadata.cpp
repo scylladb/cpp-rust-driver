@@ -42,7 +42,7 @@ public:
 
 /*
  * Support for UDF should be manually enabled to successfully execute the below code.
- * These tests are also disabled for C++ driver. Additionally, Scylla does no support Java language in UDFs.
+ * These tests are also disabled for C++ driver. Additionally, ScyllaDB does no support Java language in UDFs.
  * It seems that the created aggregate and functions are not checked in these tests, so currently it is commented out.
  *
     session_.execute("CREATE FUNCTION avg_state(state tuple<int, bigint>, val int) "

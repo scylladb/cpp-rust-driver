@@ -1,6 +1,6 @@
 # ScyllaDB Cpp-Rust Driver
 ___
-Wrapper around ScyllaDB's rust-driver compatible with Datastax cpp-driver.
+Wrapper around [ScyllaDB's Rust Driver](https://cpp-rust-driver.docs.scylladb.com/stable), which is API-compatible with both ScyllaDB and Datastax C/C++ Driver and may be considered a drop-in replacement (with some minor limitations, see [Limitations](#limitations)).
 
 #### Note: It is work in progress, bug reports and pull requests are welcome!
 
@@ -137,7 +137,7 @@ int main() {
 ___
 
 The driver inherits almost all the features of C/C++ and Rust drivers, such as:
- * [Asynchronous API](http://datastax.github.io/cpp-driver/topics/#futures)
+ * [Asynchronous API](https://cpp-rust-driver.docs.scylladb.com/stable/topics/#futures)
  * Shard-aware routing
  * Simple, Prepared and Batch statements
  * Query paging
@@ -146,9 +146,9 @@ The driver inherits almost all the features of C/C++ and Rust drivers, such as:
  * Retry policies
  * SSL
  * Authentication
- * [Tuples](http://datastax.github.io/cpp-driver/topics/basics/tuples/) and [UDTs](http://datastax.github.io/cpp-driver/topics/basics/user_defined_types/)
- * [Nested collections](http://datastax.github.io/cpp-driver/topics/basics/binding_parameters/#nested-collections)
- * [Data types](http://datastax.github.io/cpp-driver/topics/basics/data_types/)
+ * [Tuples](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/tuples/) and [UDTs](http://https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/user-defined-types/)
+ * [Nested collections](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/binding-parameters/#nested-collections)
+ * [Data types](https://cpp-rust-driver.docs.scylladb.com/stable/topics/basics/data-types/)
  * Schema metadata (keyspace metadata, materialized views, etc.)
 
 # Limitations
@@ -395,7 +395,7 @@ Some tests are added to GitHub Actions workflows and are used to test every pull
 
 To build and run the integration tests several requirements need to be met:
 
-* Install `libuv`, `openssl` and `kerberos` on your system:
+* Install `libuv` and `openssl` on your system:
 
 ```shell
 # On Ubuntu

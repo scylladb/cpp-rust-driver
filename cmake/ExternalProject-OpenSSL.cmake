@@ -25,9 +25,6 @@ if(NOT OPENSSL_VERSION)
   set(OPENSSL_VERSION "1.0.2s")
 endif()
 option(OPENSSL_INSTALL_PREFIX "OpenSSL installation prefix location")
-if(CASS_USE_ZLIB)
-  include(ExternalProject-zlib)
-endif()
 set(OPENSSL_VERSION ${OPENSSL_VERSION} CACHE STRING "OpenSSL version to build and install" FORCE)
 
 # Determine the major and minor version of OpenSSL used
@@ -90,19 +87,6 @@ else()
                         CACHE STRING "OpenSSL libraries" FORCE)
 endif()
 set(OPENSSL_ROOT_DIR "${OPENSSL_INSTALL_DIR}" CACHE STRING "OpenSSL root directory" FORCE)
-
-# Create build options for the platform build scripts
-if(BUILD_SHARED_LIBS)
-  if(CASS_USE_ZLIB)
-    set(OPENSSL_ZLIB_CONFIGURE_ARGUMENT "zlib-dynamic")
-    set(ZLIB_LIB zlib.lib)
-  endif()
-else()
-  if(CASS_USE_ZLIB)
-    set(OPENSSL_ZLIB_CONFIGURE_ARGUMENT "no-zlib-dynamic")
-    set(ZLIB_LIB zlibstatic.lib)
-  endif()
-endif()
 
 # Determine if shared or static library should be built
 set(OPENSSL_CONFIGURE_COMPILER "no-asm no-ssl2")
@@ -273,16 +257,6 @@ file(APPEND ${OPENSSL_CONFIGURE_SCRIPT}
   "POPD\r\n"
   "SET PATH=${PERL_PATH};%PATH%\r\n"
   "CALL :SHORTENPATH \"${OPENSSL_NATIVE_INSTALL_DIR}\" SHORTENED_OPENSSL_INSTALL_DIR\r\n")
-if(CASS_USE_ZLIB)
-  # OpenSSL requires zlib paths to be relative (otherwise build errors may occur)
-  externalproject_get_property(${OPENSSL_LIBRARY_NAME} SOURCE_DIR)
-  file(RELATIVE_PATH ZLIB_INCLUDE_RELATIVE_DIR ${SOURCE_DIR} ${ZLIB_INCLUDE_DIR})
-  file(TO_NATIVE_PATH ${ZLIB_INCLUDE_RELATIVE_DIR} ZLIB_NATIVE_INCLUDE_RELATIVE_DIR)
-  file(RELATIVE_PATH ZLIB_LIBRARY_RELATIVE_DIR ${SOURCE_DIR} ${ZLIB_LIBRARY_DIR})
-  file(TO_NATIVE_PATH ${ZLIB_LIBRARY_RELATIVE_DIR} ZLIB_NATIVE_LIBRARY_RELATIVE_DIR)
-  set(OPENSSL_WITH_ZLIB_ARGUMENT "zlib ${OPENSSL_ZLIB_CONFIGURE_ARGUMENT} --with-zlib-include=\"${ZLIB_NATIVE_INCLUDE_RELATIVE_DIR}\" --with-zlib-lib=\"${ZLIB_NATIVE_LIBRARY_RELATIVE_DIR}\\${ZLIB_LIB}\"")
-  set(OPENSSL_WITH_ZLIB_ARGUMENT "zlib ${OPENSSL_ZLIB_CONFIGURE_ARGUMENT} --with-zlib-include=\"${ZLIB_INCLUDE_RELATIVE_DIR}\" --with-zlib-lib=\"${ZLIB_LIBRARY_RELATIVE_DIR}\\${ZLIB_LIB}\"")
-endif()
 file(APPEND ${OPENSSL_CONFIGURE_SCRIPT}
   "perl Configure ${OPENSSL_WITH_ZLIB_ARGUMENT} --openssldir=!SHORTENED_OPENSSL_INSTALL_DIR! --prefix=!SHORTENED_OPENSSL_INSTALL_DIR! ${OPENSSL_CONFIGURE_COMPILER}\r\n"
   "IF NOT %ERRORLEVEL% EQU 0 (\r\n"
@@ -316,11 +290,6 @@ file(APPEND ${OPENSSL_CONFIGURE_SCRIPT}
   ":SHORTENPATH\r\n"
   "  FOR %%A IN (\"%~1\") DO SET %~2=%%~SA\r\n"
   "  EXIT /B\r\n")
-
-# Determine if zlib should be added as a dependency
-if(CASS_USE_ZLIB)
-  add_dependencies(${OPENSSL_LIBRARY_NAME} ${ZLIB_LIBRARY_NAME})
-endif()
 
 # Update the include directory to use OpenSSL
 include_directories(${OPENSSL_INCLUDE_DIR})

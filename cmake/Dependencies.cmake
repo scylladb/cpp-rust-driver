@@ -108,51 +108,6 @@ if(CASS_USE_OPENSSL)
 endif()
 
 #------------------------
-# ZLIB
-#------------------------
-
-if(CASS_USE_ZLIB)
-  if(NOT ZLIB_LIBRARY_NAME)
-    # Setup the root directory for zlib
-    set(ZLIB_ROOT "${PROJECT_SOURCE_DIR}/lib/zlib/"
-                  "${PROJECT_SOURCE_DIR}/build/libs/zlib/")
-    set(ZLIB_ROOT ${ZLIB_ROOT} ${ZLIB_ROOT_DIR} $ENV{ZLIB_ROOT_DIR})
-
-    # Ensure zlib was found (assign zlib include/libraries or present warning)
-    find_package(ZLIB)
-    if(ZLIB_FOUND)
-      # Determine if the static library needs to be used for Windows
-      if(WIN32 AND CASS_USE_STATIC_LIBS)
-        string(REPLACE "zlib.lib" "zlibstatic.lib" ZLIB_LIBRARIES "${ZLIB_LIBRARIES}")
-      endif()
-
-      # Assign zlib properties
-      set(CASS_INCLUDES ${CASS_INCLUDES} ${ZLIB_INCLUDE_DIRS})
-      set(CASS_LIBS ${CASS_LIBS} ${ZLIB_LIBRARIES})
-      set(HAVE_ZLIB On)
-    else()
-      message(WARNING "Could not find zlib, try to set the path to zlib root folder in the system variable ZLIB_ROOT_DIR")
-      message(WARNING "zlib libraries will not be linked into build")
-    endif()
-  else()
-    # Assign zlib properties
-    set(CASS_INCLUDES ${CASS_INCLUDES} ${ZLIB_INCLUDE_DIRS})
-    set(CASS_LIBS ${CASS_LIBS} ${ZLIB_LIBRARIES})
-  endif()
-endif()
-
-#------------------------
-# Kerberos
-#------------------------
-
-if(CASS_USE_KERBEROS)
-  # Discover Kerberos and assign Kerberos include and libraries
-  find_package(Kerberos REQUIRED)
-  set(CASS_INCLUDES ${CASS_INCLUDES} ${KERBEROS_INCLUDE_DIR})
-  set(CASS_LIBS ${CASS_LIBS} ${KERBEROS_LIBRARIES})
-endif()
-
-#------------------------
 # Boost
 #------------------------
 

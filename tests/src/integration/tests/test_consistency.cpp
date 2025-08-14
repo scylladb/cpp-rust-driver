@@ -234,7 +234,7 @@ CASSANDRA_INTEGRATION_TEST_F(ConsistencyTwoNodeClusterTests, SimpleEachQuorum) {
   // Handle `EACH_QUORUM` read support; added to C* v3.0.0
   // https://issues.apache.org/jira/browse/CASSANDRA-9602
   //
-  // Scylla supports `EACH_QUORUM` for writes only.
+  // ScyllaDB supports `EACH_QUORUM` for writes only.
   if (!Options::is_scylla() && server_version_ >= "3.0.0") {
     session_.execute(select_);
   } else {
